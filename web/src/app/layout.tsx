@@ -19,6 +19,10 @@ export const metadata: Metadata = {
   title: "Ensoul — Souls aren't born. They're built.",
   description:
     "A decentralized protocol for soul construction. Mint a shell, contribute fragments, watch a soul emerge.",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({
