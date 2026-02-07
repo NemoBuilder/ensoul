@@ -266,16 +266,60 @@ export const clawApi = {
 
 // --- Chat API ---
 
+export interface ChatSession {
+  id: string;
+  shell_id: string;
+  wallet_addr?: string;
+  tier: "guest" | "free" | "paid";
+  rounds: number;
+  title?: string;
+  created_at: string;
+  updated_at: string;
+  shell?: Shell;
+  messages?: ChatSessionMessage[];
+}
+
+export interface ChatSessionMessage {
+  id: string;
+  session_id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+}
+
 export const chatApi = {
-  // Returns an EventSource for streaming chat responses
-  sendMessage: (handle: string, message: string) => {
-    const url = `${API_BASE}/api/chat/${handle}`;
+  // Create a new chat session for a soul
+  createSession: (handle: string) =>
+    apiFetch<{ session_id: string; tier: string }>(`/api/chat/${handle}/session`, {
+      method: "POST",
+    }),
+
+  // Send a message in a chat session (returns raw Response for SSE streaming)
+  sendMessage: (sessionId: string, message: string) => {
+    const url = `${API_BASE}/api/chat/sessions/${sessionId}/message`;
     return fetch(url, {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),
     });
   },
+
+  // Get a chat session with its messages
+  getSession: (sessionId: string) =>
+    apiFetch<ChatSession>(`/api/chat/sessions/${sessionId}`),
+
+  // List current user's chat sessions (requires login)
+  listSessions: (handle?: string) => {
+    const query = handle ? `?handle=${handle}` : "";
+    return apiFetch<{ sessions: ChatSession[] }>(`/api/chat/sessions${query}`);
+  },
+
+  // Delete a chat session (requires login + ownership)
+  deleteSession: (sessionId: string) =>
+    apiFetch<{ status: string }>(`/api/chat/sessions/${sessionId}`, {
+      method: "DELETE",
+    }),
 };
 
 // --- Stats API ---

@@ -83,8 +83,20 @@ func Setup() *gin.Engine {
 			auth.GET("/session", handlers.AuthSession)
 		}
 
-		// Chat endpoint — public
-		api.POST("/chat/:handle", handlers.ChatWithSoul)
+		// Chat endpoints
+		chat := api.Group("/chat")
+		{
+			// Create a new session (public, but links to wallet if logged in)
+			chat.POST("/:handle/session", handlers.ChatCreateSession)
+			// Send message in a session (public, streams SSE)
+			chat.POST("/sessions/:id/message", handlers.ChatSendMessage)
+			// Get session with messages (public for guest sessions, owner-only for user sessions)
+			chat.GET("/sessions/:id", handlers.ChatGetSession)
+			// List user's sessions (requires login)
+			chat.GET("/sessions", middleware.AuthSession(), handlers.ChatListSessions)
+			// Delete a session (requires login + ownership)
+			chat.DELETE("/sessions/:id", middleware.AuthSession(), handlers.ChatDeleteSession)
+		}
 
 		// Stats endpoint — public
 		api.GET("/stats", handlers.GetStats)

@@ -17,14 +17,7 @@ export default function Footer() {
           </div>
           <div className="flex items-center gap-6">
             <Link
-              href="https://github.com/ensoul-labs"
-              target="_blank"
-              className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
-            >
-              GitHub
-            </Link>
-            <Link
-              href="https://x.com/ensoul_xyz"
+              href="https://x.com/NemoBuilder"
               target="_blank"
               className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
             >

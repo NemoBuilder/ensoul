@@ -181,15 +181,66 @@ export default function SoulPage({
 
         {/* Soul prompt */}
         <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
-          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Soul Prompt</h3>
+          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Soul Identity</h3>
           {shell.soul_prompt ? (
-            <pre className="max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs leading-relaxed text-[#e2e8f0]">
-              {shell.soul_prompt}
-            </pre>
+            <div className="space-y-4">
+              {/* Key dimension summaries */}
+              {Object.entries(dims).filter(([, d]) => d.summary).length > 0 ? (
+                Object.entries(dims)
+                  .filter(([, d]) => d.summary)
+                  .sort(([, a], [, b]) => b.score - a.score)
+                  .map(([key, d]) => (
+                    <div key={key}>
+                      <div className="mb-1 flex items-center gap-2">
+                        <span className="text-sm">
+                          {key === "personality" ? "🧠" : key === "knowledge" ? "📚" : key === "stance" ? "🎯" : key === "style" ? "✍️" : key === "relationship" ? "🤝" : "⏳"}
+                        </span>
+                        <span className="text-xs font-medium text-[#8b5cf6]">
+                          {dimensionLabels[key] || key}
+                        </span>
+                        <span className="text-xs text-[#94a3b8]">· {d.score}%</span>
+                      </div>
+                      <p className="text-xs leading-relaxed text-[#e2e8f0]/80">
+                        {d.summary}
+                      </p>
+                    </div>
+                  ))
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-sm leading-relaxed text-[#e2e8f0]">
+                    {shell.seed_summary || "This soul is still forming its identity..."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <span className="rounded-full bg-[#8b5cf6]/10 px-2.5 py-1 text-xs text-[#a78bfa]">
+                      DNA v{shell.dna_version}
+                    </span>
+                    <span className="rounded-full bg-[#8b5cf6]/10 px-2.5 py-1 text-xs text-[#a78bfa]">
+                      {shell.accepted_frags} fragments absorbed
+                    </span>
+                    <span className={`rounded-full px-2.5 py-1 text-xs ${stage.bgClass} ${stage.textClass}`}>
+                      {stage.label}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
           ) : (
-            <p className="text-sm italic text-[#94a3b8]">
-              This soul is still an embryo — no prompt has been generated yet.
-            </p>
+            <div className="space-y-3">
+              <div className="flex items-center gap-2 text-[#f59e0b]">
+                <span>🥚</span>
+                <span className="text-sm font-medium">Embryo Stage</span>
+              </div>
+              <p className="text-xs leading-relaxed text-[#94a3b8]">
+                This soul hasn&apos;t awakened yet. As more fragments are contributed and absorbed, 
+                a unique identity will emerge — personality, knowledge, communication style, 
+                and worldview will gradually crystallize.
+              </p>
+              <div className="rounded-lg border border-dashed border-[#1e1e2e] p-3 text-center">
+                <p className="text-xs text-[#94a3b8]">
+                  Need <span className="text-[#8b5cf6]">10 accepted fragments</span> to trigger first Ensouling
+                </p>
+              </div>
+            </div>
           )}
         </div>
       </div>

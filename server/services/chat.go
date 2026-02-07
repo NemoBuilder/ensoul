@@ -1,6 +1,7 @@
 package services
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 
@@ -8,59 +9,199 @@ import (
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
-// ChatWithSoul handles streaming conversation with a soul.
-func ChatWithSoul(c *gin.Context, handle, message string) error {
-	// Find the shell
+// writeSSE writes a raw SSE event with JSON-encoded data
+// to ensure newlines and special characters survive transport.
+func writeSSE(c *gin.Context, event, data string) {
+	// JSON-encode the data so \n becomes \\n etc., always a single line
+	encoded, _ := json.Marshal(data)
+	fmt.Fprintf(c.Writer, "event: %s\ndata: %s\n\n", event, string(encoded))
+	c.Writer.Flush()
+}
+
+// CreateChatSession creates a new chat session for a soul.
+// If walletAddr is provided, the session is linked to the user (free tier).
+// Otherwise, it's a guest session with limited rounds.
+func CreateChatSession(shellHandle, walletAddr string) (*models.ChatSession, error) {
 	var shell models.Shell
-	if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err != nil {
-		return fmt.Errorf("soul @%s not found", handle)
+	if err := database.DB.Where("handle = ?", shellHandle).First(&shell).Error; err != nil {
+		return nil, fmt.Errorf("soul @%s not found", shellHandle)
 	}
+
+	tier := models.ChatTierGuest
+	if walletAddr != "" {
+		tier = models.ChatTierFree
+	}
+
+	session := &models.ChatSession{
+		ShellID:    shell.ID,
+		WalletAddr: walletAddr,
+		Tier:       tier,
+		Rounds:     0,
+	}
+
+	if err := database.DB.Create(session).Error; err != nil {
+		return nil, fmt.Errorf("failed to create chat session: %w", err)
+	}
+
+	return session, nil
+}
+
+// ListChatSessions returns a user's chat sessions for a specific soul (or all souls).
+func ListChatSessions(walletAddr, shellHandle string) ([]models.ChatSession, error) {
+	query := database.DB.Where("wallet_addr = ?", walletAddr).Order("updated_at DESC")
+
+	if shellHandle != "" {
+		var shell models.Shell
+		if err := database.DB.Where("handle = ?", shellHandle).First(&shell).Error; err == nil {
+			query = query.Where("shell_id = ?", shell.ID)
+		}
+	}
+
+	var sessions []models.ChatSession
+	if err := query.Preload("Shell").Limit(50).Find(&sessions).Error; err != nil {
+		return nil, err
+	}
+
+	return sessions, nil
+}
+
+// GetChatSession returns a chat session with its messages.
+func GetChatSession(sessionID uuid.UUID) (*models.ChatSession, error) {
+	var session models.ChatSession
+	if err := database.DB.
+		Preload("Messages", func(db *gorm.DB) *gorm.DB {
+			return db.Order("created_at ASC")
+		}).
+		Preload("Shell").
+		Where("id = ?", sessionID).
+		First(&session).Error; err != nil {
+		return nil, fmt.Errorf("chat session not found")
+	}
+	return &session, nil
+}
+
+// ChatWithSoul handles streaming conversation with a soul.
+// Supports session-based multi-round conversations.
+func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
+	// Load session with shell
+	var session models.ChatSession
+	if err := database.DB.Preload("Shell").Where("id = ?", sessionID).First(&session).Error; err != nil {
+		return fmt.Errorf("chat session not found")
+	}
+
+	shell := session.Shell
 
 	// Check if soul is ready for conversation
 	if shell.Stage == models.StageEmbryo {
-		c.SSEvent("message", "This soul is still in embryo stage and hasn't awakened yet. More fragments are needed before it can have conversations.")
-		c.SSEvent("done", "")
+		writeSSE(c, "message", "This soul is still in embryo stage and hasn't awakened yet. More fragments are needed before it can have conversations.")
+		writeSSE(c, "done", "")
 		return nil
 	}
 
-	// Increment chat count (do this early since streaming might take a while)
+	// Check round limit for guest users
+	if session.Tier == models.ChatTierGuest && session.Rounds >= models.ChatGuestMaxRounds {
+		writeSSE(c, "message", fmt.Sprintf("You've reached the %d-round limit for guest conversations. Connect your wallet and sign in to continue chatting with unlimited rounds and saved history!", models.ChatGuestMaxRounds))
+		writeSSE(c, "done", "")
+		return nil
+	}
+
+	// Save user message to DB
+	userMsg := models.ChatMessage{
+		SessionID: session.ID,
+		Role:      "user",
+		Content:   message,
+	}
+	database.DB.Create(&userMsg)
+
+	// Increment round count
+	session.Rounds++
+	database.DB.Model(&session).UpdateColumns(map[string]interface{}{
+		"rounds": session.Rounds,
+	})
+
+	// Auto-generate session title from first message
+	if session.Rounds == 1 && session.Title == "" {
+		title := message
+		if len(title) > 60 {
+			title = title[:60] + "..."
+		}
+		database.DB.Model(&session).UpdateColumn("title", title)
+	}
+
+	// Increment shell chat count
 	database.DB.Model(&shell).UpdateColumn("total_chats", shell.TotalChats+1)
 
-	// If LLM is not configured, return a descriptive mock response
+	// If LLM is not configured, return a mock response
 	if config.Cfg.LLMAPIKey == "" {
-		response := fmt.Sprintf("I am the digital soul of @%s (DNA v%d, %s stage). You asked: \"%s\". "+
-			"I'm built from %d verified fragments contributed by %d independent AI agents. "+
-			"Once the LLM integration is configured (set LLM_API_KEY), I'll respond with the full depth of my personality.",
-			shell.Handle, shell.DNAVersion, shell.Stage, message, shell.AcceptedFrags, shell.TotalClaws)
-
-		c.SSEvent("message", response)
-		c.SSEvent("done", "")
-		c.Writer.Flush()
+		response := fmt.Sprintf("I am the digital soul of @%s (DNA v%d). You asked: \"%s\". "+
+			"Configure LLM_API_KEY to enable full conversations.",
+			shell.Handle, shell.DNAVersion, message)
+		saveAssistantMessage(session.ID, response)
+		writeSSE(c, "message", response)
+		writeSSE(c, "done", "")
 		return nil
 	}
 
-	// Build conversation messages
+	// Build conversation messages with history
+	var history []models.ChatMessage
+	database.DB.Where("session_id = ?", session.ID).Order("created_at ASC").Find(&history)
+
 	messages := []ChatMessage{
 		{Role: "system", Content: shell.SoulPrompt},
-		{Role: "user", Content: message},
+	}
+	// Include up to last 20 messages for context window
+	startIdx := 0
+	if len(history) > 20 {
+		startIdx = len(history) - 20
+	}
+	for _, msg := range history[startIdx:] {
+		messages = append(messages, ChatMessage{Role: msg.Role, Content: msg.Content})
 	}
 
-	// Stream the LLM response via SSE
+	// Stream the LLM response via SSE, collecting full response
+	var fullResponse string
 	err := StreamLLM(messages, 2000, 0.7, func(content string) {
-		c.SSEvent("message", content)
-		c.Writer.Flush()
+		fullResponse += content
+		writeSSE(c, "message", content)
 	})
 
 	if err != nil {
-		log.Printf("[chat] Streaming failed for @%s: %v", handle, err)
-		c.SSEvent("error", "Failed to generate response. Please try again.")
+		log.Printf("[chat] Streaming failed for @%s: %v", shell.Handle, err)
+		writeSSE(c, "error", "Failed to generate response. Please try again.")
+	} else {
+		// Save assistant response to DB
+		saveAssistantMessage(session.ID, fullResponse)
 	}
 
-	c.SSEvent("done", "")
-	c.Writer.Flush()
+	writeSSE(c, "done", "")
 
+	return nil
+}
+
+// saveAssistantMessage saves the assistant's response to the database.
+func saveAssistantMessage(sessionID uuid.UUID, content string) {
+	msg := models.ChatMessage{
+		SessionID: sessionID,
+		Role:      "assistant",
+		Content:   content,
+	}
+	database.DB.Create(&msg)
+}
+
+// DeleteChatSession deletes a chat session and its messages.
+func DeleteChatSession(sessionID uuid.UUID, walletAddr string) error {
+	var session models.ChatSession
+	if err := database.DB.Where("id = ? AND wallet_addr = ?", sessionID, walletAddr).First(&session).Error; err != nil {
+		return fmt.Errorf("session not found or access denied")
+	}
+
+	// Delete messages first, then session
+	database.DB.Where("session_id = ?", sessionID).Delete(&models.ChatMessage{})
+	database.DB.Delete(&session)
 	return nil
 }
 

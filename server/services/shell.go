@@ -150,6 +150,13 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		return nil, fmt.Errorf("a soul for @%s already exists", handle)
 	}
 
+	// Limit: each wallet can mint at most 5 shells
+	var mintCount int64
+	database.DB.Model(&models.Shell{}).Where("owner_addr = ?", ownerAddr).Count(&mintCount)
+	if mintCount >= 5 {
+		return nil, fmt.Errorf("each wallet can mint at most 5 souls")
+	}
+
 	// Build dimensions JSON
 	dims := make(models.JSON)
 	for k, v := range preview.Dimensions {

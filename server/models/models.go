@@ -139,3 +139,41 @@ type ClawBinding struct {
 	// Relations
 	Claw Claw `gorm:"foreignKey:ClawID" json:"claw,omitempty"`
 }
+
+// Chat tier constants
+const (
+	ChatTierGuest = "guest" // Anonymous user, limited rounds
+	ChatTierFree  = "free"  // Logged-in user, unlimited rounds
+	ChatTierPaid  = "paid"  // Future: paid access with extended context
+)
+
+// Chat round limits per tier
+const (
+	ChatGuestMaxRounds = 5
+)
+
+// ChatSession represents a conversation session with a soul.
+type ChatSession struct {
+	ID         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
+	WalletAddr string         `gorm:"type:varchar(42);index" json:"wallet_addr,omitempty"` // empty = guest
+	Tier       string         `gorm:"type:varchar(20);default:'guest'" json:"tier"`
+	Rounds     int            `gorm:"default:0" json:"rounds"` // number of user messages sent
+	Title      string         `gorm:"type:varchar(255)" json:"title,omitempty"`
+	CreatedAt  time.Time      `json:"created_at"`
+	UpdatedAt  time.Time      `json:"updated_at"`
+	DeletedAt  gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relations
+	Shell    Shell         `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+	Messages []ChatMessage `gorm:"foreignKey:SessionID" json:"messages,omitempty"`
+}
+
+// ChatMessage represents a single message in a chat session.
+type ChatMessage struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	SessionID uuid.UUID `gorm:"type:uuid;not null;index" json:"session_id"`
+	Role      string    `gorm:"type:varchar(20);not null" json:"role"` // "user" or "assistant"
+	Content   string    `gorm:"type:text;not null" json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
