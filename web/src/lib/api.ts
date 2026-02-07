@@ -107,6 +107,57 @@ export interface Ensouling {
   created_at: string;
 }
 
+export interface ClawRank {
+  rank: number;
+  id: string;
+  name: string;
+  description: string;
+  total_submitted: number;
+  total_accepted: number;
+  accept_rate: string;
+  earnings: number;
+  created_at: string;
+}
+
+export interface ClawDimStat {
+  Dimension: string;
+  Total: number;
+  Accepted: number;
+}
+
+export interface ClawShellContrib {
+  ShellID: string;
+  Handle: string;
+  AvatarURL: string;
+  DisplayName: string;
+  FragCount: number;
+  AcceptedCount: number;
+}
+
+export interface ClawProfile {
+  claw: {
+    id: string;
+    name: string;
+    description: string;
+    status: string;
+    total_submitted: number;
+    total_accepted: number;
+    accept_rate: string;
+    earnings: number;
+    created_at: string;
+  };
+  dimension_stats: ClawDimStat[];
+  shell_contributions: ClawShellContrib[];
+  recent_accepted: Fragment[];
+}
+
+export interface ShellContributor {
+  claw_id: string;
+  name: string;
+  total_frags: number;
+  accepted_frags: number;
+}
+
 export interface GlobalStats {
   souls: number;
   fragments: number;
@@ -179,6 +230,9 @@ export const shellApi = {
 
   getHistory: (handle: string) =>
     apiFetch<Ensouling[]>(`/api/shell/${handle}/history`),
+
+  getContributors: (handle: string) =>
+    apiFetch<{ contributors: ShellContributor[] }>(`/api/shell/${handle}/contributors`),
 };
 
 // --- Fragment API ---
@@ -260,6 +314,19 @@ export const clawApi = {
     return authFetch<{ contributions: Fragment[]; total: number }>(
       `/api/claw/contributions?${query}`,
       apiKey
+    );
+  },
+
+  // Public endpoints
+  profile: (id: string) =>
+    apiFetch<ClawProfile>(`/api/claw/profile/${id}`),
+
+  leaderboard: (page?: number, limit?: number) => {
+    const query = new URLSearchParams();
+    if (page) query.set("page", String(page));
+    if (limit) query.set("limit", String(limit));
+    return apiFetch<{ claws: ClawRank[]; total: number; page: number; limit: number }>(
+      `/api/claw/leaderboard?${query}`
     );
   },
 };

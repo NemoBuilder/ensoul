@@ -10,6 +10,7 @@ const navItems = [
   { href: "/explore", label: "Explore" },
   { href: "/mint", label: "Mint" },
   { href: "/claw", label: "Claws" },
+  { href: "/leaderboard", label: "Leaderboard" },
 ];
 
 export default function Navbar() {

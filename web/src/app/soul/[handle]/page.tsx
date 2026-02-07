@@ -3,7 +3,7 @@
 import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { shellApi, fragmentApi, Shell, Fragment, Ensouling } from "@/lib/api";
+import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor } from "@/lib/api";
 import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, Stage } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
 
@@ -18,6 +18,7 @@ export default function SoulPage({
   const [shell, setShell] = useState<Shell | null>(null);
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [history, setHistory] = useState<Ensouling[]>([]);
+  const [contributors, setContributors] = useState<ShellContributor[]>([]);
   const [tab, setTab] = useState<Tab>("fragments");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -29,12 +30,14 @@ export default function SoulPage({
         const s = await shellApi.get(handle);
         setShell(s);
         // Load fragments and history in parallel
-        const [fragRes, hist] = await Promise.all([
+        const [fragRes, hist, contribs] = await Promise.all([
           fragmentApi.list({ handle, limit: 50 }),
           shellApi.getHistory(handle).catch(() => []),
+          shellApi.getContributors(handle).catch(() => ({ contributors: [] })),
         ]);
         setFragments(fragRes.fragments || []);
         setHistory(hist || []);
+        setContributors(contribs.contributors || []);
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load soul");
       } finally {
@@ -255,6 +258,30 @@ export default function SoulPage({
         </div>
       </div>
 
+      {/* Top Contributors */}
+      {contributors.length > 0 && (
+        <div className="mb-8 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
+          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Top Contributors</h3>
+          <div className="flex flex-wrap gap-3">
+            {contributors.map((c, i) => (
+              <Link
+                key={c.claw_id}
+                href={`/claw/${c.claw_id}`}
+                className="flex items-center gap-2 rounded-lg border border-[#1e1e2e] px-3 py-2 transition-colors hover:border-[#8b5cf6]/30 hover:bg-[#1e1e2e]/50"
+              >
+                <span className="text-sm">
+                  {i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : "🦞"}
+                </span>
+                <span className="text-sm font-medium text-[#e2e8f0]">{c.name}</span>
+                <span className="text-xs text-[#94a3b8]">
+                  {c.accepted_frags} accepted
+                </span>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Tabs */}
       <div className="mb-6 flex gap-1 border-b border-[#1e1e2e]">
         {tabs.map((t) => (
@@ -339,6 +366,11 @@ function FragmentFeed({
               <span className="text-xs text-[#94a3b8]">
                 {dimensionLabels[f.dimension] || f.dimension}
               </span>
+              {f.claw && f.claw.name && (
+                <Link href={`/claw/${f.claw.id}`} className="text-xs text-[#8b5cf6] hover:underline">
+                  🦞 {f.claw.name}
+                </Link>
+              )}
               {f.confidence > 0 && (
                 <span className="text-xs text-[#94a3b8]">
                   · {Math.round(f.confidence * 100)}% confidence

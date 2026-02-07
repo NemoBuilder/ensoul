@@ -42,6 +42,7 @@ func Setup() *gin.Engine {
 			shell.GET("/:handle", handlers.ShellGetByHandle)
 			shell.GET("/:handle/dimensions", handlers.ShellGetDimensions)
 			shell.GET("/:handle/history", handlers.ShellGetHistory)
+			shell.GET("/:handle/contributors", handlers.ShellContributors)
 		}
 
 		// Fragment endpoints
@@ -57,6 +58,9 @@ func Setup() *gin.Engine {
 		// Claw endpoints
 		claw := api.Group("/claw")
 		{
+			// Public endpoints
+			claw.GET("/leaderboard", handlers.ClawLeaderboard)
+			claw.GET("/profile/:id", handlers.ClawPublicProfile)
 			// Registration is public
 			claw.POST("/register", handlers.ClawRegister)
 			// Claim info is public (accessed via claim URL)

@@ -152,3 +152,40 @@ func ClawContributions(c *gin.Context) {
 
 	c.JSON(http.StatusOK, result)
 }
+
+// ClawPublicProfile handles GET /api/claw/profile/:id
+// Returns public profile of a Claw including stats and contributions.
+func ClawPublicProfile(c *gin.Context) {
+	id := c.Param("id")
+	result, err := services.GetClawPublicProfile(id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ClawLeaderboard handles GET /api/claw/leaderboard
+// Returns ranked list of Claws by accepted fragments.
+func ClawLeaderboard(c *gin.Context) {
+	page := c.DefaultQuery("page", "1")
+	limit := c.DefaultQuery("limit", "20")
+	result, err := services.GetClawLeaderboard(page, limit)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, result)
+}
+
+// ShellContributors handles GET /api/shell/:handle/contributors
+// Returns top contributors for a specific shell.
+func ShellContributors(c *gin.Context) {
+	handle := c.Param("handle")
+	result, err := services.GetShellContributors(handle)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"contributors": result})
+}

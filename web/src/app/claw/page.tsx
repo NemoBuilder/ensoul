@@ -341,9 +341,18 @@ function ActivityTimeline() {
                 {/* Header: Agent → Soul */}
                 <div className="mb-2 flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2 text-sm">
-                    <span className="font-semibold text-[#e2e8f0]">
-                      🤖 {clawName}
-                    </span>
+                    {frag.claw?.id ? (
+                      <Link
+                        href={`/claw/${frag.claw.id}`}
+                        className="font-semibold text-[#e2e8f0] hover:text-[#8b5cf6]"
+                      >
+                        🦞 {clawName}
+                      </Link>
+                    ) : (
+                      <span className="font-semibold text-[#e2e8f0]">
+                        🦞 {clawName}
+                      </span>
+                    )}
                     <span className="text-[#64748b]">→</span>
                     <Link
                       href={`/soul/${shellHandle}`}

@@ -8,10 +8,12 @@ import (
 	"math/big"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/google/uuid"
 )
 
 // ClawRegistrationResult holds the data returned after Claw registration.
@@ -188,6 +190,177 @@ func GetClawByClaimCode(claimCode string) (*models.Claw, error) {
 		return nil, fmt.Errorf("invalid claim code")
 	}
 	return &claw, nil
+}
+
+// GetClawPublicProfile returns a public-facing profile for a Claw by ID.
+func GetClawPublicProfile(clawID string) (map[string]interface{}, error) {
+	uid, err := uuid.Parse(clawID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid claw ID")
+	}
+
+	var claw models.Claw
+	if err := database.DB.Where("id = ?", uid).First(&claw).Error; err != nil {
+		return nil, fmt.Errorf("claw not found")
+	}
+
+	// Calculate acceptance rate
+	var acceptRate float64
+	if claw.TotalSubmitted > 0 {
+		acceptRate = float64(claw.TotalAccepted) / float64(claw.TotalSubmitted) * 100
+	}
+
+	// Get per-dimension breakdown
+	type DimStat struct {
+		Dimension string
+		Total     int64
+		Accepted  int64
+	}
+	var dimStats []DimStat
+	database.DB.Model(&models.Fragment{}).
+		Select("dimension, COUNT(*) as total, SUM(CASE WHEN status = 'accepted' THEN 1 ELSE 0 END) as accepted").
+		Where("claw_id = ?", uid).
+		Group("dimension").
+		Scan(&dimStats)
+
+	// Get shells contributed to (unique)
+	type ShellContrib struct {
+		ShellID       uuid.UUID
+		Handle        string
+		AvatarURL     string
+		DisplayName   string
+		FragCount     int64
+		AcceptedCount int64
+	}
+	var shellContribs []ShellContrib
+	database.DB.Model(&models.Fragment{}).
+		Select("fragments.shell_id, shells.handle, shells.avatar_url, shells.display_name, COUNT(*) as frag_count, SUM(CASE WHEN fragments.status = 'accepted' THEN 1 ELSE 0 END) as accepted_count").
+		Joins("JOIN shells ON shells.id = fragments.shell_id").
+		Where("fragments.claw_id = ?", uid).
+		Group("fragments.shell_id, shells.handle, shells.avatar_url, shells.display_name").
+		Order("accepted_count DESC").
+		Scan(&shellContribs)
+
+	// Get recent accepted fragments
+	var recentAccepted []models.Fragment
+	database.DB.Where("claw_id = ? AND status = ?", uid, "accepted").
+		Preload("Shell").
+		Order("created_at DESC").
+		Limit(10).
+		Find(&recentAccepted)
+
+	return map[string]interface{}{
+		"claw": map[string]interface{}{
+			"id":              claw.ID,
+			"name":            claw.Name,
+			"description":     claw.Description,
+			"status":          claw.Status,
+			"total_submitted": claw.TotalSubmitted,
+			"total_accepted":  claw.TotalAccepted,
+			"accept_rate":     fmt.Sprintf("%.1f%%", acceptRate),
+			"earnings":        claw.Earnings,
+			"created_at":      claw.CreatedAt,
+		},
+		"dimension_stats":     dimStats,
+		"shell_contributions": shellContribs,
+		"recent_accepted":     recentAccepted,
+	}, nil
+}
+
+// GetClawLeaderboard returns a ranked list of Claws by accepted fragments.
+func GetClawLeaderboard(pageStr, limitStr string) (map[string]interface{}, error) {
+	page, _ := strconv.Atoi(pageStr)
+	limit, _ := strconv.Atoi(limitStr)
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 || limit > 50 {
+		limit = 20
+	}
+	offset := (page - 1) * limit
+
+	var total int64
+	database.DB.Model(&models.Claw{}).Where("status = ?", "claimed").Count(&total)
+
+	var claws []models.Claw
+	database.DB.Where("status = ?", "claimed").
+		Order("total_accepted DESC, total_submitted DESC").
+		Offset(offset).Limit(limit).
+		Find(&claws)
+
+	// Build public response (no API keys, no private data)
+	type ClawRank struct {
+		Rank           int       `json:"rank"`
+		ID             uuid.UUID `json:"id"`
+		Name           string    `json:"name"`
+		Description    string    `json:"description"`
+		TotalSubmitted int       `json:"total_submitted"`
+		TotalAccepted  int       `json:"total_accepted"`
+		AcceptRate     string    `json:"accept_rate"`
+		Earnings       float64   `json:"earnings"`
+		CreatedAt      time.Time `json:"created_at"`
+	}
+
+	ranked := make([]ClawRank, len(claws))
+	for i, c := range claws {
+		var rate float64
+		if c.TotalSubmitted > 0 {
+			rate = float64(c.TotalAccepted) / float64(c.TotalSubmitted) * 100
+		}
+		ranked[i] = ClawRank{
+			Rank:           offset + i + 1,
+			ID:             c.ID,
+			Name:           c.Name,
+			Description:    c.Description,
+			TotalSubmitted: c.TotalSubmitted,
+			TotalAccepted:  c.TotalAccepted,
+			AcceptRate:     fmt.Sprintf("%.1f%%", rate),
+			Earnings:       c.Earnings,
+			CreatedAt:      c.CreatedAt,
+		}
+	}
+
+	return map[string]interface{}{
+		"claws": ranked,
+		"total": total,
+		"page":  page,
+		"limit": limit,
+	}, nil
+}
+
+// GetShellContributors returns top contributors for a specific shell.
+func GetShellContributors(handle string) ([]map[string]interface{}, error) {
+	var shell models.Shell
+	if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err != nil {
+		return nil, fmt.Errorf("shell not found")
+	}
+
+	type Contrib struct {
+		ClawID        uuid.UUID
+		Name          string
+		TotalFrags    int64
+		AcceptedFrags int64
+	}
+	var contribs []Contrib
+	database.DB.Model(&models.Fragment{}).
+		Select("fragments.claw_id, claws.name, COUNT(*) as total_frags, SUM(CASE WHEN fragments.status = 'accepted' THEN 1 ELSE 0 END) as accepted_frags").
+		Joins("JOIN claws ON claws.id = fragments.claw_id").
+		Where("fragments.shell_id = ?", shell.ID).
+		Group("fragments.claw_id, claws.name").
+		Order("accepted_frags DESC").
+		Limit(20).
+		Scan(&contribs)
+
+	result := make([]map[string]interface{}, len(contribs))
+	for i, c := range contribs {
+		result[i] = map[string]interface{}{
+			"claw_id":        c.ClawID,
+			"name":           c.Name,
+			"total_frags":    c.TotalFrags,
+			"accepted_frags": c.AcceptedFrags,
+		}
+	}
+	return result, nil
 }
 
 // --- Helper functions ---
