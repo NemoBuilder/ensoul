@@ -1,0 +1,176 @@
+package services
+
+import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"github.com/ensoul-labs/ensoul-server/config"
+)
+
+// TwitterUser holds basic user profile data from the Twitter API.
+type TwitterUser struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	Username        string `json:"username"`
+	Description     string `json:"description"`
+	ProfileImageURL string `json:"profile_image_url"`
+	PublicMetrics   struct {
+		FollowersCount int `json:"followers_count"`
+		FollowingCount int `json:"following_count"`
+		TweetCount     int `json:"tweet_count"`
+	} `json:"public_metrics"`
+}
+
+// TwitterTweet holds a single tweet from the Twitter API.
+type TwitterTweet struct {
+	ID        string `json:"id"`
+	Text      string `json:"text"`
+	CreatedAt string `json:"created_at"`
+}
+
+// TwitterProfile aggregates user info and recent tweets for seed extraction.
+type TwitterProfile struct {
+	User   TwitterUser    `json:"user"`
+	Tweets []TwitterTweet `json:"tweets"`
+}
+
+// FetchTwitterProfile retrieves a user's profile and recent tweets via the Twitter v2 API.
+// Falls back to mock data if TWITTER_BEARER_TOKEN is not configured.
+func FetchTwitterProfile(handle string) (*TwitterProfile, error) {
+	token := config.Cfg.TwitterBearerToken
+	if token == "" {
+		return mockTwitterProfile(handle), nil
+	}
+
+	handle = strings.TrimPrefix(handle, "@")
+
+	// Fetch user profile
+	user, err := fetchTwitterUser(handle, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch Twitter user @%s: %w", handle, err)
+	}
+
+	// Fetch recent tweets
+	tweets, err := fetchUserTweets(user.ID, token)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch tweets for @%s: %w", handle, err)
+	}
+
+	return &TwitterProfile{
+		User:   *user,
+		Tweets: tweets,
+	}, nil
+}
+
+func fetchTwitterUser(username, token string) (*TwitterUser, error) {
+	params := url.Values{}
+	params.Set("user.fields", "id,name,username,description,profile_image_url,public_metrics")
+
+	apiURL := fmt.Sprintf("https://api.twitter.com/2/users/by/username/%s?%s",
+		url.PathEscape(username), params.Encode())
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Twitter API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data TwitterUser `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode Twitter user response: %w", err)
+	}
+
+	return &result.Data, nil
+}
+
+func fetchUserTweets(userID, token string) ([]TwitterTweet, error) {
+	params := url.Values{}
+	params.Set("max_results", "50")
+	params.Set("tweet.fields", "id,text,created_at")
+	params.Set("exclude", "retweets,replies")
+
+	apiURL := fmt.Sprintf("https://api.twitter.com/2/users/%s/tweets?%s",
+		url.PathEscape(userID), params.Encode())
+
+	req, err := http.NewRequest("GET", apiURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("Twitter API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result struct {
+		Data []TwitterTweet `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode Twitter tweets response: %w", err)
+	}
+
+	return result.Data, nil
+}
+
+// mockTwitterProfile returns mock profile data when Twitter API is not configured.
+func mockTwitterProfile(handle string) *TwitterProfile {
+	return &TwitterProfile{
+		User: TwitterUser{
+			ID:              "mock_" + handle,
+			Name:            handle,
+			Username:        handle,
+			Description:     fmt.Sprintf("Public figure @%s. Bio not available (Twitter API not configured).", handle),
+			ProfileImageURL: fmt.Sprintf("https://unavatar.io/twitter/%s", handle),
+			PublicMetrics: struct {
+				FollowersCount int `json:"followers_count"`
+				FollowingCount int `json:"following_count"`
+				TweetCount     int `json:"tweet_count"`
+			}{
+				FollowersCount: 0,
+				FollowingCount: 0,
+				TweetCount:     0,
+			},
+		},
+		Tweets: []TwitterTweet{
+			{ID: "1", Text: fmt.Sprintf("(Mock tweet 1 for @%s — Twitter API not configured. Seed extraction will use limited data.)", handle)},
+			{ID: "2", Text: fmt.Sprintf("(Mock tweet 2 for @%s — Configure TWITTER_BEARER_TOKEN for real tweet analysis.)", handle)},
+		},
+	}
+}
+
+// FormatTweetsForLLM formats tweets into a readable text block for LLM input.
+func FormatTweetsForLLM(tweets []TwitterTweet) string {
+	var sb strings.Builder
+	for i, t := range tweets {
+		sb.WriteString(fmt.Sprintf("[%d] %s\n", i+1, t.Text))
+		if t.CreatedAt != "" {
+			sb.WriteString(fmt.Sprintf("    (posted: %s)\n", t.CreatedAt))
+		}
+		sb.WriteString("\n")
+	}
+	return sb.String()
+}

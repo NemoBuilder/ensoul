@@ -1,0 +1,24 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+
+# Node
+node_modules/
+.next/
+out/
+
+# Go
+*.exe
+*.dll
+vendor/
+
+# Personal
+mydocs/

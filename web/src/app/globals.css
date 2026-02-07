@@ -1,0 +1,64 @@
+@import "tailwindcss";
+
+@theme inline {
+  /* Brand colors */
+  --color-bg-primary: #0a0a0f;
+  --color-bg-card: #14141f;
+  --color-bg-hover: #1a1a2e;
+  --color-border: #1e1e2e;
+  --color-brand: #8b5cf6;
+  --color-brand-light: #a78bfa;
+  --color-success: #22c55e;
+  --color-danger: #ef4444;
+  --color-warning: #f59e0b;
+  --color-text-primary: #e2e8f0;
+  --color-text-secondary: #94a3b8;
+
+  /* Stage colors */
+  --color-stage-embryo: #6b7280;
+  --color-stage-growing: #3b82f6;
+  --color-stage-mature: #8b5cf6;
+  --color-stage-evolving: #f59e0b;
+
+  /* Wire up Next.js font CSS variables */
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  min-height: 100vh;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-secondary);
+}
+
+/* Slow bouncing animation for logo */
+@keyframes bounce-slow {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-12px);
+  }
+}
+.animate-bounce-slow {
+  animation: bounce-slow 3s ease-in-out infinite;
+}

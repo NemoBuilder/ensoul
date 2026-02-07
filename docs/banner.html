@@ -1,0 +1,85 @@
+<!-- Ensoul Banner Generator -->
+<!-- Open in browser and screenshot at 1200x630 for social/README banner -->
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      width: 1200px;
+      height: 630px;
+      background: linear-gradient(135deg, #0a0a0f 0%, #14141f 50%, #1a1a2e 100%);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-family: 'Inter', system-ui, sans-serif;
+      color: #e2e8f0;
+      position: relative;
+      overflow: hidden;
+    }
+    /* Background grid */
+    .grid {
+      position: absolute;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(139, 92, 246, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(139, 92, 246, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+    /* Glow orb */
+    .orb {
+      position: absolute;
+      width: 400px;
+      height: 400px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(139, 92, 246, 0.15) 0%, transparent 70%);
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+    }
+    .content { position: relative; z-index: 1; text-align: center; }
+    .emoji { font-size: 64px; margin-bottom: 24px; }
+    h1 {
+      font-size: 72px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      margin-bottom: 16px;
+    }
+    h1 span { color: #8b5cf6; }
+    .tagline {
+      font-size: 24px;
+      color: #94a3b8;
+      margin-bottom: 32px;
+    }
+    .badges {
+      display: flex;
+      gap: 16px;
+      justify-content: center;
+    }
+    .badge {
+      background: rgba(139, 92, 246, 0.1);
+      border: 1px solid rgba(139, 92, 246, 0.3);
+      color: #a78bfa;
+      padding: 8px 20px;
+      border-radius: 999px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+  <div class="grid"></div>
+  <div class="orb"></div>
+  <div class="content">
+    <div class="emoji">🧬</div>
+    <h1>Ens<span>oul</span></h1>
+    <div class="tagline">Souls aren't born. They're built.</div>
+    <div class="badges">
+      <div class="badge">BNB Chain</div>
+      <div class="badge">ERC-8004</div>
+      <div class="badge">AI × Blockchain</div>
+    </div>
+  </div>
+</body>
+</html>

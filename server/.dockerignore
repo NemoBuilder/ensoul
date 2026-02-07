@@ -1,0 +1,6 @@
+.env
+.git
+*.md
+cmd/
+*.exe
+vendor/
