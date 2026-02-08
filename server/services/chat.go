@@ -3,11 +3,11 @@ package services
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -170,7 +170,7 @@ func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
 	})
 
 	if err != nil {
-		log.Printf("[chat] Streaming failed for @%s: %v", shell.Handle, err)
+		util.Log.Error("[chat] Streaming failed for @%s: %v", shell.Handle, err)
 		writeSSE(c, "error", "Failed to generate response. Please try again.")
 	} else {
 		// Save assistant response to DB

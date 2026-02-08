@@ -11,8 +11,9 @@ import (
 // Config holds all configuration for the application.
 type Config struct {
 	// Server
-	Port string
-	Env  string // "production" or "development"
+	Port     string
+	Env      string // "production" or "development"
+	LogLevel string // "debug", "info", "warn", "error"
 
 	// Database
 	DBHost     string
@@ -50,6 +51,7 @@ func Load() *Config {
 	cfg := &Config{
 		Port:                   getEnv("PORT", "8990"),
 		Env:                    getEnv("ENV", "development"),
+		LogLevel:               getEnv("LOG_LEVEL", ""), // auto-set below
 		DBHost:                 getEnv("DB_HOST", "localhost"),
 		DBPort:                 getEnv("DB_PORT", "5432"),
 		DBUser:                 getEnv("DB_USER", "ensoul"),
@@ -66,6 +68,15 @@ func Load() *Config {
 		LLMModel:               getEnv("LLM_MODEL", "gpt-4o"),
 		LLMBaseURL:             getEnv("LLM_BASE_URL", ""),
 		TwitterBearerToken:     getEnv("TWITTER_BEARER_TOKEN", ""),
+	}
+
+	// Auto-set log level based on environment if not explicitly configured
+	if cfg.LogLevel == "" {
+		if cfg.IsProduction() {
+			cfg.LogLevel = "info"
+		} else {
+			cfg.LogLevel = "debug"
+		}
 	}
 
 	Cfg = cfg

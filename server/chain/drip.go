@@ -3,12 +3,13 @@ package chain
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // Gas drip configuration
@@ -36,7 +37,7 @@ func NeedsGasDrip(ctx context.Context, clawAddr string) (bool, error) {
 
 	needsDrip := balance.Cmp(MinGasBalance) < 0
 	if needsDrip {
-		log.Printf("[chain] Claw wallet %s balance is %s wei (below threshold %s), needs drip",
+		util.Log.Debug("[chain] Claw wallet %s balance is %s wei (below threshold %s), needs drip",
 			clawAddr, balance.String(), MinGasBalance.String())
 	}
 
@@ -85,7 +86,7 @@ func DripGas(ctx context.Context, clawAddr string) (string, error) {
 	}
 
 	txHash := signedTx.Hash().Hex()
-	log.Printf("[chain] Gas drip sent to %s: %s BNB, tx=%s",
+	util.Log.Debug("[chain] Gas drip sent to %s: %s BNB, tx=%s",
 		clawAddr, "0.001", txHash)
 
 	return txHash, nil
@@ -110,7 +111,7 @@ func EnsureGasAndDrip(ctx context.Context, clawAddr string) error {
 		return fmt.Errorf("gas drip failed: %w", err)
 	}
 
-	log.Printf("[chain] Gas drip successful for %s, waiting for confirmation... tx=%s", clawAddr, txHash)
+	util.Log.Debug("[chain] Gas drip successful for %s, waiting for confirmation... tx=%s", clawAddr, txHash)
 
 	// Wait for the drip tx to be mined before proceeding
 	// (the Claw needs the BNB in its account before it can send a tx)
@@ -123,7 +124,7 @@ func EnsureGasAndDrip(ctx context.Context, clawAddr string) error {
 		return fmt.Errorf("drip tx reverted: %s", txHash)
 	}
 
-	log.Printf("[chain] Gas drip confirmed for %s: tx=%s", clawAddr, txHash)
+	util.Log.Info("[chain] Gas drip confirmed for %s: tx=%s", clawAddr, txHash)
 	return nil
 }
 

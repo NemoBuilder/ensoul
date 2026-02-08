@@ -6,11 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strings"
 
 	"github.com/ensoul-labs/ensoul-server/config"
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // --- OpenAI-compatible API client ---
@@ -153,7 +153,7 @@ func callOpenAI(messages []ChatMessage, maxTokens int, temperature float64, _ bo
 		return "", fmt.Errorf("LLM returned no choices")
 	}
 
-	log.Printf("[llm] Tokens used: prompt=%d, completion=%d, total=%d",
+	util.Log.Debug("[llm] Tokens used: prompt=%d, completion=%d, total=%d",
 		chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens, chatResp.Usage.TotalTokens)
 
 	return chatResp.Choices[0].Message.Content, nil
@@ -297,7 +297,7 @@ func callClaude(messages []ChatMessage, maxTokens int, temperature float64) (str
 		return "", fmt.Errorf("Claude returned no content")
 	}
 
-	log.Printf("[llm] Claude tokens: input=%d, output=%d",
+	util.Log.Debug("[llm] Claude tokens: input=%d, output=%d",
 		claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens)
 
 	return claudeResp.Content[0].Text, nil

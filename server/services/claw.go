@@ -4,7 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
-	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -56,7 +55,7 @@ func RegisterClaw(name, description string) (*ClawRegistrationResult, error) {
 	// Generate a real Ethereum wallet for this Claw using go-ethereum
 	wallet, err := chain.GenerateClawWallet()
 	if err != nil {
-		log.Printf("[services] Real wallet generation failed, using mock: %v", err)
+		util.Log.Warn("[services] Real wallet generation failed, using mock: %v", err)
 		wallet = &chain.ClawWallet{
 			Address:       generateMockWalletAddr(),
 			PrivateKeyEnc: "",

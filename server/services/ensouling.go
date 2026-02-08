@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"strings"
 
@@ -12,6 +11,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // EnsoulingResult holds the LLM output for a soul condensation.
@@ -50,7 +50,7 @@ func TriggerEnsouling(shell *models.Shell) {
 	if config.Cfg.LLMAPIKey != "" {
 		result, err = ensoulWithLLM(shell, fragments)
 		if err != nil {
-			log.Printf("[ensouling] LLM ensouling failed, using fallback: %v", err)
+			util.Log.Warn("[ensouling] LLM ensouling failed, using fallback: %v", err)
 			result = ensoulFallback(shell, fragments)
 		}
 	} else {
@@ -61,7 +61,7 @@ func TriggerEnsouling(shell *models.Shell) {
 	ensouling.SummaryDiff = result.SummaryDiff
 
 	if err := database.DB.Create(ensouling).Error; err != nil {
-		log.Printf("[ensouling] Failed to create ensouling record: %v", err)
+		util.Log.Error("[ensouling] Failed to create ensouling record: %v", err)
 		return
 	}
 
@@ -107,17 +107,17 @@ func TriggerEnsouling(shell *models.Shell) {
 				shell.SeedSummary, shell.Stage, shell.DNAVersion,
 			)
 			if err != nil {
-				log.Printf("[ensouling] Failed to update agentURI on-chain for @%s: %v", shell.Handle, err)
+				util.Log.Error("[ensouling] Failed to update agentURI on-chain for @%s: %v", shell.Handle, err)
 				return
 			}
 			if txHash != "" {
 				database.DB.Model(ensouling).Update("tx_hash", txHash)
-				log.Printf("[ensouling] On-chain URI updated for @%s: tx=%s", shell.Handle, txHash)
+				util.Log.Debug("[ensouling] On-chain URI updated for @%s: tx=%s", shell.Handle, txHash)
 			}
 		}()
 	}
 
-	log.Printf("[ensouling] Completed for @%s: v%d -> v%d, merged %d fragments",
+	util.Log.Info("[ensouling] Completed for @%s: v%d -> v%d, merged %d fragments",
 		shell.Handle, ensouling.VersionFrom, ensouling.VersionTo, len(fragments))
 }
 
@@ -201,7 +201,7 @@ Respond in JSON format ONLY:
 		return nil, err
 	}
 
-	log.Printf("[ensouling] LLM ensouling for @%s: %s", shell.Handle, result.SummaryDiff)
+	util.Log.Debug("[ensouling] LLM ensouling for @%s: %s", shell.Handle, result.SummaryDiff)
 	return &result, nil
 }
 

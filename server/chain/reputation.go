@@ -4,12 +4,13 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // SubmitFeedback sends reputation feedback from a Claw's wallet to the Reputation Registry.
@@ -56,7 +57,7 @@ func SubmitFeedback(
 		return "", fmt.Errorf("giveFeedback() call failed: %w", err)
 	}
 
-	log.Printf("[chain] Reputation feedback tx sent: %s (agentId=%s, value=%d, tag1=%s)",
+	util.Log.Debug("[chain] Reputation feedback tx sent: %s (agentId=%s, value=%d, tag1=%s)",
 		tx.Hash().Hex(), agentId.String(), value, tag1)
 
 	// Wait for confirmation
@@ -69,7 +70,7 @@ func SubmitFeedback(
 		return tx.Hash().Hex(), fmt.Errorf("giveFeedback() tx reverted")
 	}
 
-	log.Printf("[chain] Reputation feedback confirmed: agentId=%s, value=%d, tx=%s",
+	util.Log.Info("[chain] Reputation feedback confirmed: agentId=%s, value=%d, tx=%s",
 		agentId.String(), value, tx.Hash().Hex())
 
 	return tx.Hash().Hex(), nil

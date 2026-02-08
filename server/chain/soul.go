@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // AgentRegistrationFile is the ERC-8004 registration file format.
@@ -44,7 +45,7 @@ func MintSoul(ctx context.Context, handle, ownerAddr, avatarURL, seedSummary str
 		return nil, "", fmt.Errorf("chain client not initialized")
 	}
 	if !C.HasPlatformKey() {
-		log.Println("[chain] Skipping on-chain minting: no platform key configured")
+		util.Log.Debug("[chain] Skipping on-chain minting: no platform key configured")
 		return nil, "", nil
 	}
 
@@ -94,7 +95,7 @@ func MintSoul(ctx context.Context, handle, ownerAddr, avatarURL, seedSummary str
 		return nil, "", fmt.Errorf("register() call failed: %w", err)
 	}
 
-	log.Printf("[chain] Soul registration tx sent: %s (handle: @%s)", tx.Hash().Hex(), handle)
+	util.Log.Debug("[chain] Soul registration tx sent: %s (handle: @%s)", tx.Hash().Hex(), handle)
 
 	// Wait for transaction receipt
 	receipt, err := bind.WaitMined(ctx, C.ethClient, tx)
@@ -112,23 +113,23 @@ func MintSoul(ctx context.Context, handle, ownerAddr, avatarURL, seedSummary str
 		return nil, tx.Hash().Hex(), fmt.Errorf("failed to extract agentId from receipt: %w", err)
 	}
 
-	log.Printf("[chain] Soul registered on-chain: @%s -> agentId=%s, tx=%s", handle, agentId.String(), tx.Hash().Hex())
+	util.Log.Info("[chain] Soul registered on-chain: @%s -> agentId=%s, tx=%s", handle, agentId.String(), tx.Hash().Hex())
 
 	// Set additional metadata: handle and stage
 	go func() {
 		setCtx := context.Background()
 		setOpts, err := C.PlatformTransactOpts(setCtx)
 		if err != nil {
-			log.Printf("[chain] Failed to create opts for setMetadata: %v", err)
+			util.Log.Error("[chain] Failed to create opts for setMetadata: %v", err)
 			return
 		}
 
 		// Store the handle as on-chain metadata
 		_, err = C.identityRegistry.SetMetadata(setOpts, agentId, "ensoul:handle", []byte(handle))
 		if err != nil {
-			log.Printf("[chain] Failed to set handle metadata: %v", err)
+			util.Log.Error("[chain] Failed to set handle metadata: %v", err)
 		} else {
-			log.Printf("[chain] Handle metadata set for agentId=%s", agentId.String())
+			util.Log.Debug("[chain] Handle metadata set for agentId=%s", agentId.String())
 		}
 	}()
 
@@ -138,7 +139,7 @@ func MintSoul(ctx context.Context, handle, ownerAddr, avatarURL, seedSummary str
 // UpdateSoulURI updates the agentURI on-chain after an ensouling event.
 func UpdateSoulURI(ctx context.Context, agentId *big.Int, handle, avatarURL, seedSummary, stage string, dnaVersion int) (string, error) {
 	if C == nil || !C.HasPlatformKey() {
-		log.Println("[chain] Skipping URI update: chain client not configured")
+		util.Log.Debug("[chain] Skipping URI update: chain client not configured")
 		return "", nil
 	}
 
@@ -184,7 +185,7 @@ func UpdateSoulURI(ctx context.Context, agentId *big.Int, handle, avatarURL, see
 		return "", fmt.Errorf("setAgentURI() call failed: %w", err)
 	}
 
-	log.Printf("[chain] Soul URI update tx sent: %s (agentId=%s, dna v%d)", tx.Hash().Hex(), agentId.String(), dnaVersion)
+	util.Log.Debug("[chain] Soul URI update tx sent: %s (agentId=%s, dna v%d)", tx.Hash().Hex(), agentId.String(), dnaVersion)
 
 	// Wait for receipt
 	receipt, err := bind.WaitMined(ctx, C.ethClient, tx)
@@ -196,7 +197,7 @@ func UpdateSoulURI(ctx context.Context, agentId *big.Int, handle, avatarURL, see
 		return tx.Hash().Hex(), fmt.Errorf("setAgentURI() tx reverted")
 	}
 
-	log.Printf("[chain] Soul URI updated on-chain: agentId=%s, tx=%s", agentId.String(), tx.Hash().Hex())
+	util.Log.Info("[chain] Soul URI updated on-chain: agentId=%s, tx=%s", agentId.String(), tx.Hash().Hex())
 	return tx.Hash().Hex(), nil
 }
 

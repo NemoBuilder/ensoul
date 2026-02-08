@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"fmt"
-	"log"
 	"math/big"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
@@ -14,6 +13,7 @@ import (
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/contracts"
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // Client wraps the Ethereum client and contract instances for ERC-8004 interaction.
@@ -46,7 +46,8 @@ func Init() error {
 	if err != nil {
 		return fmt.Errorf("failed to get chain ID: %w", err)
 	}
-	log.Printf("[chain] Connected to chain ID: %s (RPC: %s)", chainID.String(), cfg.BSCRPCURL)
+	log := util.Log.WithPrefix("[chain]")
+	log.Info("Connected to chain ID: %s (RPC: %s)", chainID.String(), cfg.BSCRPCURL)
 
 	// Parse the platform private key (used for minting souls)
 	var platformKey *ecdsa.PrivateKey
@@ -62,9 +63,9 @@ func Init() error {
 			return fmt.Errorf("failed to parse platform private key: %w", err)
 		}
 		platformAddr = crypto.PubkeyToAddress(platformKey.PublicKey)
-		log.Printf("[chain] Platform wallet: %s", platformAddr.Hex())
+		log.Debug("Platform wallet: %s", platformAddr.Hex())
 	} else {
-		log.Println("[chain] WARNING: No PLATFORM_PRIVATE_KEY set, on-chain writes will be disabled")
+		log.Warn("No PLATFORM_PRIVATE_KEY set, on-chain writes will be disabled")
 	}
 
 	// Bind to Identity Registry contract
@@ -73,7 +74,7 @@ func Init() error {
 	if err != nil {
 		return fmt.Errorf("failed to bind Identity Registry at %s: %w", identityAddr.Hex(), err)
 	}
-	log.Printf("[chain] Identity Registry bound: %s", identityAddr.Hex())
+	log.Debug("Identity Registry bound: %s", identityAddr.Hex())
 
 	// Bind to Reputation Registry contract
 	reputationAddr := common.HexToAddress(cfg.ReputationRegistryAddr)
@@ -81,21 +82,21 @@ func Init() error {
 	if err != nil {
 		return fmt.Errorf("failed to bind Reputation Registry at %s: %w", reputationAddr.Hex(), err)
 	}
-	log.Printf("[chain] Reputation Registry bound: %s", reputationAddr.Hex())
+	log.Debug("Reputation Registry bound: %s", reputationAddr.Hex())
 
 	// Verify contracts are accessible by reading version
 	version, err := identityRegistry.GetVersion(&bind.CallOpts{})
 	if err != nil {
-		log.Printf("[chain] WARNING: Could not read Identity Registry version (contract may not be deployed on this chain): %v", err)
+		log.Warn("Could not read Identity Registry version: %v", err)
 	} else {
-		log.Printf("[chain] Identity Registry version: %s", version)
+		log.Debug("Identity Registry version: %s", version)
 	}
 
 	repVersion, err := reputationRegistry.GetVersion(&bind.CallOpts{})
 	if err != nil {
-		log.Printf("[chain] WARNING: Could not read Reputation Registry version: %v", err)
+		log.Warn("Could not read Reputation Registry version: %v", err)
 	} else {
-		log.Printf("[chain] Reputation Registry version: %s", repVersion)
+		log.Debug("Reputation Registry version: %s", repVersion)
 	}
 
 	C = &Client{

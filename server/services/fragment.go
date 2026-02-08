@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/big"
 	"strconv"
 	"strings"
@@ -12,6 +11,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/sha3"
 )
@@ -61,7 +61,7 @@ func ReviewFragment(fragment *models.Fragment, shell *models.Shell) {
 
 	// If LLM is not configured, auto-accept with default confidence
 	if config.Cfg.LLMAPIKey == "" {
-		log.Println("[curator] LLM not configured, auto-accepting fragment")
+		util.Log.Debug("[curator] LLM not configured, auto-accepting fragment")
 		acceptFragment(fragment, shell, 0.75)
 		return
 	}
@@ -134,12 +134,12 @@ Respond in JSON format ONLY:
 	}, 500, 0.2, &result)
 
 	if err != nil {
-		log.Printf("[curator] LLM review failed, auto-accepting: %v", err)
+		util.Log.Warn("[curator] LLM review failed, auto-accepting: %v", err)
 		acceptFragment(fragment, shell, 0.70)
 		return
 	}
 
-	log.Printf("[curator] Review for @%s/%s: accept=%v, confidence=%.2f, reason=%s",
+	util.Log.Debug("[curator] Review for @%s/%s: accept=%v, confidence=%.2f, reason=%s",
 		shell.Handle, fragment.Dimension, result.Accept, result.Confidence, result.Reason)
 
 	if result.Accept {
@@ -199,17 +199,17 @@ func submitOnChainFeedback(fragment *models.Fragment, shell *models.Shell) {
 		// Load the Claw to get its encrypted private key
 		var claw models.Claw
 		if err := database.DB.First(&claw, "id = ?", fragment.ClawID).Error; err != nil {
-			log.Printf("[services] Failed to load claw for feedback: %v", err)
+			util.Log.Error("[services] Failed to load claw for feedback: %v", err)
 			return
 		}
 		if claw.WalletPKEnc == "" {
-			log.Printf("[services] Claw %s has no wallet key, skipping on-chain feedback", claw.Name)
+			util.Log.Debug("[services] Claw %s has no wallet key, skipping on-chain feedback", claw.Name)
 			return
 		}
 
 		clawKey, err := chain.DecryptClawPrivateKey(claw.WalletPKEnc)
 		if err != nil {
-			log.Printf("[services] Failed to decrypt claw key: %v", err)
+			util.Log.Error("[services] Failed to decrypt claw key: %v", err)
 			return
 		}
 
@@ -219,7 +219,7 @@ func submitOnChainFeedback(fragment *models.Fragment, shell *models.Shell) {
 		// Platform auto-drips 0.001 BNB if balance < 0.0005 BNB
 		if claw.WalletAddr != "" {
 			if err := chain.EnsureGasAndDrip(ctx, claw.WalletAddr); err != nil {
-				log.Printf("[services] Gas drip failed for claw %s (%s): %v", claw.Name, claw.WalletAddr, err)
+				util.Log.Error("[services] Gas drip failed for claw %s (%s): %v", claw.Name, claw.WalletAddr, err)
 				// Store the error so we can retry later
 				database.DB.Model(fragment).Update("tx_hash", "drip_failed")
 				return
@@ -240,12 +240,12 @@ func submitOnChainFeedback(fragment *models.Fragment, shell *models.Shell) {
 
 		txHash, err := chain.SubmitFeedback(ctx, clawKey, agentId, feedbackValue, fragment.Dimension, "fragment", endpoint, feedbackURI, hashBytes)
 		if err != nil {
-			log.Printf("[services] On-chain feedback failed for @%s by claw %s: %v", shell.Handle, claw.Name, err)
+			util.Log.Error("[services] On-chain feedback failed for @%s by claw %s: %v", shell.Handle, claw.Name, err)
 			return
 		}
 		// Store the feedback tx hash on the fragment
 		database.DB.Model(fragment).Update("tx_hash", txHash)
-		log.Printf("[services] On-chain feedback submitted for @%s: value=%d, tx=%s", shell.Handle, feedbackValue, txHash)
+		util.Log.Info("[services] On-chain feedback submitted for @%s: value=%d, tx=%s", shell.Handle, feedbackValue, txHash)
 	}()
 }
 

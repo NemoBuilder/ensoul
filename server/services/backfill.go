@@ -2,13 +2,13 @@ package services
 
 import (
 	"context"
-	"log"
 	"math/big"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/ethereum/go-ethereum/common"
 )
 
@@ -28,7 +28,7 @@ func StartAgentIDBackfill(interval time.Duration) {
 			backfillAgentIDs()
 		}
 	}()
-	log.Printf("[backfill] Agent ID backfill started (interval: %s)", interval)
+	util.Log.Info("[backfill] Agent ID backfill started (interval: %s)", interval)
 }
 
 func backfillAgentIDs() {
@@ -42,14 +42,14 @@ func backfillAgentIDs() {
 		Where("mint_tx_hash != '' AND (agent_id IS NULL OR agent_id = 0)").
 		Find(&shells)
 	if result.Error != nil {
-		log.Printf("[backfill] Error querying shells: %v", result.Error)
+		util.Log.Error("[backfill] Error querying shells: %v", result.Error)
 		return
 	}
 	if len(shells) == 0 {
 		return
 	}
 
-	log.Printf("[backfill] Found %d shell(s) needing agent_id backfill", len(shells))
+	util.Log.Debug("[backfill] Found %d shell(s) needing agent_id backfill", len(shells))
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -58,7 +58,7 @@ func backfillAgentIDs() {
 		txHash := common.HexToHash(s.MintTxHash)
 		receipt, err := chain.C.EthClient().TransactionReceipt(ctx, txHash)
 		if err != nil {
-			log.Printf("[backfill] @%s: failed to get receipt for tx %s: %v", s.Handle, s.MintTxHash, err)
+			util.Log.Warn("[backfill] @%s: failed to get receipt for tx %s: %v", s.Handle, s.MintTxHash, err)
 			continue
 		}
 
@@ -75,7 +75,7 @@ func backfillAgentIDs() {
 		}
 
 		if agentID == nil {
-			log.Printf("[backfill] @%s: Registered event not found in tx %s", s.Handle, s.MintTxHash)
+			util.Log.Warn("[backfill] @%s: Registered event not found in tx %s", s.Handle, s.MintTxHash)
 			continue
 		}
 
@@ -84,9 +84,9 @@ func backfillAgentIDs() {
 			Where("id = ?", s.ID).
 			Update("agent_id", &aid).Error
 		if err != nil {
-			log.Printf("[backfill] @%s: failed to update agent_id: %v", s.Handle, err)
+			util.Log.Error("[backfill] @%s: failed to update agent_id: %v", s.Handle, err)
 			continue
 		}
-		log.Printf("[backfill] @%s: agent_id backfilled to %d (tx: %s)", s.Handle, aid, s.MintTxHash)
+		util.Log.Info("[backfill] @%s: agent_id backfilled to %d (tx: %s)", s.Handle, aid, s.MintTxHash)
 	}
 }

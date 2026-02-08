@@ -1,11 +1,11 @@
 package services
 
 import (
-	"log"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // StartSessionCleanup periodically removes expired wallet sessions from the database.
@@ -17,12 +17,12 @@ func StartSessionCleanup(interval time.Duration) {
 			cleanExpiredSessions()
 		}
 	}()
-	log.Printf("[cleanup] Expired session cleanup started (every %v)", interval)
+	util.Log.Info("[cleanup] Expired session cleanup started (every %v)", interval)
 }
 
 func cleanExpiredSessions() {
 	result := database.DB.Where("expires_at < ?", time.Now()).Delete(&models.WalletSession{})
 	if result.RowsAffected > 0 {
-		log.Printf("[cleanup] Removed %d expired sessions", result.RowsAffected)
+		util.Log.Debug("[cleanup] Removed %d expired sessions", result.RowsAffected)
 	}
 }

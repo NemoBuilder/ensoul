@@ -2,13 +2,13 @@ package services
 
 import (
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 )
 
 // SeedPreview holds the preview data returned after seed extraction.
@@ -31,7 +31,7 @@ func GenerateSeedPreview(handle string) (*SeedPreview, error) {
 
 	// If LLM is not configured, return basic preview from Twitter data only
 	if config.Cfg.LLMAPIKey == "" {
-		log.Println("[seed] LLM not configured, returning basic preview")
+		util.Log.Debug("[seed] LLM not configured, returning basic preview")
 		return &SeedPreview{
 			Handle:      handle,
 			DisplayName: profile.User.Name,
@@ -104,7 +104,7 @@ Respond in JSON format ONLY:
 	}, 2000, 0.3, &result)
 
 	if err != nil {
-		log.Printf("[seed] LLM seed extraction failed, using fallback: %v", err)
+		util.Log.Warn("[seed] LLM seed extraction failed, using fallback: %v", err)
 		return &SeedPreview{
 			Handle:      handle,
 			DisplayName: profile.User.Name,
@@ -121,7 +121,7 @@ Respond in JSON format ONLY:
 		}, nil
 	}
 
-	log.Printf("[seed] Seed extraction for @%s complete via LLM", handle)
+	util.Log.Debug("[seed] Seed extraction for @%s complete via LLM", handle)
 
 	return &SeedPreview{
 		Handle:      handle,
@@ -183,7 +183,7 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		return nil, fmt.Errorf("failed to create shell: %w", err)
 	}
 
-	log.Printf("[services] Shell @%s created in DB (owner: %s). Awaiting on-chain registration from user.", handle, ownerAddr)
+	util.Log.Info("[services] Shell @%s created in DB (owner: %s)", handle, ownerAddr)
 
 	return shell, nil
 }
@@ -200,7 +200,7 @@ func ConfirmMint(handle, txHash string, agentID uint64) error {
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("shell @%s not found", handle)
 	}
-	log.Printf("[services] Shell @%s confirmed on-chain: agentId=%d, tx=%s", handle, agentID, txHash)
+	util.Log.Info("[services] Shell @%s confirmed on-chain: agentId=%d, tx=%s", handle, agentID, txHash)
 	return nil
 }
 
