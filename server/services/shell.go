@@ -103,19 +103,35 @@ func GenerateSeedPreview(handle string) (*SeedPreview, error) {
 	}
 
 	// Build the LLM prompt for seed extraction
-	tweetsText := FormatTweetsForLLM(profile.Tweets)
+	isMock := IsMockProfile(profile)
 
-	seedPrompt := fmt.Sprintf(`You are the seed extraction engine for Ensoul, a decentralized soul construction protocol.
-
-Analyze the following Twitter profile and recent tweets to create an initial personality profile.
-
-=== PROFILE ===
+	var dataSection string
+	if isMock {
+		// No real Twitter data — ask LLM to use its own public knowledge
+		dataSection = fmt.Sprintf(`=== DATA SOURCE ===
+NOTE: Real-time Twitter data is not available for @%s.
+Use your own knowledge about this public figure to create the seed profile.
+Base your analysis on publicly known information: their career, public statements,
+known personality traits, areas of expertise, notable positions, and public persona.
+If you do not have sufficient knowledge about @%s, provide your best assessment
+with lower scores and honest summaries indicating limited information.`, handle, handle)
+	} else {
+		tweetsText := FormatTweetsForLLM(profile.Tweets)
+		dataSection = fmt.Sprintf(`=== PROFILE ===
 Handle: @%s
 Display Name: %s
 Bio: %s
 Followers: %d
 
 === RECENT TWEETS ===
+%s`, handle, profile.User.Name, profile.User.Description,
+			profile.User.PublicMetrics.FollowersCount, tweetsText)
+	}
+
+	seedPrompt := fmt.Sprintf(`You are the seed extraction engine for Ensoul, a decentralized soul construction protocol.
+
+Analyze the following information to create an initial personality profile.
+
 %s
 
 === YOUR TASK ===
@@ -144,8 +160,7 @@ Respond in JSON format ONLY:
     "relationship": {"score": 8, "summary": "..."},
     "timeline": {"score": 5, "summary": "..."}
   }
-}`, handle, profile.User.Name, profile.User.Description,
-		profile.User.PublicMetrics.FollowersCount, tweetsText)
+}`, dataSection)
 
 	var result struct {
 		SeedSummary string                          `json:"seed_summary"`

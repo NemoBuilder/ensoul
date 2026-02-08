@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { shellApi, SeedPreview } from "@/lib/api";
@@ -18,12 +18,21 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { bsc } from "wagmi/chains";
 import { parseAbi, decodeEventLog } from "viem";
 
-// ERC-8004 Identity Registry contract
-const IDENTITY_REGISTRY_ADDRESS = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" as `0x${string}`;
+// ERC-8004 Identity Registry (for parsing Registered event from inner call)
 const IDENTITY_REGISTRY_ABI = parseAbi([
-  "function register(string agentURI) returns (uint256 agentId)",
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)",
 ]);
+
+// EnsoulMinter wrapper contract (charges BNB fee → calls register → transfers NFT to user)
+const ENSOUL_MINTER_ADDRESS = (process.env.NEXT_PUBLIC_MINTER_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
+const ENSOUL_MINTER_ABI = parseAbi([
+  "function mint(string agentURI) payable returns (uint256 agentId)",
+  "function mintFee() view returns (uint256)",
+  "event Minted(address indexed user, uint256 indexed agentId, uint256 fee)",
+]);
+
+// Default mint fee (~1 USD in BNB, fixed at 700 USD/BNB), overridden by on-chain read
+const DEFAULT_MINT_FEE = BigInt("1430000000000000"); // 0.00143 BNB ≈ $1 @700U
 
 export default function MintPage() {
   const router = useRouter();
@@ -41,6 +50,27 @@ export default function MintPage() {
   const [mintStep, setMintStep] = useState("");
   const [error, setError] = useState("");
   const [imgErr, setImgErr] = useState(false);
+  const [mintFee, setMintFee] = useState<bigint>(DEFAULT_MINT_FEE);
+
+  // Read the current mint fee from the contract on mount
+  useEffect(() => {
+    if (!publicClient || !isConnected || !isCorrectChain) return;
+    if (ENSOUL_MINTER_ADDRESS === "0x0000000000000000000000000000000000000000") return;
+    publicClient.readContract({
+      address: ENSOUL_MINTER_ADDRESS,
+      abi: ENSOUL_MINTER_ABI,
+      functionName: "mintFee",
+    }).then((fee) => {
+      setMintFee(fee as bigint);
+    }).catch(() => {
+      // Use default fee if read fails
+    });
+  }, [publicClient, isConnected, isCorrectChain]);
+
+  const formatBNB = (wei: bigint) => {
+    const bnb = Number(wei) / 1e18;
+    return bnb < 0.001 ? bnb.toFixed(6) : bnb.toFixed(4);
+  };
 
   // Preview seed extraction
   async function handlePreview() {
@@ -99,15 +129,16 @@ export default function MintPage() {
       setMintStep("Saving soul data...");
       await shellApi.mint(preview.handle, address, signature, preview);
 
-      // Step 3: On-chain registration (user pays gas, user becomes NFT owner)
-      setMintStep("Registering on BNB Chain (confirm in wallet)...");
+      // Step 3: On-chain registration via EnsoulMinter (user pays mint fee + gas)
+      setMintStep(`Minting on BNB Chain — ${formatBNB(mintFee)} BNB (confirm in wallet)...`);
       const agentURI = buildAgentURI(preview);
 
       const txHash = await writeContractAsync({
-        address: IDENTITY_REGISTRY_ADDRESS,
-        abi: IDENTITY_REGISTRY_ABI,
-        functionName: "register",
+        address: ENSOUL_MINTER_ADDRESS,
+        abi: ENSOUL_MINTER_ABI,
+        functionName: "mint",
         args: [agentURI],
+        value: mintFee,
         chainId: bsc.id,
       });
 
@@ -116,6 +147,7 @@ export default function MintPage() {
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
       let agentId = 0;
+      // Try parsing Registered event from IdentityRegistry (inner call)
       for (const log of receipt.logs) {
         try {
           const decoded = decodeEventLog({
@@ -129,6 +161,24 @@ export default function MintPage() {
           }
         } catch {
           // not our event, skip
+        }
+      }
+      // Fallback: try parsing Minted event from EnsoulMinter
+      if (agentId === 0) {
+        for (const log of receipt.logs) {
+          try {
+            const decoded = decodeEventLog({
+              abi: ENSOUL_MINTER_ABI,
+              data: log.data,
+              topics: log.topics,
+            });
+            if (decoded.eventName === "Minted") {
+              agentId = Number((decoded.args as { agentId: bigint }).agentId);
+              break;
+            }
+          } catch {
+            // not our event, skip
+          }
         }
       }
 
@@ -298,15 +348,15 @@ export default function MintPage() {
               Ready to Mint?
             </h3>
             <p className="mb-4 text-sm text-[#94a3b8]">
-              This will register an ERC-8004 identity on BNB Chain. The shell
-              starts as an embryo and evolves as Claws contribute fragments.
+              This will register an ERC-8004 identity on BNB Chain (≈$1 in BNB).
+              The shell starts as an embryo and evolves as Claws contribute fragments.
             </p>
             <button
               onClick={handleMint}
               disabled={minting}
               className="rounded-lg bg-[#8b5cf6] px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-[#a78bfa] disabled:opacity-50"
             >
-              {minting ? "Minting..." : "Mint Shell (Free + Gas)"}
+              {minting ? "Minting..." : `Mint Shell (${formatBNB(mintFee)} BNB + Gas)`}
             </button>
             {mintStep && (
               <p className="mt-3 text-sm text-[#8b5cf6]">{mintStep}</p>
