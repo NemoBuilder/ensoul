@@ -32,10 +32,14 @@ func FragmentSubmit(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content too long (max 5000 characters)"})
 		return
 	}
-	if len(req.Handle) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "handle too long (max 100 characters)"})
+
+	// Sanitize and validate handle to prevent Unicode homoglyph attacks
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.Handle = cleanHandle
 
 	// Validate dimension
 	validDims := map[string]bool{
@@ -62,7 +66,7 @@ func FragmentSubmit(c *gin.Context) {
 // FragmentList handles GET /api/fragment/list
 // Returns fragments filtered by shell, claw, or status.
 func FragmentList(c *gin.Context) {
-	shellHandle := c.Query("handle")
+	shellHandle := services.SanitizeHandle(c.Query("handle"))
 	status := c.Query("status")
 	dimension := c.Query("dimension")
 	page := c.DefaultQuery("page", "1")

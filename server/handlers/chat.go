@@ -12,7 +12,7 @@ import (
 // ChatCreateSession handles POST /api/chat/:handle/session
 // Creates a new chat session. If user is logged in, session is linked to wallet.
 func ChatCreateSession(c *gin.Context) {
-	handle := c.Param("handle")
+	handle := services.SanitizeHandle(c.Param("handle"))
 	walletAddr := middleware.GetSessionWallet(c)
 
 	session, err := services.CreateChatSession(handle, walletAddr)

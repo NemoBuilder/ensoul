@@ -20,11 +20,14 @@ func ClawRegister(c *gin.Context) {
 		return
 	}
 
-	// Input length limits
-	if len(req.Name) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 100 characters)"})
+	// Sanitize and validate Claw name to prevent Unicode homoglyph attacks
+	cleanName, err := services.ValidateClawName(req.Name)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	req.Name = cleanName
+
 	if len(req.Description) > 500 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 500 characters)"})
 		return
@@ -191,7 +194,7 @@ func ClawLeaderboard(c *gin.Context) {
 // ShellContributors handles GET /api/shell/:handle/contributors
 // Returns top contributors for a specific shell.
 func ShellContributors(c *gin.Context) {
-	handle := c.Param("handle")
+	handle := services.SanitizeHandle(c.Param("handle"))
 	result, err := services.GetShellContributors(handle)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})

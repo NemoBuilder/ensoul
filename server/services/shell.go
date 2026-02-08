@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -10,6 +11,59 @@ import (
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
 )
+
+// handleRegex enforces Twitter-compatible handles: ASCII alphanumeric + underscore, 1-15 chars.
+var handleRegex = regexp.MustCompile(`^[a-zA-Z0-9_]{1,15}$`)
+
+// SanitizeHandle strips all Unicode control characters, zero-width characters,
+// and directional formatting characters from a handle, then trims whitespace.
+func SanitizeHandle(handle string) string {
+	// Remove common invisible/control Unicode characters used in homoglyph attacks:
+	// - U+200B Zero Width Space
+	// - U+200C Zero Width Non-Joiner
+	// - U+200D Zero Width Joiner
+	// - U+200E/200F LTR/RTL Mark
+	// - U+202A-202E Directional formatting (LRE, RLE, PDF, LRO, RLO)
+	// - U+2060 Word Joiner
+	// - U+2066-2069 Isolate formatting
+	// - U+FEFF BOM / Zero Width No-Break Space
+	// - U+00AD Soft Hyphen
+	// - All C0/C1 control characters except normal whitespace
+	invisibleRe := regexp.MustCompile(`[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}\x{00AD}\x{034F}\x{061C}\x{180E}]`)
+	handle = invisibleRe.ReplaceAllString(handle, "")
+	handle = strings.TrimSpace(handle)
+	return handle
+}
+
+// ValidateHandle checks that a handle is safe and valid.
+// Returns the sanitized handle and an error if invalid.
+func ValidateHandle(handle string) (string, error) {
+	handle = SanitizeHandle(handle)
+	if handle == "" {
+		return "", fmt.Errorf("handle is required")
+	}
+	if !handleRegex.MatchString(handle) {
+		return "", fmt.Errorf("invalid handle: only letters, numbers, and underscores are allowed (max 15 characters)")
+	}
+	return handle, nil
+}
+
+// clawNameRegex allows printable ASCII and common Unicode letters/digits, 1-100 chars.
+// Blocks control characters, zero-width chars, and directional formatting.
+var clawNameRegex = regexp.MustCompile(`^[\p{L}\p{N}\p{Zs}_.\-]{1,100}$`)
+
+// ValidateClawName sanitizes and validates a Claw name.
+// Returns the sanitized name and an error if invalid.
+func ValidateClawName(name string) (string, error) {
+	name = SanitizeHandle(name) // reuse: strips invisible chars + trims
+	if name == "" {
+		return "", fmt.Errorf("name is required")
+	}
+	if !clawNameRegex.MatchString(name) {
+		return "", fmt.Errorf("invalid name: only letters, numbers, spaces, dots, hyphens and underscores are allowed (max 100 characters)")
+	}
+	return name, nil
+}
 
 // SeedPreview holds the preview data returned after seed extraction.
 type SeedPreview struct {

@@ -23,6 +23,14 @@ func ShellPreview(c *gin.Context) {
 		return
 	}
 
+	// Sanitize and validate handle to prevent Unicode homoglyph attacks
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Handle = cleanHandle
+
 	// Check if shell already exists
 	var existing models.Shell
 	if err := database.DB.Where("handle = ?", req.Handle).First(&existing).Error; err == nil {
@@ -54,6 +62,14 @@ func ShellMint(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "handle, owner_addr, and preview are required"})
 		return
 	}
+
+	// Sanitize and validate handle to prevent Unicode homoglyph attacks
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Handle = cleanHandle
 
 	// Verify wallet signature proves ownership of owner_addr
 	walletAddr := c.GetHeader("X-Wallet-Address")
@@ -113,6 +129,14 @@ func ShellConfirmMint(c *gin.Context) {
 		return
 	}
 
+	// Sanitize handle
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Handle = cleanHandle
+
 	if err := services.ConfirmMint(req.Handle, req.TxHash, req.AgentID); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm mint: " + err.Error()})
 		return
@@ -142,7 +166,7 @@ func ShellList(c *gin.Context) {
 // ShellGetByHandle handles GET /api/shell/:handle
 // Returns detailed information about a specific shell.
 func ShellGetByHandle(c *gin.Context) {
-	handle := c.Param("handle")
+	handle := services.SanitizeHandle(c.Param("handle"))
 
 	shell, err := services.GetShellByHandle(handle)
 	if err != nil {
@@ -156,7 +180,7 @@ func ShellGetByHandle(c *gin.Context) {
 // ShellGetDimensions handles GET /api/shell/:handle/dimensions
 // Returns the six-dimension data for a shell.
 func ShellGetDimensions(c *gin.Context) {
-	handle := c.Param("handle")
+	handle := services.SanitizeHandle(c.Param("handle"))
 
 	dims, err := services.GetShellDimensions(handle)
 	if err != nil {
@@ -170,7 +194,7 @@ func ShellGetDimensions(c *gin.Context) {
 // ShellGetHistory handles GET /api/shell/:handle/history
 // Returns the ensouling history for a shell.
 func ShellGetHistory(c *gin.Context) {
-	handle := c.Param("handle")
+	handle := services.SanitizeHandle(c.Param("handle"))
 
 	history, err := services.GetShellHistory(handle)
 	if err != nil {

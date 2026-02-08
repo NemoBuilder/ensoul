@@ -47,10 +47,16 @@ export default function MintPage() {
     if (!handle.trim()) return;
     setError("");
     setPreview(null);
-    setLoading(true);
     setImgErr(false);
+    // Validate handle: only ASCII letters, numbers, underscores (Twitter format)
+    const cleanHandle = handle.trim().replace(/^@/, "");
+    if (!/^[a-zA-Z0-9_]{1,15}$/.test(cleanHandle)) {
+      setError("Invalid handle: only letters, numbers, and underscores are allowed (max 15 characters)");
+      return;
+    }
+    setLoading(true);
     try {
-      const data = await shellApi.preview(handle.trim().replace(/^@/, ""));
+      const data = await shellApi.preview(cleanHandle);
       setPreview(data);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Preview failed");
