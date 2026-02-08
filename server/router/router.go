@@ -24,7 +24,7 @@ func Setup() *gin.Engine {
 
 	// CORS configuration — allow frontend dev server
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3410", "https://ensoul.ac"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3410", "https://ensoul.ac"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Wallet-Address", "X-Wallet-Signature"},
 		ExposeHeaders:    []string{"Content-Length"},
