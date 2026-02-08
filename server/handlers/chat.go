@@ -111,6 +111,12 @@ func ChatSendMessage(c *gin.Context) {
 		return
 	}
 
+	// Input length limit — prevent abuse of LLM tokens and DB storage
+	if len(req.Message) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "message too long (max 2000 characters)"})
+		return
+	}
+
 	// Set SSE headers
 	c.Header("Content-Type", "text/event-stream")
 	c.Header("Cache-Control", "no-cache")

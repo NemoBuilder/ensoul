@@ -20,6 +20,16 @@ func ClawRegister(c *gin.Context) {
 		return
 	}
 
+	// Input length limits
+	if len(req.Name) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "name too long (max 100 characters)"})
+		return
+	}
+	if len(req.Description) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "description too long (max 500 characters)"})
+		return
+	}
+
 	result, err := services.RegisterClaw(req.Name, req.Description)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to register claw: " + err.Error()})

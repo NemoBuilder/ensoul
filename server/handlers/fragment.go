@@ -27,6 +27,16 @@ func FragmentSubmit(c *gin.Context) {
 		return
 	}
 
+	// Input length limits
+	if len(req.Content) > 5000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "content too long (max 5000 characters)"})
+		return
+	}
+	if len(req.Handle) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle too long (max 100 characters)"})
+		return
+	}
+
 	// Validate dimension
 	validDims := map[string]bool{
 		"personality": true, "knowledge": true, "stance": true,

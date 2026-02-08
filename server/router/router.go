@@ -35,9 +35,9 @@ func Setup() *gin.Engine {
 		// Shell (Soul) endpoints
 		shell := api.Group("/shell")
 		{
-			shell.POST("/preview", handlers.ShellPreview)
-			shell.POST("/mint", handlers.ShellMint)
-			shell.POST("/confirm", handlers.ShellConfirmMint)
+			shell.POST("/preview", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellPreview)
+			shell.POST("/mint", middleware.RateLimit(middleware.RegisterLimiter), handlers.ShellMint)
+			shell.POST("/confirm", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellConfirmMint)
 			shell.GET("/list", handlers.ShellList)
 			shell.GET("/:handle", handlers.ShellGetByHandle)
 			shell.GET("/:handle/dimensions", handlers.ShellGetDimensions)
@@ -49,7 +49,7 @@ func Setup() *gin.Engine {
 		fragment := api.Group("/fragment")
 		{
 			// Submit requires authenticated + claimed Claw
-			fragment.POST("/submit", middleware.AuthClaw(), middleware.RequireClaimed(), handlers.FragmentSubmit)
+			fragment.POST("/submit", middleware.RateLimit(middleware.SubmitLimiter), middleware.AuthClaw(), middleware.RequireClaimed(), handlers.FragmentSubmit)
 			// List and get are public
 			fragment.GET("/list", handlers.FragmentList)
 			fragment.GET("/:id", handlers.FragmentGetByID)
@@ -61,8 +61,8 @@ func Setup() *gin.Engine {
 			// Public endpoints
 			claw.GET("/leaderboard", handlers.ClawLeaderboard)
 			claw.GET("/profile/:id", handlers.ClawPublicProfile)
-			// Registration is public
-			claw.POST("/register", handlers.ClawRegister)
+			// Registration is public (rate limited)
+			claw.POST("/register", middleware.RateLimit(middleware.RegisterLimiter), handlers.ClawRegister)
 			// Claim info is public (accessed via claim URL)
 			claw.GET("/claim/:code", handlers.ClawClaimInfo)
 			// Claim verification requires wallet session (so we can auto-bind)
@@ -82,7 +82,7 @@ func Setup() *gin.Engine {
 		// Auth endpoints (wallet signature login)
 		auth := api.Group("/auth")
 		{
-			auth.POST("/login", handlers.AuthLogin)
+			auth.POST("/login", middleware.RateLimit(middleware.GeneralLimiter), handlers.AuthLogin)
 			auth.POST("/logout", handlers.AuthLogout)
 			auth.GET("/session", handlers.AuthSession)
 		}
@@ -91,9 +91,9 @@ func Setup() *gin.Engine {
 		chat := api.Group("/chat")
 		{
 			// Create a new session (public, but links to wallet if logged in)
-			chat.POST("/:handle/session", handlers.ChatCreateSession)
-			// Send message in a session (public, streams SSE)
-			chat.POST("/sessions/:id/message", handlers.ChatSendMessage)
+			chat.POST("/:handle/session", middleware.RateLimit(middleware.SessionLimiter), handlers.ChatCreateSession)
+			// Send message in a session (public, streams SSE — rate limited per IP)
+			chat.POST("/sessions/:id/message", middleware.RateLimit(middleware.ChatLimiter), handlers.ChatSendMessage)
 			// Get session with messages (public for guest sessions, owner-only for user sessions)
 			chat.GET("/sessions/:id", handlers.ChatGetSession)
 			// List user's sessions (requires login)
