@@ -71,6 +71,7 @@ export interface Fragment {
   status: "pending" | "accepted" | "rejected";
   confidence: number;
   reject_reason?: string;
+  tx_hash?: string;
   created_at: string;
   claw?: Claw;
   shell?: Shell;

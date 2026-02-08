@@ -13,6 +13,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/google/uuid"
+	"golang.org/x/crypto/sha3"
 )
 
 // SubmitFragment processes a new fragment submission from a Claw.
@@ -188,6 +189,7 @@ func rejectFragment(fragment *models.Fragment, confidence float64, reason string
 }
 
 // submitOnChainFeedback submits reputation feedback for an accepted fragment.
+// It auto-drips BNB gas to the Claw wallet if needed (B-2 pattern).
 func submitOnChainFeedback(fragment *models.Fragment, shell *models.Shell) {
 	if shell.AgentID == nil {
 		return
@@ -212,10 +214,31 @@ func submitOnChainFeedback(fragment *models.Fragment, shell *models.Shell) {
 		}
 
 		ctx := context.Background()
+
+		// B-2: Ensure the Claw wallet has enough BNB for gas
+		// Platform auto-drips 0.001 BNB if balance < 0.0005 BNB
+		if claw.WalletAddr != "" {
+			if err := chain.EnsureGasAndDrip(ctx, claw.WalletAddr); err != nil {
+				log.Printf("[services] Gas drip failed for claw %s (%s): %v", claw.Name, claw.WalletAddr, err)
+				// Store the error so we can retry later
+				database.DB.Model(fragment).Update("tx_hash", "drip_failed")
+				return
+			}
+		}
+
 		agentId := new(big.Int).SetUint64(*shell.AgentID)
 		// Map confidence (0.0-1.0) to feedback value (0-100)
 		feedbackValue := int64(fragment.Confidence * 100)
-		txHash, err := chain.SubmitFeedback(ctx, clawKey, agentId, feedbackValue, fragment.Dimension, "fragment")
+
+		// Build on-chain metadata
+		endpoint := fmt.Sprintf("https://ensoul.ac/soul/%s", shell.Handle)
+		feedbackURI := fmt.Sprintf("https://ensoul.ac/api/fragment/%s", fragment.ID)
+		feedbackHash := sha3.NewLegacyKeccak256()
+		feedbackHash.Write([]byte(fragment.Content))
+		var hashBytes [32]byte
+		copy(hashBytes[:], feedbackHash.Sum(nil))
+
+		txHash, err := chain.SubmitFeedback(ctx, clawKey, agentId, feedbackValue, fragment.Dimension, "fragment", endpoint, feedbackURI, hashBytes)
 		if err != nil {
 			log.Printf("[services] On-chain feedback failed for @%s by claw %s: %v", shell.Handle, claw.Name, err)
 			return

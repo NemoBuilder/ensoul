@@ -163,13 +163,17 @@ func main() {
 		log.Println("      Submitting feedback from platform wallet (test mode)...")
 
 		// We need to use the same pattern but with the platform key directly
+		var testHash [32]byte
 		feedbackTx, err := chain.SubmitFeedback(
 			ctx,
 			chain.C.PlatformKey(),
 			agentId,
-			85,            // feedback value: 85%
-			"personality", // tag1
-			"depth",       // tag2
+			85,                            // feedback value: 85%
+			"personality",                 // tag1
+			"depth",                       // tag2
+			"https://ensoul.ac/soul/test", // endpoint
+			"",                            // feedbackURI
+			testHash,                      // feedbackHash
 		)
 		if err != nil {
 			log.Printf("      ✗ SubmitFeedback failed: %v", err)

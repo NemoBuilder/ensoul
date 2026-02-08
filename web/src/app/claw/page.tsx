@@ -386,6 +386,16 @@ function ActivityTimeline() {
                       — {frag.reject_reason}
                     </span>
                   )}
+                  {frag.tx_hash && frag.tx_hash !== "drip_failed" && (
+                    <a
+                      href={`https://bscscan.com/tx/${frag.tx_hash}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1 text-xs text-[#8b5cf6] hover:underline"
+                    >
+                      ⛓️ on-chain
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

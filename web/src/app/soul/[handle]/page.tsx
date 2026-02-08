@@ -376,6 +376,16 @@ function FragmentFeed({
                   · {Math.round(f.confidence * 100)}% confidence
                 </span>
               )}
+              {f.tx_hash && f.tx_hash !== "drip_failed" && (
+                <a
+                  href={`https://bscscan.com/tx/${f.tx_hash}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-xs text-[#8b5cf6] hover:underline"
+                >
+                  ⛓️ on-chain
+                </a>
+              )}
             </div>
             <span className="text-xs text-[#94a3b8]">{timeAgo(f.created_at)}</span>
           </div>

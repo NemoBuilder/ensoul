@@ -16,12 +16,17 @@ import (
 // The Claw's own wallet address is the msg.sender, making each feedback independently verifiable.
 // value: the feedback score (e.g., 85 for 85% quality). valueDecimals: typically 0.
 // tag1/tag2: optional categorization tags (e.g., "personality", "knowledge").
+// endpoint: the agent's service endpoint URL.
+// feedbackURI: link to the detailed feedback content.
+// feedbackHash: keccak256 hash of the feedback content for integrity verification.
 func SubmitFeedback(
 	ctx context.Context,
 	clawKey *ecdsa.PrivateKey,
 	agentId *big.Int,
 	value int64,
 	tag1, tag2 string,
+	endpoint, feedbackURI string,
+	feedbackHash [32]byte,
 ) (string, error) {
 	if C == nil {
 		return "", fmt.Errorf("chain client not initialized")
@@ -35,17 +40,16 @@ func SubmitFeedback(
 
 	// Prepare feedback parameters
 	feedbackValue := big.NewInt(value)
-	var feedbackHash [32]byte // zero hash — not using off-chain feedback files
 
 	tx, err := C.reputationRegistry.GiveFeedback(
 		opts,
 		agentId,
 		feedbackValue,
-		0,    // valueDecimals = 0 (whole number)
-		tag1, // dimension/category tag
-		tag2, // sub-category tag
-		"",   // endpoint (not applicable)
-		"",   // feedbackURI (no off-chain file)
+		0,           // valueDecimals = 0 (whole number)
+		tag1,        // dimension/category tag
+		tag2,        // sub-category tag
+		endpoint,    // agent soul page URL
+		feedbackURI, // link to fragment detail
 		feedbackHash,
 	)
 	if err != nil {
