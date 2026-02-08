@@ -6,6 +6,7 @@ import (
 
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/gin-gonic/gin"
 )
 
@@ -21,8 +22,9 @@ func AuthSession() gin.HandlerFunc {
 			return
 		}
 
+		tokenHash := util.HashToken(token)
 		var session models.WalletSession
-		if err := database.DB.Where("token = ? AND expires_at > ?", token, time.Now()).First(&session).Error; err != nil {
+		if err := database.DB.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&session).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Session expired or invalid"})
 			c.Abort()
 			return
@@ -47,8 +49,9 @@ func GetSessionWallet(c *gin.Context) string {
 		return ""
 	}
 
+	tokenHash := util.HashToken(token)
 	var session models.WalletSession
-	if err := database.DB.Where("token = ? AND expires_at > ?", token, time.Now()).First(&session).Error; err != nil {
+	if err := database.DB.Where("token_hash = ? AND expires_at > ?", tokenHash, time.Now()).First(&session).Error; err != nil {
 		return ""
 	}
 

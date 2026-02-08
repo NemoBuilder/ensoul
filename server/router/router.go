@@ -3,6 +3,7 @@ package router
 import (
 	"net/http"
 
+	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/handlers"
 	"github.com/ensoul-labs/ensoul-server/middleware"
 	"github.com/gin-contrib/cors"
@@ -11,11 +12,19 @@ import (
 
 // Setup creates and configures the Gin router with all routes.
 func Setup() *gin.Engine {
+	// #6: Use release mode in production (suppresses debug logs, route dumps)
+	if config.Cfg.IsProduction() {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
 	r := gin.Default()
+
+	// #7: Trust only loopback proxies (Nginx on same machine)
+	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 
 	// CORS configuration — allow frontend dev server
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "https://ensoul.ac"},
+		AllowOrigins:     []string{"http://localhost:3410", "https://ensoul.ac"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Wallet-Address", "X-Wallet-Signature"},
 		ExposeHeaders:    []string{"Content-Length"},

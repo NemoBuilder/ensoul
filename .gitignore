@@ -16,6 +16,7 @@ node_modules/
 out/
 
 # Go
+ensoul_server
 *.exe
 *.dll
 vendor/

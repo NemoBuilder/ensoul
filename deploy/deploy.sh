@@ -57,8 +57,8 @@ else
     docker compose up -d --build
     echo ""
     echo "Development services started."
-    echo "  Frontend: http://localhost:3000"
-    echo "  API:      http://localhost:8080"
+    echo "  Frontend: http://localhost:3410"
+    echo "  API:      http://localhost:8990"
     echo "  DB:       localhost:5432"
 fi
 
@@ -71,7 +71,7 @@ echo ""
 echo "Waiting for API health check..."
 sleep 5
 
-API_URL="http://localhost:8080"
+API_URL="http://localhost:8990"
 if [ "$MODE" = "prod" ] || [ "$MODE" = "production" ]; then
     API_URL="https://api.ensoul.ac"
 fi

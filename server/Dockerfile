@@ -22,6 +22,6 @@ WORKDIR /app
 
 COPY --from=builder /ensoul-server /app/ensoul-server
 
-EXPOSE 8080
+EXPOSE 8990
 
 ENTRYPOINT ["/app/ensoul-server"]

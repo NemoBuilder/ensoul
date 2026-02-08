@@ -12,6 +12,7 @@ import (
 type Config struct {
 	// Server
 	Port string
+	Env  string // "production" or "development"
 
 	// Database
 	DBHost     string
@@ -47,7 +48,8 @@ func Load() *Config {
 	_ = godotenv.Load()
 
 	cfg := &Config{
-		Port:                   getEnv("PORT", "8080"),
+		Port:                   getEnv("PORT", "8990"),
+		Env:                    getEnv("ENV", "development"),
 		DBHost:                 getEnv("DB_HOST", "localhost"),
 		DBPort:                 getEnv("DB_PORT", "5432"),
 		DBUser:                 getEnv("DB_USER", "ensoul"),
@@ -82,6 +84,11 @@ func (c *Config) DatabaseURL() string {
 		"postgres://%s:%s@%s:%s/%s?sslmode=%s",
 		c.DBUser, c.DBPassword, c.DBHost, c.DBPort, c.DBName, c.DBSSLMode,
 	)
+}
+
+// IsProduction returns true if running in production mode.
+func (c *Config) IsProduction() bool {
+	return c.Env == "production" || c.Env == "prod"
 }
 
 // getEnv reads an environment variable with a fallback default value.

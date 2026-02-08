@@ -27,6 +27,9 @@ func main() {
 	// Start background agent_id backfill (checks every 2 minutes)
 	services.StartAgentIDBackfill(2 * time.Minute)
 
+	// Start expired session cleanup (runs every hour)
+	services.StartSessionCleanup(1 * time.Hour)
+
 	// Setup routes
 	r := router.Setup()
 

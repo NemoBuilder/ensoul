@@ -23,9 +23,9 @@ import (
 //   go run cmd/test_e2e/main.go [API_BASE]
 //
 // Requirements:
-//   - A running Ensoul server (default: http://localhost:8080)
+//   - A running Ensoul server (default: http://localhost:8990)
 
-const defaultAPI = "http://localhost:8080"
+const defaultAPI = "http://localhost:8990"
 
 var apiBase string
 var passed, failed int

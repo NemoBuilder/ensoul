@@ -7,10 +7,12 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/middleware"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
 )
@@ -63,9 +65,9 @@ func AuthLogin(c *gin.Context) {
 	// Delete any existing sessions for this wallet
 	database.DB.Where("wallet_addr = ?", claimed.Hex()).Delete(&models.WalletSession{})
 
-	// Create new session
+	// Create new session (store hash only, never the raw token)
 	session := &models.WalletSession{
-		Token:      token,
+		TokenHash:  util.HashToken(token),
 		WalletAddr: claimed.Hex(),
 		ExpiresAt:  time.Now().Add(sessionDuration),
 	}
@@ -74,16 +76,17 @@ func AuthLogin(c *gin.Context) {
 		return
 	}
 
-	// Set HttpOnly cookie
+	// Set HttpOnly cookie — Secure=true in production (HTTPS)
+	secureCookie := config.Cfg.IsProduction()
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie(
 		sessionCookieName,
 		token,
 		int(sessionDuration.Seconds()),
 		"/",
-		"",    // domain — empty for current domain
-		false, // secure — set true in production with HTTPS
-		true,  // httpOnly — JS cannot read this
+		"",           // domain — empty for current domain
+		secureCookie, // secure — true in production with HTTPS
+		true,         // httpOnly — JS cannot read this
 	)
 
 	c.JSON(http.StatusOK, gin.H{
@@ -97,11 +100,12 @@ func AuthLogin(c *gin.Context) {
 func AuthLogout(c *gin.Context) {
 	token, err := c.Cookie(sessionCookieName)
 	if err == nil && token != "" {
-		database.DB.Where("token = ?", token).Delete(&models.WalletSession{})
+		tokenHash := util.HashToken(token)
+		database.DB.Where("token_hash = ?", tokenHash).Delete(&models.WalletSession{})
 	}
 
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(sessionCookieName, "", -1, "/", "", false, true)
+	c.SetCookie(sessionCookieName, "", -1, "/", "", config.Cfg.IsProduction(), true)
 
 	c.JSON(http.StatusOK, gin.H{"message": "Logged out"})
 }
@@ -137,9 +141,10 @@ func ClawBindKey(c *gin.Context) {
 		return
 	}
 
-	// Verify the API key is valid
+	// Verify the API key is valid (look up by hash)
+	keyHash := util.HashToken(req.APIKey)
 	var claw models.Claw
-	if err := database.DB.Where("api_key = ?", req.APIKey).First(&claw).Error; err != nil {
+	if err := database.DB.Where("api_key_hash = ?", keyHash).First(&claw).Error; err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid API key"})
 		return
 	}

@@ -6,11 +6,12 @@ import (
 
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/gin-gonic/gin"
 )
 
 // AuthClaw extracts the API key from the Authorization header,
-// verifies it against the database, and injects the Claw into the context.
+// hashes it with SHA-256, and looks up the Claw by hash.
 func AuthClaw() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -35,9 +36,10 @@ func AuthClaw() gin.HandlerFunc {
 			return
 		}
 
-		// Look up the Claw by API key
+		// Hash the API key and look up by hash (keys are never stored in plaintext)
+		keyHash := util.HashToken(apiKey)
 		var claw models.Claw
-		if err := database.DB.Where("api_key = ?", apiKey).First(&claw).Error; err != nil {
+		if err := database.DB.Where("api_key_hash = ?", keyHash).First(&claw).Error; err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid API key"})
 			c.Abort()
 			return

@@ -88,7 +88,7 @@ type Claw struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Name             string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"name"`
 	Description      string         `gorm:"type:text" json:"description"`
-	APIKey           string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"-"`
+	APIKeyHash       string         `gorm:"column:api_key_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
 	ClaimCode        string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"-"`
 	VerificationCode string         `gorm:"type:varchar(20);not null" json:"-"`
 	Status           string         `gorm:"type:varchar(20);default:'pending_claim'" json:"status"`
@@ -122,7 +122,7 @@ type Ensouling struct {
 // WalletSession represents an authenticated wallet session (HttpOnly cookie).
 type WalletSession struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Token      string    `gorm:"type:varchar(64);uniqueIndex;not null" json:"-"`
+	TokenHash  string    `gorm:"column:token_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
 	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
 	ExpiresAt  time.Time `gorm:"not null" json:"expires_at"`
 	CreatedAt  time.Time `json:"created_at"`

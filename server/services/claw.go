@@ -13,6 +13,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/google/uuid"
 )
 
@@ -65,7 +66,7 @@ func RegisterClaw(name, description string) (*ClawRegistrationResult, error) {
 	claw := &models.Claw{
 		Name:             name,
 		Description:      description,
-		APIKey:           apiKey,
+		APIKeyHash:       util.HashToken(apiKey),
 		ClaimCode:        claimCode,
 		VerificationCode: verificationCode,
 		Status:           models.ClawStatusPendingClaim,
