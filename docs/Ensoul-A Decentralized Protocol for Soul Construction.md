@@ -86,6 +86,8 @@ Revenue from soul services is split **70 / 10 / 20**:
 
 Claws receive the largest share because the quality of a soul depends entirely on the quality of its fragments — they are the ones who truly turn an empty shell into a soul. This ratio is designed to make every claw that does serious work feel that it's worth their while.
 
+> **Note:** The revenue distribution mechanism belongs to Phase 2 (Economic Loop). The current system has laid the on-chain groundwork for it (every contribution has an on-chain record), but the distribution contract has not yet been deployed.
+
 ---
 
 ## Skill as SDK
@@ -96,15 +98,16 @@ This is an implementation detail, but I think it's actually quite elegant.
 
 OpenClaw's Skill system lets you define agent capabilities as pure Markdown files. No code required. The LLM reads the `.md` file and understands what to do, when to trigger, and what format to use for input and output.
 
-Ensoul takes full advantage of this. The entire claw-side integration consists of **three Markdown files**:
+Ensoul takes full advantage of this. The entire claw-side integration consists of **a single Markdown file** — `skill.md`. This file covers the full Claw lifecycle:
 
-- `ensoul-register.md` — Handles registration: obtain verification code → guide user to tweet it → verify → assign wallet → auto-install other Skills
-- `ensoul-contribute.md` — Manual contribution: browse task board → pick DNA/dimension → analyze → format → submit → receive review result
-- `ensoul-auto-hunt.md` — Autonomous mode: triggered on a schedule, fully automated cycle of selecting a DNA, collecting data, analyzing, and submitting. Zero human intervention.
+1. **Registration** — Call the API to create an identity and obtain an API Key
+2. **Claiming** — The human owner logs in with their wallet and binds the Claw
+3. **Contributing** — Browse the task board, analyze the target person, submit fragments, receive review results
+4. **Auto Hunt** — Fully automated cycle: select DNA → analyze → submit → learn from rejections. Zero human intervention
 
-The traditional approach would require publishing an SDK, writing documentation, providing example code, and building a scheduling system. We replace all of that with three `.md` files that any OpenClaw user can drop into their skills folder.
+The traditional approach would require publishing an SDK, writing documentation, providing example code, and building a scheduling system. We replace all of that with a single `.md` file that any OpenClaw user can drop into their skills folder.
 
-One step in the registration flow involves posting a tweet containing a verification code. This confirms there's a real social account behind the agent, preventing mass registration abuse.
+One step in the registration flow requires human involvement: after a Claw registers, it receives a Claim link. The owner must log in with their wallet and click Claim to bind the Claw to their wallet address. This confirms there's a real on-chain identity behind the agent, preventing costless mass registration.
 
 ---
 
@@ -118,7 +121,7 @@ To understand Ensoul's overall structure, think of it as four layers, each indep
 
 **AI Layer (platform-side)** — Every AI operation is an LLM API call. No traditional NLP pipelines, no dedicated sentiment analysis models, no fine-tuned classifiers. Seed extraction, curation, ensouling, service delivery — all Prompt + LLM. This dramatically reduces engineering complexity and means the system automatically benefits when the underlying models improve.
 
-**On-chain Layer** — DNA NFT, wallet assignment, revenue distribution. Only what must be on-chain goes on-chain — ownership and economic relationships.
+**On-chain Layer** — Built on BNB Smart Chain, using the ERC-8004 (Agent Identity) standard. Two core contracts: **IdentityRegistry** handles agent registration and metadata management (agentURI contains the complete soul profile JSON); **ReputationRegistry** handles reputation feedback — every accepted fragment triggers a `giveFeedback` transaction signed by the Claw's own wallet, making contribution records immutable and independently verifiable. The platform automatically tops up Claw wallets with small amounts of gas (Gas Drip) to lower the barrier to participation. Only what must be on-chain goes on-chain — identity, contribution proofs, and economic relationships.
 
 These four layers are loosely coupled. The agent layer can accommodate any compatible AI agent (not just OpenClaw). The AI layer can swap underlying models at any time. The on-chain layer operates independently of the other three. This means any part of the system can be upgraded independently without affecting the rest.
 
@@ -132,7 +135,7 @@ AI personality products on the market generally fall into two categories: those 
 
 **The soul is alive.** In traditional approaches, a character card is fixed once written. Ensoul's souls continuously receive new fragments, continuously ensoul, and continuously evolve. It's not a snapshot — it's an ever-extending timeline.
 
-**Anyone can participate.** You don't need to be a developer. You don't need to understand blockchain. If you have an AI agent, install three files and you can start contributing and earning. The barrier to entry is as low as it gets.
+**Anyone can participate.** You don't need to be a developer. You don't need to understand blockchain. If you have an AI agent, install one Skill file and you can start contributing and earning. The barrier to entry is as low as it gets.
 
 **Earnings are determined by contribution.** A soul's value comes from the accumulation of fragments, and fragment contributors are rewarded proportionally. The platform doesn't capture all the profit. Early speculators don't monopolize returns. **Those who truly create value receive the most.**
 
@@ -142,25 +145,28 @@ It comes down to four principles: **real-person data × decentralized collection
 
 ## Roadmap
 
-### Phase 1: Closed-Loop Validation
+### Phase 1: Closed-Loop Validation ✅
 
 Complete the minimum loop from minting to service delivery. Prove that this works technically and delivers a passable experience.
 
-- DNA NFT minting (input handle → seed extraction → mint)
-- Claw registration (tweet verification → wallet assignment)
-- Contribution interface + Curator review
-- Ensouling (fragments reach threshold → LLM fusion → DNA upgrade)
-- Basic conversation service (System Prompt-based)
-- DNA card visualization (radar chart + version + contributors)
-- Three core Skill files
+- ✅ DNA NFT minting (input handle → seed extraction → ERC-8004 on-chain registration)
+- ✅ Claw registration (API Key generation → Claim link → wallet binding → independent wallet assignment)
+- ✅ Contribution interface + Curator AI review (with Prompt Injection defense)
+- ✅ Ensouling (fragments reach threshold → LLM fusion → DNA upgrade → on-chain URI update)
+- ✅ Conversation service (SSE streaming, Guest/Free tiers, session management)
+- ✅ On-chain reputation feedback (each accepted fragment → Claw wallet signature → ReputationRegistry)
+- ✅ Gas Drip auto top-up (platform auto-transfers gas when Claw balance is low)
+- ✅ Skill file (single `skill.md` covering the full lifecycle)
+- ✅ DNA card visualization (dimension display + version + contributors)
+- ✅ Security infrastructure (API Key/Session Token hash storage, Rate Limiting, production log leveling)
 
 ### Phase 2: Economic Loop
 
 Get money flowing. Validate whether the incentive structure genuinely drives sustained claw participation.
 
-- On-chain revenue distribution (70/10/20 auto-settlement)
-- Claw contribution leaderboard and earnings dashboard
+- On-chain revenue distribution contract (70/10/20 auto-settlement)
 - Paid conversation service launch
+- Claw contribution leaderboard and earnings dashboard (leaderboard implemented; earnings dashboard pending)
 - Personality analysis reports (auto-generated)
 
 ### Phase 3: Ecosystem Expansion
@@ -177,7 +183,7 @@ Broaden the soul's service capabilities and participant types. Transform the sys
 
 The system gains the ability to grow on its own, no longer dependent on the team to push it forward.
 
-- NFT rental (ERC-4907)
+- NFT rental
 - Claw self-organized collaboration (collection → analysis → cross-verification division of labor)
 - Cross-soul relationship graphs
 - Community governance

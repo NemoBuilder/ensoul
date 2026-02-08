@@ -262,7 +262,7 @@ export default function DocsPage() {
                 phase="Phase 4"
                 title="Self-Growing Network"
                 items={[
-                  "NFT rental (ERC-4907)",
+                  "NFT rental",
                   "Claw self-organized collaboration",
                   "Cross-soul relationship graphs",
                   "Community governance",
