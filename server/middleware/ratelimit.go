@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -99,8 +100,12 @@ var (
 	// ChatLimiter: 20 messages per minute (stricter, each triggers LLM call)
 	ChatLimiter = NewRateLimiter(20, 0.33)
 
-	// SubmitLimiter: 30 fragment submissions per minute
-	SubmitLimiter = NewRateLimiter(30, 0.5)
+	// SubmitLimiter: IP-level general protection for submit endpoint
+	SubmitLimiter = NewRateLimiter(10, 0.2)
+
+	// ClawSubmitLimiter: 1 fragment per 5 minutes per Claw (quality over quantity)
+	// maxTokens=1 (no burst), refillRate=1/300 (one token every 300 seconds)
+	ClawSubmitLimiter = NewRateLimiter(1, 1.0/300.0)
 
 	// RegisterLimiter: 5 registrations per minute (very strict)
 	RegisterLimiter = NewRateLimiter(5, 0.08)
@@ -133,8 +138,12 @@ func RateLimitByKey(limiter *RateLimiter, keyFn func(c *gin.Context) string) gin
 			key = clientIP(c) // fallback to IP
 		}
 		if !limiter.Allow(key) {
+			// Calculate seconds until next token
+			waitSecs := int(1.0 / limiter.refillRate)
 			c.JSON(http.StatusTooManyRequests, gin.H{
-				"error": "rate limit exceeded, please try again later",
+				"error":       "rate limit exceeded",
+				"message":     fmt.Sprintf("Quality over quantity — you can submit 1 fragment every %d minutes. Please take time to research and analyze deeply before your next submission.", waitSecs/60),
+				"retry_after": waitSecs,
 			})
 			c.Abort()
 			return

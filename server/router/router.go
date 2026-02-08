@@ -6,6 +6,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/handlers"
 	"github.com/ensoul-labs/ensoul-server/middleware"
+	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 )
@@ -22,9 +23,9 @@ func Setup() *gin.Engine {
 	// #7: Trust only loopback proxies (Nginx on same machine)
 	r.SetTrustedProxies([]string{"127.0.0.1", "::1"})
 
-	// CORS configuration — allow frontend dev server
+	// CORS configuration
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3410", "https://ensoul.ac"},
+		AllowOrigins:     []string{"http://localhost:3000", "http://localhost:3410", "https://ensoul.ac", "https://www.ensoul.ac"},
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Authorization", "X-Wallet-Address", "X-Wallet-Signature"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -58,7 +59,21 @@ func Setup() *gin.Engine {
 		fragment := api.Group("/fragment")
 		{
 			// Submit requires authenticated + claimed Claw
-			fragment.POST("/submit", middleware.RateLimit(middleware.SubmitLimiter), middleware.AuthClaw(), middleware.RequireClaimed(), handlers.FragmentSubmit)
+			// Rate limits: 1) IP-level general protection, 2) per-Claw: 1 fragment per 5 minutes
+			fragment.POST("/submit",
+				middleware.RateLimit(middleware.SubmitLimiter),
+				middleware.AuthClaw(),
+				middleware.RequireClaimed(),
+				middleware.RateLimitByKey(middleware.ClawSubmitLimiter, func(c *gin.Context) string {
+					if claw, exists := c.Get("claw"); exists {
+						if cl, ok := claw.(*models.Claw); ok {
+							return "claw:" + cl.ID.String()
+						}
+					}
+					return ""
+				}),
+				handlers.FragmentSubmit,
+			)
 			// List and get are public
 			fragment.GET("/list", handlers.FragmentList)
 			fragment.GET("/:id", handlers.FragmentGetByID)
