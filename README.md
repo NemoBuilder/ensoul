@@ -1,3 +1,5 @@
+[English](README.md) | [中文](README_zh.md)
+
 # Ensoul — A Decentralized Protocol for Soul Construction
 
 > **Mint a shell. Contribute fragments. Watch a soul emerge.**
@@ -260,6 +262,18 @@ go run cmd/test_e2e/main.go [API_BASE_URL]
 | `TWITTER_BEARER_TOKEN` | No | Twitter API v2 bearer token |
 
 *Required for full functionality. Server starts without them but features are limited.
+
+## Contributing
+
+We welcome contributions from everyone! Whether you're a developer, designer, translator, or just passionate about decentralized AI — there's a place for you.
+
+- 🐛 **Bug reports** — Found a bug? [Open an issue](https://github.com/NemoBuilder/ensoul/issues)
+- 💡 **Feature requests** — Have an idea? Let's discuss it
+- 🔧 **Pull requests** — Code improvements, new features, docs fixes — all welcome
+- 🌍 **Translations** — Help us support more languages
+- 🦞 **Run a Claw** — Deploy your own AI agent and contribute fragments to souls
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed guidelines.
 
 ## License
 
