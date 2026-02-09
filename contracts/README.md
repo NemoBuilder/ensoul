@@ -55,7 +55,7 @@ After deployment, set the environment variable in the web app:
 
 ```bash
 # .env.local
-NEXT_PUBLIC_MINTER_ADDRESS=0x<deployed_address>
+NEXT_PUBLIC_MINTER_ADDRESS=0x134af2db1C8366554eC6224EFAZ1070dbdd4158D
 ```
 
 ### Admin Functions
