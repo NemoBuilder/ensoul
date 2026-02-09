@@ -67,11 +67,12 @@ func ValidateClawName(name string) (string, error) {
 
 // SeedPreview holds the preview data returned after seed extraction.
 type SeedPreview struct {
-	Handle      string                          `json:"handle"`
-	DisplayName string                          `json:"display_name"`
-	AvatarURL   string                          `json:"avatar_url"`
-	SeedSummary string                          `json:"seed_summary"`
+	Handle      string                         `json:"handle"`
+	DisplayName string                         `json:"display_name"`
+	AvatarURL   string                         `json:"avatar_url"`
+	SeedSummary string                         `json:"seed_summary"`
 	Dimensions  map[string]models.DimensionData `json:"dimensions"`
+	TwitterMeta map[string]interface{}          `json:"twitter_meta,omitempty"`
 }
 
 // GenerateSeedPreview extracts seed data from a Twitter handle using LLM analysis.
@@ -99,6 +100,7 @@ func GenerateSeedPreview(handle string) (*SeedPreview, error) {
 				"relationship": {Score: 1, Summary: "Initial assessment pending LLM analysis"},
 				"timeline":     {Score: 0, Summary: "Initial assessment pending LLM analysis"},
 			},
+			TwitterMeta: buildTwitterMeta(profile),
 		}, nil
 	}
 
@@ -210,6 +212,7 @@ Respond in JSON format ONLY:
 				"relationship": {Score: 1, Summary: "LLM analysis unavailable"},
 				"timeline":     {Score: 0, Summary: "LLM analysis unavailable"},
 			},
+			TwitterMeta: buildTwitterMeta(profile),
 		}, nil
 	}
 
@@ -221,6 +224,7 @@ Respond in JSON format ONLY:
 		AvatarURL:   normalizeAvatarURL(profile.User.ProfileImageURL, handle),
 		SeedSummary: result.SeedSummary,
 		Dimensions:  result.Dimensions,
+		TwitterMeta: buildTwitterMeta(profile),
 	}, nil
 }
 
@@ -231,6 +235,37 @@ func normalizeAvatarURL(twitterURL, handle string) string {
 		return strings.Replace(twitterURL, "_normal", "_400x400", 1)
 	}
 	return fmt.Sprintf("https://unavatar.io/twitter/%s", handle)
+}
+
+// buildTwitterMeta extracts display-friendly metadata from a TwitterProfile
+// for storage in the Shell's twitter_meta JSONB column.
+func buildTwitterMeta(profile *TwitterProfile) map[string]interface{} {
+	meta := map[string]interface{}{
+		"followers_count": profile.User.PublicMetrics.FollowersCount,
+		"following_count": profile.User.PublicMetrics.FollowingCount,
+		"tweet_count":     profile.User.PublicMetrics.TweetCount,
+		"data_source":     profile.DataSource,
+		"bio":             profile.User.Description,
+	}
+	if profile.Location != "" {
+		meta["location"] = profile.Location
+	}
+	if profile.Verified {
+		meta["verified"] = true
+	}
+	if profile.CreatedAt != "" {
+		meta["account_created_at"] = profile.CreatedAt
+	}
+	if profile.BannerURL != "" {
+		meta["banner_url"] = profile.BannerURL
+	}
+	if profile.ListedCount > 0 {
+		meta["listed_count"] = profile.ListedCount
+	}
+	if profile.FavouritesCount > 0 {
+		meta["favourites_count"] = profile.FavouritesCount
+	}
+	return meta
 }
 
 // MintShell creates a new shell in the database using the provided preview data.
@@ -258,6 +293,12 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		}
 	}
 
+	// Build twitter_meta JSON
+	twitterMeta := models.JSON{}
+	for k, v := range preview.TwitterMeta {
+		twitterMeta[k] = v
+	}
+
 	// Create shell record
 	shell := &models.Shell{
 		Handle:      handle,
@@ -269,6 +310,7 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		Dimensions:  dims,
 		AvatarURL:   preview.AvatarURL,
 		DisplayName: preview.DisplayName,
+		TwitterMeta: twitterMeta,
 	}
 
 	if err := database.DB.Create(shell).Error; err != nil {

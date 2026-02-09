@@ -55,6 +55,7 @@ type Shell struct {
 	TotalChats    int            `gorm:"default:0" json:"total_chats"`
 	AvatarURL     string         `gorm:"type:text" json:"avatar_url"`
 	DisplayName   string         `gorm:"type:varchar(255)" json:"display_name"`
+	TwitterMeta   JSON           `gorm:"type:jsonb;default:'{}'" json:"twitter_meta"`
 	AgentID       *uint64        `gorm:"type:bigint" json:"agent_id"` // ERC-8004 agent ID
 	AgentURI      string         `gorm:"type:text" json:"agent_uri"`
 	MintTxHash    string         `gorm:"type:varchar(66)" json:"mint_tx_hash,omitempty"`

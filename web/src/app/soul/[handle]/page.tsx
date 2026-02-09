@@ -3,8 +3,8 @@
 import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor } from "@/lib/api";
-import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, Stage } from "@/lib/utils";
+import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor, TwitterMeta } from "@/lib/api";
+import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, accountAge, formatCount, Stage } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
 
 type Tab = "fragments" | "dimensions" | "history";
@@ -70,6 +70,7 @@ export default function SoulPage({
   const stage = stageConfig[shell.stage as Stage] || stageConfig.embryo;
   const completion = calcCompletion(shell.dimensions || {});
   const dims = shell.dimensions || {};
+  const meta: TwitterMeta = shell.twitter_meta || {};
 
   const acceptedFrags = fragments.filter((f) => f.status === "accepted");
   const pendingFrags = fragments.filter((f) => f.status === "pending");
@@ -81,107 +82,241 @@ export default function SoulPage({
     { key: "history", label: "Evolution", count: history.length },
   ];
 
+  // Count how many dimensions have fragments
+  const dimCoverage = Object.entries(dims).filter(([, d]) => d.score > 0).length;
+
   return (
     <div className="mx-auto max-w-5xl px-4 pt-24 pb-16">
-      {/* Header */}
-      <div className="mb-8 flex flex-col gap-6 sm:flex-row sm:items-start">
-        {/* Avatar */}
-        <div className={`relative h-24 w-24 flex-shrink-0 overflow-hidden rounded-full border-2 ${stage.borderClass}`}>
-          {shell.avatar_url && !imgErr ? (
-            <Image
-              src={shell.avatar_url}
-              alt={shell.handle}
-              fill
-              className="object-cover"
-              onError={() => setImgErr(true)}
-              unoptimized
+      {/* ═══════════════════════════════════════════════════════════════
+          LAYER 1 — Identity Card
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="mb-6 overflow-hidden rounded-xl border border-[#1e1e2e] bg-[#14141f]">
+        {/* Banner */}
+        {meta.banner_url && (
+          <div className="relative h-32 w-full overflow-hidden bg-gradient-to-r from-[#1e1e2e] to-[#2a1a4e] sm:h-40">
+            <img
+              src={meta.banner_url}
+              alt=""
+              className="h-full w-full object-cover opacity-60"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
             />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center bg-[#1e1e2e] text-2xl text-[#94a3b8]">
-              {shell.handle[0]?.toUpperCase() || "?"}
-            </div>
-          )}
-        </div>
+          </div>
+        )}
+        {!meta.banner_url && (
+          <div className="h-20 w-full bg-gradient-to-r from-[#1e1e2e] via-[#2a1a4e] to-[#1e1e2e]" />
+        )}
 
-        {/* Info */}
-        <div className="flex-1">
-          <div className="mb-1 flex items-center gap-3">
+        <div className="relative px-5 pb-5 sm:px-6">
+          {/* Avatar — overlaps banner */}
+          <div className={`relative -mt-12 mb-3 inline-block h-24 w-24 overflow-hidden rounded-full border-4 border-[#14141f] ${stage.borderClass}`}>
+            {shell.avatar_url && !imgErr ? (
+              <Image
+                src={shell.avatar_url}
+                alt={shell.handle}
+                fill
+                className="object-cover"
+                onError={() => setImgErr(true)}
+                unoptimized
+              />
+            ) : (
+              <div className="flex h-full w-full items-center justify-center bg-[#1e1e2e] text-2xl text-[#94a3b8]">
+                {shell.handle[0]?.toUpperCase() || "?"}
+              </div>
+            )}
+          </div>
+
+          {/* Name row */}
+          <div className="mb-2 flex flex-wrap items-center gap-3">
             <h1 className="text-2xl font-bold text-[#e2e8f0]">
               {shell.display_name || `@${shell.handle}`}
             </h1>
+            {meta.verified && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
+                ✓ Verified
+              </span>
+            )}
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${stage.bgClass} ${stage.textClass}`}>
               {stage.label}
             </span>
+            {/* Chat button */}
+            <Link
+              href={`/soul/${shell.handle}/chat`}
+              className="ml-auto flex-shrink-0 rounded-lg bg-[#8b5cf6] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+            >
+              Chat with Soul
+            </Link>
           </div>
+
+          {/* Handle link */}
           <a
             href={`https://x.com/${shell.handle}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="mb-2 inline-flex items-center gap-1 text-sm text-[#94a3b8] hover:text-[#8b5cf6] transition-colors"
+            className="mb-3 inline-flex items-center gap-1 text-sm text-[#94a3b8] hover:text-[#8b5cf6] transition-colors"
           >
             <svg className="h-4 w-4" viewBox="0 0 24 24" fill="currentColor">
               <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
             </svg>
             @{shell.handle}
           </a>
-          <p className="mb-4 text-sm leading-relaxed text-[#94a3b8]">
-            {shell.seed_summary || "No summary yet."}
-          </p>
-          <div className="flex flex-wrap items-center gap-4 text-xs text-[#94a3b8]">
-            <span>DNA v{shell.dna_version}</span>
-            <span>·</span>
-            <span>Owner: {truncateAddr(shell.owner_addr)}</span>
-            <span>·</span>
-            <span>Minted {timeAgo(shell.created_at)}</span>
-            {shell.agent_id != null && (
-              <>
-                <span>·</span>
-                <span className="font-mono text-[#8b5cf6]">Token #{shell.agent_id}</span>
-                <span>·</span>
-                <a
-                  href={`https://bscscan.com/nft/0x8004a169fb4a3325136eb29fa0ceb6d2e539a432/${shell.agent_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#8b5cf6] hover:underline"
-                >
-                  BscScan ↗
-                </a>
-                <a
-                  href={`https://www.8004scan.io/agents/bsc/${shell.agent_id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-[#8b5cf6] hover:underline"
-                >
-                  8004Scan ↗
-                </a>
-              </>
+
+          {/* Bio */}
+          {(meta.bio || shell.seed_summary) && (
+            <p className="mb-4 text-sm leading-relaxed text-[#94a3b8]">
+              {meta.bio || shell.seed_summary}
+            </p>
+          )}
+
+          {/* Twitter stats row */}
+          <div className="flex flex-wrap items-center gap-4 text-sm text-[#94a3b8]">
+            {(meta.followers_count != null && meta.followers_count > 0) && (
+              <span>
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.followers_count)}</span> Followers
+              </span>
+            )}
+            {(meta.following_count != null && meta.following_count > 0) && (
+              <span>
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.following_count)}</span> Following
+              </span>
+            )}
+            {(meta.tweet_count != null && meta.tweet_count > 0) && (
+              <span>
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.tweet_count)}</span> Tweets
+              </span>
+            )}
+            {meta.location && (
+              <span className="inline-flex items-center gap-1">
+                📍 {meta.location}
+              </span>
+            )}
+            {meta.account_created_at && (
+              <span className="inline-flex items-center gap-1">
+                📅 {accountAge(meta.account_created_at)}
+              </span>
             )}
           </div>
         </div>
-
-        {/* Chat button */}
-        <Link
-          href={`/soul/${shell.handle}/chat`}
-          className="flex-shrink-0 rounded-lg bg-[#8b5cf6] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
-        >
-          Chat with Soul
-        </Link>
       </div>
 
-      {/* Stats bar */}
-      <div className="mb-8 grid grid-cols-2 gap-3 sm:grid-cols-5">
-        {[
-          { label: "Completion", value: `${completion}%` },
-          { label: "Fragments", value: shell.total_frags },
-          { label: "Accepted", value: shell.accepted_frags },
-          { label: "Claws", value: shell.total_claws },
-          { label: "Chats", value: shell.total_chats },
-        ].map((s) => (
-          <div key={s.label} className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-3 text-center">
-            <div className="text-lg font-bold text-[#e2e8f0]">{s.value}</div>
-            <div className="text-xs text-[#94a3b8]">{s.label}</div>
+      {/* ═══════════════════════════════════════════════════════════════
+          LAYER 2 — Soul State
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#14141f] p-5 sm:p-6">
+        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#94a3b8]/60">
+          Soul State
+        </h3>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
+          {[
+            { label: "Stage", value: stage.label, color: stage.color },
+            { label: "DNA", value: `v${shell.dna_version}` },
+            { label: "Completion", value: `${completion}%` },
+            { label: "Fragments", value: shell.total_frags },
+            { label: "Accepted", value: shell.accepted_frags },
+            { label: "Claws", value: shell.total_claws },
+            { label: "Chats", value: shell.total_chats },
+          ].map((s) => (
+            <div key={s.label} className="rounded-lg border border-[#1e1e2e]/60 bg-[#0a0a0f]/50 p-3 text-center">
+              <div
+                className="text-lg font-bold"
+                style={{ color: 'color' in s && s.color ? s.color : '#e2e8f0' }}
+              >
+                {s.value}
+              </div>
+              <div className="text-[10px] text-[#94a3b8]">{s.label}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Dimension coverage mini-bar */}
+        <div className="mt-4 flex items-center gap-3 text-xs text-[#94a3b8]">
+          <span>Dimension Coverage:</span>
+          <div className="flex gap-1">
+            {Object.entries(dimensionLabels).map(([key, label]) => {
+              const has = dims[key] && dims[key].score > 0;
+              return (
+                <span
+                  key={key}
+                  title={`${label}: ${has ? dims[key].score + '%' : 'empty'}`}
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
+                    has
+                      ? "bg-[#8b5cf6]/20 text-[#a78bfa]"
+                      : "bg-[#1e1e2e] text-[#94a3b8]/40"
+                  }`}
+                >
+                  {label}
+                </span>
+              );
+            })}
           </div>
-        ))}
+          <span className="ml-auto font-mono text-[#8b5cf6]">{dimCoverage}/6</span>
+        </div>
+
+        {/* Seed Summary */}
+        {shell.seed_summary && (
+          <div className="mt-4 rounded-lg border border-[#1e1e2e]/40 bg-[#0a0a0f]/30 p-3">
+            <p className="text-xs leading-relaxed text-[#e2e8f0]/80">
+              {shell.seed_summary}
+            </p>
+          </div>
+        )}
+
+        {/* Last ensouling */}
+        {history.length > 0 && (
+          <div className="mt-3 text-xs text-[#94a3b8]">
+            Last Ensouling: <span className="text-[#8b5cf6]">{timeAgo(history[0].created_at)}</span>
+            <span className="ml-2">({history[0].frags_merged} fragments merged → v{history[0].version_to})</span>
+          </div>
+        )}
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════════
+          LAYER 3 — On-Chain
+          ═══════════════════════════════════════════════════════════════ */}
+      <div className="mb-8 rounded-xl border border-[#1e1e2e] bg-[#14141f] p-5 sm:p-6">
+        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#94a3b8]/60">
+          On-Chain
+        </h3>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[#94a3b8]">
+          {shell.agent_id != null && (
+            <span>
+              Token: <span className="font-mono font-semibold text-[#8b5cf6]">#{shell.agent_id}</span>
+            </span>
+          )}
+          <span>
+            Owner: <span className="font-mono text-[#e2e8f0]">{truncateAddr(shell.owner_addr)}</span>
+          </span>
+          <span>
+            Minted: <span className="text-[#e2e8f0]">{timeAgo(shell.created_at)}</span>
+          </span>
+          <span className="font-mono text-[10px] text-[#94a3b8]/50">
+            ERC-8004
+          </span>
+          {shell.agent_id != null && (
+            <>
+              <a
+                href={`https://bscscan.com/nft/0x8004a169fb4a3325136eb29fa0ceb6d2e539a432/${shell.agent_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#8b5cf6] hover:underline"
+              >
+                BscScan ↗
+              </a>
+              <a
+                href={`https://www.8004scan.io/agents/bsc/${shell.agent_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-[#8b5cf6] hover:underline"
+              >
+                8004Scan ↗
+              </a>
+            </>
+          )}
+          {meta.data_source && (
+            <span className="ml-auto rounded bg-[#1e1e2e] px-1.5 py-0.5 text-[10px] text-[#94a3b8]/60">
+              data: {meta.data_source}
+            </span>
+          )}
+        </div>
       </div>
 
       {/* Radar + Soul Prompt side by side */}

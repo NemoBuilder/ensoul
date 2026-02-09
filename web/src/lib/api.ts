@@ -41,6 +41,20 @@ export interface DimensionData {
   summary: string;
 }
 
+export interface TwitterMeta {
+  bio?: string;
+  followers_count?: number;
+  following_count?: number;
+  tweet_count?: number;
+  location?: string;
+  verified?: boolean;
+  account_created_at?: string;
+  banner_url?: string;
+  listed_count?: number;
+  favourites_count?: number;
+  data_source?: string;
+}
+
 export interface Shell {
   id: string;
   handle: string;
@@ -58,6 +72,7 @@ export interface Shell {
   avatar_url: string;
   display_name: string;
   agent_id: number | null;
+  twitter_meta?: TwitterMeta;
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +111,7 @@ export interface SeedPreview {
   avatar_url: string;
   seed_summary: string;
   dimensions: Record<string, DimensionData>;
+  twitter_meta?: TwitterMeta;
 }
 
 export interface Ensouling {

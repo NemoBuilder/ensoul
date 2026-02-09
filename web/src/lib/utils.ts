@@ -68,3 +68,24 @@ export function calcCompletion(dimensions: Record<string, { score: number }>): n
   const total = values.reduce((sum, d) => sum + (d.score || 0), 0);
   return Math.round(total / values.length);
 }
+
+// Format account age from creation date string (e.g., "Since Jun 2009")
+export function accountAge(createdAt: string): string {
+  if (!createdAt) return "";
+  try {
+    const d = new Date(createdAt);
+    if (isNaN(d.getTime())) return "";
+    const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+    return `Since ${months[d.getMonth()]} ${d.getFullYear()}`;
+  } catch {
+    return "";
+  }
+}
+
+// Format large numbers (e.g., 1234567 → "1.2M")
+export function formatCount(n: number | undefined): string {
+  if (n == null || n === 0) return "0";
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+  return n.toString();
+}
