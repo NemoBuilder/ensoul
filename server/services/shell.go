@@ -67,10 +67,10 @@ func ValidateClawName(name string) (string, error) {
 
 // SeedPreview holds the preview data returned after seed extraction.
 type SeedPreview struct {
-	Handle      string                         `json:"handle"`
-	DisplayName string                         `json:"display_name"`
-	AvatarURL   string                         `json:"avatar_url"`
-	SeedSummary string                         `json:"seed_summary"`
+	Handle      string                          `json:"handle"`
+	DisplayName string                          `json:"display_name"`
+	AvatarURL   string                          `json:"avatar_url"`
+	SeedSummary string                          `json:"seed_summary"`
 	Dimensions  map[string]models.DimensionData `json:"dimensions"`
 	TwitterMeta map[string]interface{}          `json:"twitter_meta,omitempty"`
 }

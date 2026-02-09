@@ -24,6 +24,17 @@ interface IIdentityRegistry {
     function safeTransferFrom(address from, address to, uint256 tokenId) external;
 }
 
+/// @dev Minimal interface for ERC-20 token rescue.
+interface IERC20 {
+    function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
+}
+
+/// @dev Minimal interface for ERC-721 NFT rescue.
+interface IERC721 {
+    function safeTransferFrom(address from, address to, uint256 tokenId) external;
+}
+
 contract EnsoulMinter is Ownable, IERC721Receiver, ReentrancyGuard {
     // ── State ──────────────────────────────────────────────────────────
     IIdentityRegistry public immutable registry;
@@ -103,6 +114,29 @@ contract EnsoulMinter is Ownable, IERC721Receiver, ReentrancyGuard {
     function emergencyWithdraw() external onlyOwner {
         (bool ok, ) = treasury.call{value: address(this).balance}("");
         if (!ok) revert TransferFailed();
+    }
+
+    /**
+     * @notice Rescue ERC-20 tokens accidentally sent to this contract.
+     * @param token The ERC-20 token contract address.
+     */
+    function emergencyWithdrawToken(address token) external onlyOwner {
+        if (token == address(0)) revert ZeroAddress();
+        uint256 balance = IERC20(token).balanceOf(address(this));
+        if (balance > 0) {
+            bool ok = IERC20(token).transfer(treasury, balance);
+            if (!ok) revert TransferFailed();
+        }
+    }
+
+    /**
+     * @notice Rescue ERC-721 NFTs accidentally sent to this contract.
+     * @param nft The ERC-721 contract address.
+     * @param tokenId The token ID to rescue.
+     */
+    function emergencyWithdrawNFT(address nft, uint256 tokenId) external onlyOwner {
+        if (nft == address(0)) revert ZeroAddress();
+        IERC721(nft).safeTransferFrom(address(this), treasury, tokenId);
     }
 
     // ── IERC721Receiver ────────────────────────────────────────────────
