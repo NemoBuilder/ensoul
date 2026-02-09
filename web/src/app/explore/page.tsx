@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { shellApi, type Shell } from "@/lib/api";
 import SoulCard from "@/components/SoulCard";
 
@@ -22,36 +22,71 @@ export default function ExplorePage() {
   const [souls, setSouls] = useState<Shell[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [stage, setStage] = useState("");
   const [sort, setSort] = useState("newest");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const limit = 12;
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
+  const hasMore = souls.length < total;
+
+  // Fetch first page (reset)
   const fetchSouls = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await shellApi.list({ stage, sort, search, page, limit });
+      const result = await shellApi.list({ stage, sort, search, page: 1, limit });
       setSouls(result.shells || []);
       setTotal(result.total);
+      setPage(1);
     } catch {
       setSouls([]);
       setTotal(0);
     } finally {
       setLoading(false);
     }
-  }, [stage, sort, search, page]);
+  }, [stage, sort, search]);
 
+  // Fetch next page (append)
+  const loadMore = useCallback(async () => {
+    if (loadingMore || !hasMore) return;
+    const nextPage = page + 1;
+    setLoadingMore(true);
+    try {
+      const result = await shellApi.list({ stage, sort, search, page: nextPage, limit });
+      setSouls((prev) => [...prev, ...(result.shells || [])]);
+      setTotal(result.total);
+      setPage(nextPage);
+    } catch {
+      // silently fail, user can scroll again
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [stage, sort, search, page, loadingMore, hasMore]);
+
+  // Reset on filter change
   useEffect(() => {
     fetchSouls();
   }, [fetchSouls]);
 
-  // Reset page when filters change
+  // IntersectionObserver for infinite scroll
   useEffect(() => {
-    setPage(1);
-  }, [stage, sort, search]);
+    const el = sentinelRef.current;
+    if (!el) return;
 
-  const totalPages = Math.ceil(total / limit);
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: "200px" } // trigger 200px before reaching bottom
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [hasMore, loading, loadingMore, loadMore]);
 
   return (
     <div className="mx-auto max-w-7xl px-4 pt-24 pb-16">
@@ -121,27 +156,20 @@ export default function ExplorePage() {
             ))}
           </div>
 
-          {totalPages > 1 && (
-            <div className="mt-8 flex items-center justify-center gap-2">
-              <button
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-                disabled={page <= 1}
-                className="rounded-md border border-[#1e1e2e] px-3 py-1.5 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#8b5cf6] disabled:opacity-30"
-              >
-                ← Prev
-              </button>
-              <span className="px-3 text-sm text-[#94a3b8]">
-                Page {page} of {totalPages}
-              </span>
-              <button
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                disabled={page >= totalPages}
-                className="rounded-md border border-[#1e1e2e] px-3 py-1.5 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#8b5cf6] disabled:opacity-30"
-              >
-                Next →
-              </button>
-            </div>
-          )}
+          {/* Sentinel + loading indicator */}
+          <div ref={sentinelRef} className="mt-8 flex justify-center py-4">
+            {loadingMore && (
+              <div className="flex items-center gap-2 text-sm text-[#94a3b8]">
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#8b5cf6] border-t-transparent" />
+                Loading more...
+              </div>
+            )}
+            {!hasMore && souls.length > 0 && (
+              <p className="text-sm text-[#94a3b8]/50">
+                All {total} souls loaded
+              </p>
+            )}
+          </div>
         </>
       )}
     </div>

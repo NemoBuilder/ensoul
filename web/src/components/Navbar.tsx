@@ -139,7 +139,7 @@ export default function Navbar() {
                           href="/my-souls"
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
-                          <span>👻</span>
+                          <span>🧬</span>
                           <span>My Souls</span>
                         </Link>
                         <Link
