@@ -9,6 +9,7 @@ import (
 
 // Shell stage constants
 const (
+	StagePending  = "pending" // Mint requested but not yet confirmed on-chain
 	StageEmbryo   = "embryo"
 	StageGrowing  = "growing"
 	StageMature   = "mature"

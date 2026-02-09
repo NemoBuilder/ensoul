@@ -5,6 +5,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -32,6 +33,9 @@ func SanitizeHandle(handle string) string {
 	invisibleRe := regexp.MustCompile(`[\x{200B}-\x{200F}\x{202A}-\x{202E}\x{2060}-\x{2069}\x{FEFF}\x{00AD}\x{034F}\x{061C}\x{180E}]`)
 	handle = invisibleRe.ReplaceAllString(handle, "")
 	handle = strings.TrimSpace(handle)
+	// Twitter handles are case-insensitive; normalize to lowercase
+	// to prevent duplicate shells like "X" vs "x", "Grok" vs "grok".
+	handle = strings.ToLower(handle)
 	return handle
 }
 
@@ -55,7 +59,7 @@ var clawNameRegex = regexp.MustCompile(`^[\p{L}\p{N}\p{Zs}_.\-]{1,100}$`)
 // ValidateClawName sanitizes and validates a Claw name.
 // Returns the sanitized name and an error if invalid.
 func ValidateClawName(name string) (string, error) {
-	name = SanitizeHandle(name) // reuse: strips invisible chars + trims
+	name = SanitizeHandle(name) // reuse: strips invisible chars + trims + lowercase
 	if name == "" {
 		return "", fmt.Errorf("name is required")
 	}
@@ -268,18 +272,40 @@ func buildTwitterMeta(profile *TwitterProfile) map[string]interface{} {
 	return meta
 }
 
-// MintShell creates a new shell in the database using the provided preview data.
-// On-chain minting is handled by the user's wallet on the frontend.
+// PendingMintTimeout is how long a pending mint reservation lasts before cleanup.
+const PendingMintTimeout = 30 * time.Minute
+
+// MintShell creates a new shell in the database with stage=pending.
+// The shell is only fully activated after ConfirmMint is called with a tx_hash.
+// If the same wallet retries the same handle (e.g. after a failed signing),
+// the old pending record is replaced.
 func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, error) {
 	// Check for existing shell
 	var existing models.Shell
-	if err := database.DB.Where("handle = ?", handle).First(&existing).Error; err == nil {
-		return nil, fmt.Errorf("a soul for @%s already exists", handle)
+	if err := database.DB.Where("LOWER(handle) = ?", handle).First(&existing).Error; err == nil {
+		if existing.Stage == models.StagePending {
+			// Same wallet retrying → cascade-delete old pending and re-create
+			if strings.EqualFold(existing.OwnerAddr, ownerAddr) {
+				HardDeleteShell(existing.ID)
+				util.Log.Info("[services] Replaced pending shell @%s for same wallet %s", handle, ownerAddr)
+			} else {
+				// Different wallet has a pending reservation
+				if time.Since(existing.CreatedAt) > PendingMintTimeout {
+					// Expired pending → cascade-delete and allow
+					HardDeleteShell(existing.ID)
+					util.Log.Info("[services] Cleared expired pending shell @%s (was %s)", handle, existing.OwnerAddr)
+				} else {
+					return nil, fmt.Errorf("@%s is being minted by another user, please try again later", handle)
+				}
+			}
+		} else {
+			return nil, fmt.Errorf("a soul for @%s already exists", handle)
+		}
 	}
 
-	// Limit: each wallet can mint at most 5 shells
+	// Limit: each wallet can mint at most 5 confirmed shells (exclude pending)
 	var mintCount int64
-	database.DB.Model(&models.Shell{}).Where("owner_addr = ?", ownerAddr).Count(&mintCount)
+	database.DB.Model(&models.Shell{}).Where("owner_addr = ? AND stage != ?", ownerAddr, models.StagePending).Count(&mintCount)
 	if mintCount >= 5 {
 		return nil, fmt.Errorf("each wallet can mint at most 5 souls")
 	}
@@ -299,11 +325,11 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		twitterMeta[k] = v
 	}
 
-	// Create shell record
+	// Create shell record (pending until on-chain confirmation)
 	shell := &models.Shell{
 		Handle:      handle,
 		OwnerAddr:   ownerAddr,
-		Stage:       models.StageEmbryo,
+		Stage:       models.StagePending,
 		DNAVersion:  1,
 		SeedSummary: preview.SeedSummary,
 		SoulPrompt:  buildInitialSoulPrompt(handle, preview.SeedSummary),
@@ -323,10 +349,12 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 }
 
 // ConfirmMint updates a shell record with on-chain data after the user mints.
+// Transitions the shell from pending → embryo.
 func ConfirmMint(handle, txHash string, agentID uint64) error {
-	result := database.DB.Model(&models.Shell{}).Where("handle = ?", handle).Updates(map[string]interface{}{
+	result := database.DB.Model(&models.Shell{}).Where("LOWER(handle) = ?", handle).Updates(map[string]interface{}{
 		"agent_id":     &agentID,
 		"mint_tx_hash": txHash,
+		"stage":        models.StageEmbryo,
 	})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update shell: %w", result.Error)
@@ -351,6 +379,9 @@ func ListShells(stage, sort, search, pageStr, limitStr string) (map[string]inter
 	offset := (page - 1) * limit
 
 	query := database.DB.Model(&models.Shell{})
+
+	// Always exclude unconfirmed shells (pending or no tx_hash) from listings
+	query = query.Where("stage != ? AND mint_tx_hash != ''", models.StagePending)
 
 	// Apply filters
 	if stage != "" && stage != "all" {
@@ -391,7 +422,7 @@ func ListShells(stage, sort, search, pageStr, limitStr string) (map[string]inter
 // GetShellByHandle returns a single shell by its Twitter handle.
 func GetShellByHandle(handle string) (*models.Shell, error) {
 	var shell models.Shell
-	if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err != nil {
+	if err := database.DB.Where("LOWER(handle) = ?", handle).First(&shell).Error; err != nil {
 		return nil, err
 	}
 	return &shell, nil
@@ -441,6 +472,12 @@ Guidelines:
 
 // UpdateShellStage recalculates and updates the stage based on accepted fragments.
 func UpdateShellStage(shell *models.Shell) {
+	// Never update the stage of a pending shell via this function;
+	// pending → embryo transition is handled exclusively by ConfirmMint.
+	if shell.Stage == models.StagePending {
+		return
+	}
+
 	oldStage := shell.Stage
 
 	// Count ensouling events

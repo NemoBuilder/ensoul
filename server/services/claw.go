@@ -31,9 +31,9 @@ type ClawRegistrationInfo struct {
 
 // RegisterClaw creates a new Claw agent with generated credentials.
 func RegisterClaw(name, description string) (*ClawRegistrationResult, error) {
-	// Check for duplicate name
+	// Check for duplicate name (case-insensitive)
 	var existing models.Claw
-	if err := database.DB.Where("name = ?", name).First(&existing).Error; err == nil {
+	if err := database.DB.Where("LOWER(name) = LOWER(?)", name).First(&existing).Error; err == nil {
 		return nil, fmt.Errorf("a claw named \"%s\" already exists", name)
 	}
 
@@ -331,7 +331,7 @@ func GetClawLeaderboard(pageStr, limitStr string) (map[string]interface{}, error
 // GetShellContributors returns top contributors for a specific shell.
 func GetShellContributors(handle string) ([]map[string]interface{}, error) {
 	var shell models.Shell
-	if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err != nil {
+	if err := database.DB.Where("LOWER(handle) = ?", handle).First(&shell).Error; err != nil {
 		return nil, fmt.Errorf("shell not found")
 	}
 

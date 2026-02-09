@@ -34,6 +34,9 @@ func main() {
 	// Start expired session cleanup (runs every hour)
 	services.StartSessionCleanup(1 * time.Hour)
 
+	// Start pending shell cleanup (checks every 5 min, deletes pending > 30 min)
+	services.StartPendingShellCleanup(5 * time.Minute)
+
 	// Setup routes
 	r := router.Setup()
 

@@ -28,8 +28,13 @@ func writeSSE(c *gin.Context, event, data string) {
 // Otherwise, it's a guest session with limited rounds.
 func CreateChatSession(shellHandle, walletAddr string) (*models.ChatSession, error) {
 	var shell models.Shell
-	if err := database.DB.Where("handle = ?", shellHandle).First(&shell).Error; err != nil {
+	if err := database.DB.Where("LOWER(handle) = ?", shellHandle).First(&shell).Error; err != nil {
 		return nil, fmt.Errorf("soul @%s not found", shellHandle)
+	}
+
+	// Reject chat for shells not yet confirmed on-chain
+	if shell.MintTxHash == "" {
+		return nil, fmt.Errorf("soul @%s has not been minted on-chain yet", shellHandle)
 	}
 
 	tier := models.ChatTierGuest
@@ -57,7 +62,7 @@ func ListChatSessions(walletAddr, shellHandle string) ([]models.ChatSession, err
 
 	if shellHandle != "" {
 		var shell models.Shell
-		if err := database.DB.Where("handle = ?", shellHandle).First(&shell).Error; err == nil {
+		if err := database.DB.Where("LOWER(handle) = ?", shellHandle).First(&shell).Error; err == nil {
 			query = query.Where("shell_id = ?", shell.ID)
 		}
 	}
@@ -231,8 +236,10 @@ func GetGlobalStats() (map[string]interface{}, error) {
 // GetTaskBoard returns dimensions that need more fragments.
 // Tasks are sorted by follower count (high-value souls first).
 func GetTaskBoard() ([]map[string]interface{}, error) {
+	// Fetch ALL confirmed shells that are not yet fully ensouled, no limit.
+	// Exclude pending, ensouled, and any shell not yet confirmed on-chain.
 	var shells []models.Shell
-	database.DB.Order("created_at DESC").Limit(50).Find(&shells)
+	database.DB.Where("stage NOT IN ? AND mint_tx_hash != ''", []string{"ensouled", models.StagePending}).Find(&shells)
 
 	// Sort shells by follower count descending (high-value targets first)
 	sort.Slice(shells, func(i, j int) bool {

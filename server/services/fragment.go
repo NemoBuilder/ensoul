@@ -20,8 +20,13 @@ import (
 func SubmitFragment(claw *models.Claw, handle, dimension, content string) (*models.Fragment, error) {
 	// Find the target shell
 	var shell models.Shell
-	if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err != nil {
+	if err := database.DB.Where("LOWER(handle) = ?", handle).First(&shell).Error; err != nil {
 		return nil, fmt.Errorf("soul @%s not found", handle)
+	}
+
+	// Reject fragments for shells not yet confirmed on-chain
+	if shell.MintTxHash == "" {
+		return nil, fmt.Errorf("soul @%s has not been minted on-chain yet", handle)
 	}
 
 	// Create the fragment
@@ -271,7 +276,7 @@ func ListFragments(handle, status, dimension, pageStr, limitStr string) (map[str
 	// Apply filters
 	if handle != "" {
 		var shell models.Shell
-		if err := database.DB.Where("handle = ?", handle).First(&shell).Error; err == nil {
+		if err := database.DB.Where("LOWER(handle) = ?", handle).First(&shell).Error; err == nil {
 			query = query.Where("shell_id = ?", shell.ID)
 		}
 	}

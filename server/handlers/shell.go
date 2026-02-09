@@ -31,11 +31,13 @@ func ShellPreview(c *gin.Context) {
 	}
 	req.Handle = cleanHandle
 
-	// Check if shell already exists
+	// Check if shell already exists (skip pending shells — they can be overridden)
 	var existing models.Shell
-	if err := database.DB.Where("handle = ?", req.Handle).First(&existing).Error; err == nil {
-		c.JSON(http.StatusConflict, gin.H{"error": "A soul for @" + req.Handle + " already exists"})
-		return
+	if err := database.DB.Where("LOWER(handle) = ?", req.Handle).First(&existing).Error; err == nil {
+		if existing.Stage != "pending" {
+			c.JSON(http.StatusConflict, gin.H{"error": "A soul for @" + req.Handle + " already exists"})
+			return
+		}
 	}
 
 	// Generate seed preview
@@ -99,9 +101,9 @@ func ShellMint(c *gin.Context) {
 		return
 	}
 
-	// Enforce per-wallet mint limit (max 3 shells per address)
+	// Enforce per-wallet mint limit (max 3 confirmed shells per address)
 	var mintCount int64
-	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?)", walletAddr).Count(&mintCount)
+	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", walletAddr, "pending").Count(&mintCount)
 	if mintCount >= 3 {
 		c.JSON(http.StatusForbidden, gin.H{"error": "Each wallet can mint at most 3 shells"})
 		return
@@ -174,6 +176,12 @@ func ShellGetByHandle(c *gin.Context) {
 		return
 	}
 
+	// Don't expose unconfirmed shells (pending stage or no tx_hash) to the public
+	if shell.Stage == models.StagePending || shell.MintTxHash == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Soul not found"})
+		return
+	}
+
 	c.JSON(http.StatusOK, shell)
 }
 
@@ -181,6 +189,13 @@ func ShellGetByHandle(c *gin.Context) {
 // Returns the six-dimension data for a shell.
 func ShellGetDimensions(c *gin.Context) {
 	handle := services.SanitizeHandle(c.Param("handle"))
+
+	// Check shell exists and is on-chain
+	shell, err := services.GetShellByHandle(handle)
+	if err != nil || shell.MintTxHash == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Soul not found"})
+		return
+	}
 
 	dims, err := services.GetShellDimensions(handle)
 	if err != nil {
@@ -195,6 +210,13 @@ func ShellGetDimensions(c *gin.Context) {
 // Returns the ensouling history for a shell.
 func ShellGetHistory(c *gin.Context) {
 	handle := services.SanitizeHandle(c.Param("handle"))
+
+	// Check shell exists and is on-chain
+	shell, err := services.GetShellByHandle(handle)
+	if err != nil || shell.MintTxHash == "" {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Soul not found"})
+		return
+	}
 
 	history, err := services.GetShellHistory(handle)
 	if err != nil {
