@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, use, useCallback } from "react";
+import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import {
   chatApi,
@@ -27,6 +28,7 @@ export default function ChatPage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = use(params);
+  const t = useTranslations("Chat");
   const [shell, setShell] = useState<Shell | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -118,7 +120,7 @@ export default function ChatPage({
             setError(
               err instanceof Error
                 ? err.message
-                : "Failed to create chat session"
+                : t("failedCreateSession")
             );
           }
         } finally {
@@ -221,7 +223,7 @@ export default function ChatPage({
     // Check guest round limit on frontend too
     if (tier === "guest" && rounds >= GUEST_MAX_ROUNDS) {
       setError(
-        `Guest limit reached (${GUEST_MAX_ROUNDS} rounds). Connect wallet & sign in for unlimited chat!`
+        `${t("guestLimitError", { max: GUEST_MAX_ROUNDS })}`
       );
       return;
     }
@@ -334,19 +336,19 @@ export default function ChatPage({
         <div className="flex w-72 flex-col border-r border-[#1e1e2e] bg-[#0a0a0f]">
           <div className="flex items-center justify-between border-b border-[#1e1e2e] px-4 py-3">
             <span className="text-sm font-medium text-[#e2e8f0]">
-              Chat History
+              {t("chatHistory")}
             </span>
             <button
               onClick={startNewSession}
               className="rounded bg-[#8b5cf6] px-2 py-1 text-xs text-white hover:bg-[#a78bfa]"
             >
-              + New
+              {t("newChat")}
             </button>
           </div>
           <div className="flex-1 overflow-y-auto">
             {sessionHistory.length === 0 ? (
               <p className="px-4 py-6 text-center text-xs text-[#94a3b8]">
-                No previous chats
+                {t("noPreviousChats")}
               </p>
             ) : (
               sessionHistory.map((s) => (
@@ -359,10 +361,10 @@ export default function ChatPage({
                 >
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm text-[#e2e8f0]">
-                      {s.title || "Untitled"}
+                      {s.title || t("untitled")}
                     </p>
                     <p className="text-xs text-[#94a3b8]">
-                      {s.rounds} rounds · {s.tier}
+                      {s.rounds} {t("rounds")} · {s.tier}
                     </p>
                   </div>
                   <button
@@ -404,7 +406,7 @@ export default function ChatPage({
               </Link>
               <div>
                 <h2 className="font-medium text-[#e2e8f0]">
-                  Chat with @{handle}
+                  {t("chatWith", { handle })}
                 </h2>
                 {shell && (
                   <span className={`text-xs ${stage.textClass}`}>
@@ -417,12 +419,12 @@ export default function ChatPage({
               {/* Round counter */}
               {tier === "guest" && (
                 <span className="rounded-full bg-[#1e1e2e] px-2 py-0.5 text-xs text-[#f59e0b]">
-                  {rounds}/{GUEST_MAX_ROUNDS} rounds
+                  {t("roundCounter", { rounds, max: GUEST_MAX_ROUNDS })}
                 </span>
               )}
               {tier === "free" && (
                 <span className="rounded-full bg-[#1e1e2e] px-2 py-0.5 text-xs text-[#10b981]">
-                  ∞ unlimited
+                  {t("unlimited")}
                 </span>
               )}
               <div className="flex items-center gap-2">
@@ -434,7 +436,7 @@ export default function ChatPage({
                   }`}
                 />
                 <span className="text-xs text-[#94a3b8]">
-                  {shell?.stage === "embryo" ? "Embryo" : "Online"}
+                  {shell?.stage === "embryo" ? t("embryo") : t("online")}
                 </span>
               </div>
             </div>
@@ -448,24 +450,23 @@ export default function ChatPage({
               <div className="py-20 text-center">
                 <div className="mb-4 text-4xl animate-pulse">⏳</div>
                 <p className="text-sm text-[#94a3b8]">
-                  Connecting to @{handle}&apos;s soul...
+                  {t("connecting", { handle })}
                 </p>
               </div>
             ) : messages.length === 0 ? (
               <div className="py-20 text-center">
                 <div className="mb-4 text-4xl">💬</div>
                 <h3 className="mb-2 text-lg font-medium text-[#e2e8f0]">
-                  Start a Conversation
+                  {t("startConversation")}
                 </h3>
                 <p className="text-sm text-[#94a3b8]">
                   {shell?.stage === "embryo"
-                    ? "This soul is still an embryo. Conversations may be limited."
-                    : `Talk to @${handle}'s digital soul. It responds based on collected personality fragments.`}
+                    ? t("embryoHint")
+                    : t("chatHint", { handle })}
                 </p>
                 {tier === "guest" && (
                   <p className="mt-3 text-xs text-[#f59e0b]">
-                    🔓 Guest mode: {GUEST_MAX_ROUNDS} free rounds. Sign in for
-                    unlimited chat & saved history.
+                    {t("guestMode", { max: GUEST_MAX_ROUNDS })}
                   </p>
                 )}
               </div>
@@ -516,17 +517,16 @@ export default function ChatPage({
             {guestLimitReached && !streaming && (
               <div className="mx-auto mt-6 max-w-md rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/5 p-4 text-center">
                 <p className="mb-2 text-sm font-medium text-[#f59e0b]">
-                  🔒 Guest round limit reached
+                  {t("guestLimitTitle")}
                 </p>
                 <p className="mb-3 text-xs text-[#94a3b8]">
-                  Connect your wallet and sign in to unlock unlimited
-                  conversations and saved chat history.
+                  {t("guestLimitDesc")}
                 </p>
                 <Link
                   href={`/soul/${handle}`}
                   className="inline-block rounded bg-[#8b5cf6] px-4 py-2 text-xs font-semibold text-white hover:bg-[#a78bfa]"
                 >
-                  Back to Soul Profile
+                  {t("backToProfile")}
                 </Link>
               </div>
             )}
@@ -562,8 +562,8 @@ export default function ChatPage({
                 }}
                 placeholder={
                   guestLimitReached
-                    ? "Sign in to continue chatting..."
-                    : `Message @${handle}...`
+                    ? t("signInToContinue")
+                    : t("messagePlaceholder", { handle })
                 }
                 rows={3}
                 className="w-full resize-none rounded-xl bg-transparent px-4 pt-3 pb-12 text-sm leading-relaxed text-[#e2e8f0] placeholder-[#94a3b8]/50 outline-none"
@@ -572,7 +572,7 @@ export default function ChatPage({
               <div className="absolute right-3 bottom-3 flex items-center gap-2">
                 {tier === "guest" && !guestLimitReached && rounds > 0 && (
                   <span className="text-xs text-[#94a3b8]">
-                    {GUEST_MAX_ROUNDS - rounds} left
+                    {t("roundsLeft", { count: GUEST_MAX_ROUNDS - rounds })}
                   </span>
                 )}
                 <button
@@ -601,7 +601,7 @@ export default function ChatPage({
               </div>
             </div>
             <p className="mt-2 text-center text-xs text-[#94a3b8]/60">
-              Enter to send · Shift+Enter for new line
+              {t("enterToSend")}
             </p>
           </div>
         </div>

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import Image from "next/image";
+import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
 import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor, TwitterMeta } from "@/lib/api";
 import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, accountAge, formatCount, Stage } from "@/lib/utils";
@@ -15,6 +16,7 @@ export default function SoulPage({
   params: Promise<{ handle: string }>;
 }) {
   const { handle } = use(params);
+  const t = useTranslations("Soul");
   const [shell, setShell] = useState<Shell | null>(null);
   const [fragments, setFragments] = useState<Fragment[]>([]);
   const [history, setHistory] = useState<Ensouling[]>([]);
@@ -58,10 +60,10 @@ export default function SoulPage({
   if (error || !shell) {
     return (
       <div className="mx-auto max-w-4xl px-4 pt-24 pb-16 text-center">
-        <h2 className="mb-2 text-2xl font-bold text-[#e2e8f0]">Soul Not Found</h2>
-        <p className="mb-6 text-[#94a3b8]">{error || "This soul does not exist."}</p>
+        <h2 className="mb-2 text-2xl font-bold text-[#e2e8f0]">{t("notFoundTitle")}</h2>
+        <p className="mb-6 text-[#94a3b8]">{error || t("notFoundDesc")}</p>
         <Link href="/explore" className="text-[#8b5cf6] hover:underline">
-          ← Back to Explore
+          {t("backToExplore")}
         </Link>
       </div>
     );
@@ -77,9 +79,9 @@ export default function SoulPage({
   const rejectedFrags = fragments.filter((f) => f.status === "rejected");
 
   const tabs: { key: Tab; label: string; count?: number }[] = [
-    { key: "fragments", label: "Fragments", count: fragments.length },
-    { key: "dimensions", label: "Dimensions", count: Object.keys(dims).length },
-    { key: "history", label: "Evolution", count: history.length },
+    { key: "fragments", label: t("tabFragments"), count: fragments.length },
+    { key: "dimensions", label: t("tabDimensions"), count: Object.keys(dims).length },
+    { key: "history", label: t("tabEvolution"), count: history.length },
   ];
 
   // Count how many dimensions have fragments
@@ -132,7 +134,7 @@ export default function SoulPage({
             </h1>
             {meta.verified && (
               <span className="inline-flex items-center gap-1 rounded-full bg-blue-500/10 px-2 py-0.5 text-xs font-medium text-blue-400">
-                ✓ Verified
+                ✓ {t("verified")}
               </span>
             )}
             <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${stage.bgClass} ${stage.textClass}`}>
@@ -143,7 +145,7 @@ export default function SoulPage({
               href={`/soul/${shell.handle}/chat`}
               className="ml-auto flex-shrink-0 rounded-lg bg-[#8b5cf6] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
             >
-              Chat with Soul
+              {t("chatWithSoul")}
             </Link>
           </div>
 
@@ -171,17 +173,17 @@ export default function SoulPage({
           <div className="flex flex-wrap items-center gap-4 text-sm text-[#94a3b8]">
             {(meta.followers_count != null && meta.followers_count > 0) && (
               <span>
-                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.followers_count)}</span> Followers
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.followers_count)}</span> {t("followers")}
               </span>
             )}
             {(meta.following_count != null && meta.following_count > 0) && (
               <span>
-                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.following_count)}</span> Following
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.following_count)}</span> {t("following")}
               </span>
             )}
             {(meta.tweet_count != null && meta.tweet_count > 0) && (
               <span>
-                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.tweet_count)}</span> Tweets
+                <span className="font-semibold text-[#e2e8f0]">{formatCount(meta.tweet_count)}</span> {t("tweets")}
               </span>
             )}
             {meta.location && (
@@ -203,17 +205,17 @@ export default function SoulPage({
           ═══════════════════════════════════════════════════════════════ */}
       <div className="mb-6 rounded-xl border border-[#1e1e2e] bg-[#14141f] p-5 sm:p-6">
         <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-[#94a3b8]/60">
-          Soul State
+          {t("soulState")}
         </h3>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-7">
           {[
-            { label: "Stage", value: stage.label, color: stage.color },
-            { label: "DNA", value: `v${shell.dna_version}` },
-            { label: "Completion", value: `${completion}%` },
-            { label: "Fragments", value: shell.total_frags },
-            { label: "Accepted", value: shell.accepted_frags },
-            { label: "Claws", value: shell.total_claws },
-            { label: "Chats", value: shell.total_chats },
+            { label: t("stage"), value: stage.label, color: stage.color },
+            { label: t("dna"), value: `v${shell.dna_version}` },
+            { label: t("completion"), value: `${completion}%` },
+            { label: t("fragments"), value: shell.total_frags },
+            { label: t("accepted"), value: shell.accepted_frags },
+            { label: t("claws"), value: shell.total_claws },
+            { label: t("chats"), value: shell.total_chats },
           ].map((s) => (
             <div key={s.label} className="rounded-lg border border-[#1e1e2e]/60 bg-[#0a0a0f]/50 p-3 text-center">
               <div
@@ -229,14 +231,14 @@ export default function SoulPage({
 
         {/* Dimension coverage mini-bar */}
         <div className="mt-4 flex items-center gap-3 text-xs text-[#94a3b8]">
-          <span>Dimension Coverage:</span>
+          <span>{t("dimensionCoverage")}:</span>
           <div className="flex gap-1">
             {Object.entries(dimensionLabels).map(([key, label]) => {
               const has = dims[key] && dims[key].score > 0;
               return (
                 <span
                   key={key}
-                  title={`${label}: ${has ? dims[key].score + '%' : 'empty'}`}
+                  title={`${label}: ${has ? dims[key].score + '%' : t('empty')}`}
                   className={`rounded px-1.5 py-0.5 text-[10px] font-medium ${
                     has
                       ? "bg-[#8b5cf6]/20 text-[#a78bfa]"
@@ -263,8 +265,8 @@ export default function SoulPage({
         {/* Last ensouling */}
         {history.length > 0 && (
           <div className="mt-3 text-xs text-[#94a3b8]">
-            Last Ensouling: <span className="text-[#8b5cf6]">{timeAgo(history[0].created_at)}</span>
-            <span className="ml-2">({history[0].frags_merged} fragments merged → v{history[0].version_to})</span>
+            {t("lastEnsouling")}: <span className="text-[#8b5cf6]">{timeAgo(history[0].created_at)}</span>
+            <span className="ml-2">({t("fragsMerged", { count: history[0].frags_merged })} → v{history[0].version_to})</span>
           </div>
         )}
       </div>
@@ -274,19 +276,19 @@ export default function SoulPage({
           ═══════════════════════════════════════════════════════════════ */}
       <div className="mb-8 rounded-xl border border-[#1e1e2e] bg-[#14141f] p-5 sm:p-6">
         <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#94a3b8]/60">
-          On-Chain
+          {t("onChain")}
         </h3>
         <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-[#94a3b8]">
           {shell.agent_id != null && (
             <span>
-              Token: <span className="font-mono font-semibold text-[#8b5cf6]">#{shell.agent_id}</span>
+              {t("token")}: <span className="font-mono font-semibold text-[#8b5cf6]">#{shell.agent_id}</span>
             </span>
           )}
           <span>
-            Owner: <span className="font-mono text-[#e2e8f0]">{truncateAddr(shell.owner_addr)}</span>
+            {t("owner")}: <span className="font-mono text-[#e2e8f0]">{truncateAddr(shell.owner_addr)}</span>
           </span>
           <span>
-            Minted: <span className="text-[#e2e8f0]">{timeAgo(shell.created_at)}</span>
+            {t("minted")}: <span className="text-[#e2e8f0]">{timeAgo(shell.created_at)}</span>
           </span>
           <span className="font-mono text-[10px] text-[#94a3b8]/50">
             ERC-8004
@@ -319,13 +321,13 @@ export default function SoulPage({
       <div className="mb-8 grid gap-6 lg:grid-cols-2">
         {/* Radar chart */}
         <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
-          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Soul Dimensions</h3>
+          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">{t("soulDimensions")}</h3>
           <RadarChart dimensions={dims} size={280} />
         </div>
 
         {/* Soul prompt */}
         <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
-          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Soul Identity</h3>
+          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">{t("soulIdentity")}</h3>
           {shell.soul_prompt ? (
             <div className="space-y-4">
               {/* Key dimension summaries */}
@@ -352,14 +354,14 @@ export default function SoulPage({
               ) : (
                 <div className="space-y-3">
                   <p className="text-sm leading-relaxed text-[#e2e8f0]">
-                    {shell.seed_summary || "This soul is still forming its identity..."}
+                    {shell.seed_summary || t("formingIdentity")}
                   </p>
                   <div className="flex flex-wrap gap-2">
                     <span className="rounded-full bg-[#8b5cf6]/10 px-2.5 py-1 text-xs text-[#a78bfa]">
                       DNA v{shell.dna_version}
                     </span>
                     <span className="rounded-full bg-[#8b5cf6]/10 px-2.5 py-1 text-xs text-[#a78bfa]">
-                      {shell.accepted_frags} fragments absorbed
+                      {t("fragsAbsorbed", { count: shell.accepted_frags })}
                     </span>
                     <span className={`rounded-full px-2.5 py-1 text-xs ${stage.bgClass} ${stage.textClass}`}>
                       {stage.label}
@@ -372,16 +374,14 @@ export default function SoulPage({
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-[#f59e0b]">
                 <span>🥚</span>
-                <span className="text-sm font-medium">Embryo Stage</span>
+                <span className="text-sm font-medium">{t("embryoStage")}</span>
               </div>
               <p className="text-xs leading-relaxed text-[#94a3b8]">
-                This soul hasn&apos;t awakened yet. As more fragments are contributed and absorbed, 
-                a unique identity will emerge — personality, knowledge, communication style, 
-                and worldview will gradually crystallize.
+                {t("embryoDesc")}
               </p>
               <div className="rounded-lg border border-dashed border-[#1e1e2e] p-3 text-center">
                 <p className="text-xs text-[#94a3b8]">
-                  Need <span className="text-[#8b5cf6]">10 accepted fragments</span> to trigger first Ensouling
+                  {t("needFragments", { count: 10 })}
                 </p>
               </div>
             </div>
@@ -392,7 +392,7 @@ export default function SoulPage({
       {/* Top Contributors */}
       {contributors.length > 0 && (
         <div className="mb-8 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
-          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">Top Contributors</h3>
+          <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">{t("topContributors")}</h3>
           <div className="flex flex-wrap gap-3">
             {contributors.map((c, i) => (
               <Link
@@ -405,7 +405,7 @@ export default function SoulPage({
                 </span>
                 <span className="text-sm font-medium text-[#e2e8f0]">{c.name}</span>
                 <span className="text-xs text-[#94a3b8]">
-                  {c.accepted_frags} accepted
+                  {c.accepted_frags} {t("accepted")}
                 </span>
               </Link>
             ))}
@@ -457,6 +457,7 @@ function FragmentFeed({
   pending: Fragment[];
   rejected: Fragment[];
 }) {
+  const t = useTranslations("Soul");
   const all = [...accepted, ...pending, ...rejected].sort(
     (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
   );
@@ -464,8 +465,8 @@ function FragmentFeed({
   if (all.length === 0) {
     return (
       <div className="py-12 text-center text-[#94a3b8]">
-        <p className="mb-1 text-lg">No fragments yet</p>
-        <p className="text-sm">Be the first Claw to contribute a fragment to this soul.</p>
+        <p className="mb-1 text-lg">{t("noFragments")}</p>
+        <p className="text-sm">{t("noFragmentsDesc")}</p>
       </div>
     );
   }
@@ -504,7 +505,7 @@ function FragmentFeed({
               )}
               {f.confidence > 0 && (
                 <span className="text-xs text-[#94a3b8]">
-                  · {Math.round(f.confidence * 100)}% confidence
+                  · {Math.round(f.confidence * 100)}% {t("confidence")}
                 </span>
               )}
               {f.tx_hash && f.tx_hash !== "drip_failed" && (
@@ -514,7 +515,7 @@ function FragmentFeed({
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-xs text-[#8b5cf6] hover:underline"
                 >
-                  ⛓️ on-chain
+                  ⛓️ {t("onchain")}
                 </a>
               )}
             </div>
@@ -522,7 +523,7 @@ function FragmentFeed({
           </div>
           <p className="text-sm leading-relaxed text-[#e2e8f0]">{f.content}</p>
           {f.reject_reason && (
-            <p className="mt-2 text-xs text-red-400">Reason: {f.reject_reason}</p>
+            <p className="mt-2 text-xs text-red-400">{t("rejectReason", { reason: f.reject_reason })}</p>
           )}
         </div>
       ))}
@@ -536,12 +537,13 @@ function DimensionDetail({
 }: {
   dims: Record<string, { score: number; summary: string }>;
 }) {
+  const t = useTranslations("Soul");
   const entries = Object.entries(dims);
 
   if (entries.length === 0) {
     return (
       <div className="py-12 text-center text-[#94a3b8]">
-        <p>No dimension data available yet.</p>
+        <p>{t("noDimensionData")}</p>
       </div>
     );
   }
@@ -569,7 +571,7 @@ function DimensionDetail({
             />
           </div>
           <p className="text-sm leading-relaxed text-[#94a3b8]">
-            {dim.summary || "No analysis yet."}
+            {dim.summary || t("noAnalysis")}
           </p>
         </div>
       ))}
@@ -579,12 +581,13 @@ function DimensionDetail({
 
 // --- History Timeline ---
 function HistoryTimeline({ history }: { history: Ensouling[] }) {
+  const t = useTranslations("Soul");
   if (history.length === 0) {
     return (
       <div className="py-12 text-center text-[#94a3b8]">
-        <p className="mb-1 text-lg">No evolution yet</p>
+        <p className="mb-1 text-lg">{t("noEvolution")}</p>
         <p className="text-sm">
-          Ensouling happens when enough quality fragments accumulate.
+          {t("noEvolutionDesc")}
         </p>
       </div>
     );
@@ -607,10 +610,10 @@ function HistoryTimeline({ history }: { history: Ensouling[] }) {
               <span className="text-xs text-[#94a3b8]">{timeAgo(e.created_at)}</span>
             </div>
             <p className="mb-1 text-xs text-[#94a3b8]">
-              {e.frags_merged} fragments merged
+              {t("fragsMerged", { count: e.frags_merged })}
             </p>
             <p className="text-sm leading-relaxed text-[#e2e8f0]">
-              {e.summary_diff || "Evolution completed."}
+              {e.summary_diff || t("evolutionCompleted")}
             </p>
           </div>
         </div>
