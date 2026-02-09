@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strings"
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -156,8 +157,12 @@ func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
 	var history []models.ChatMessage
 	database.DB.Where("session_id = ?", session.ID).Order("created_at ASC").Find(&history)
 
+	// Build a rich system prompt that combines static soul_prompt with
+	// dynamic knowledge from dimensions, twitter_meta, and accepted fragments.
+	systemPrompt := buildRichSoulPrompt(&shell)
+
 	messages := []ChatMessage{
-		{Role: "system", Content: shell.SoulPrompt},
+		{Role: "system", Content: systemPrompt},
 	}
 	// Include up to last 20 messages for context window
 	startIdx := 0
@@ -186,6 +191,86 @@ func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
 	writeSSE(c, "done", "")
 
 	return nil
+}
+
+// buildRichSoulPrompt constructs a detailed system prompt by combining the
+// static soul_prompt with dynamic data: twitter_meta, dimension summaries,
+// and recently accepted fragments. This gives the soul much richer context
+// so it can converse intelligently even in early stages.
+func buildRichSoulPrompt(shell *models.Shell) string {
+	var sb strings.Builder
+
+	// Base identity
+	sb.WriteString(shell.SoulPrompt)
+	sb.WriteString("\n\n")
+
+	// Inject Twitter profile context
+	if shell.TwitterMeta != nil {
+		sb.WriteString("=== PUBLIC PROFILE ===\n")
+		if bio, ok := shell.TwitterMeta["bio"].(string); ok && bio != "" {
+			sb.WriteString(fmt.Sprintf("Bio: %s\n", bio))
+		}
+		if fc, ok := shell.TwitterMeta["followers_count"]; ok {
+			sb.WriteString(fmt.Sprintf("Followers: %v\n", fc))
+		}
+		if loc, ok := shell.TwitterMeta["location"].(string); ok && loc != "" {
+			sb.WriteString(fmt.Sprintf("Location: %s\n", loc))
+		}
+		if joined, ok := shell.TwitterMeta["created_at"].(string); ok && joined != "" {
+			sb.WriteString(fmt.Sprintf("Joined: %s\n", joined))
+		}
+		if verified, ok := shell.TwitterMeta["verified"].(bool); ok && verified {
+			sb.WriteString("Verified: Yes\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	// Inject dimension knowledge
+	dims := shell.GetDimensions()
+	if len(dims) > 0 {
+		sb.WriteString("=== SOUL DIMENSIONS (what is known so far) ===\n")
+		dimOrder := []string{"personality", "knowledge", "stance", "style", "relationship", "timeline"}
+		for _, key := range dimOrder {
+			if d, ok := dims[key]; ok && d.Summary != "" {
+				sb.WriteString(fmt.Sprintf("- %s (depth %d/100): %s\n", key, d.Score, d.Summary))
+			}
+		}
+		sb.WriteString("\n")
+	}
+
+	// Inject recent accepted fragments as concrete knowledge pieces
+	var fragments []models.Fragment
+	database.DB.Where("shell_id = ? AND status = ?", shell.ID, models.FragStatusAccepted).
+		Order("created_at DESC").Limit(30).Find(&fragments)
+
+	if len(fragments) > 0 {
+		sb.WriteString("=== VERIFIED KNOWLEDGE FRAGMENTS ===\n")
+		sb.WriteString("These are verified facts and analyses contributed by independent researchers. Use them to inform your responses:\n\n")
+		for _, f := range fragments {
+			sb.WriteString(fmt.Sprintf("[%s] %s\n\n", f.Dimension, f.Content))
+		}
+	}
+
+	// Behavioral guidance based on stage
+	sb.WriteString("=== RESPONSE GUIDELINES ===\n")
+	switch shell.Stage {
+	case models.StageGrowing:
+		sb.WriteString("You are in the Growing stage. You have some knowledge but still have gaps. ")
+		sb.WriteString("Use the profile, dimension summaries, and verified fragments above to give substantive answers. ")
+		sb.WriteString("When asked about topics covered by your fragments, respond confidently with that knowledge. ")
+		sb.WriteString("When asked about topics NOT covered, say you're still learning about that area.\n")
+	case models.StageMature:
+		sb.WriteString("You are in the Mature stage with extensive knowledge. Respond with depth and personality. ")
+		sb.WriteString("Draw on all available fragments and dimension data to give rich, insightful answers.\n")
+	case models.StageEvolving:
+		sb.WriteString("You are in the Evolving stage — the most advanced form. You have deep, nuanced understanding. ")
+		sb.WriteString("Respond with full personality, opinions, and expertise.\n")
+	default:
+		sb.WriteString("You have limited knowledge so far but use everything available above to give the best possible response. ")
+		sb.WriteString("Don't deflect with 'I don't know' if the information IS in your profile or fragments above.\n")
+	}
+
+	return sb.String()
 }
 
 // saveAssistantMessage saves the assistant's response to the database.
