@@ -311,11 +311,7 @@ export default function SoulPage({
               </a>
             </>
           )}
-          {meta.data_source && (
-            <span className="ml-auto rounded bg-[#1e1e2e] px-1.5 py-0.5 text-[10px] text-[#94a3b8]/60">
-              data: {meta.data_source}
-            </span>
-          )}
+
         </div>
       </div>
 

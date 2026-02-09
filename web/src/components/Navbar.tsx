@@ -136,6 +136,13 @@ export default function Navbar() {
                     {menuOpen && (
                       <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-lg border border-[#1e1e2e] bg-[#14141f] shadow-xl">
                         <Link
+                          href="/my-souls"
+                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                        >
+                          <span>👻</span>
+                          <span>My Souls</span>
+                        </Link>
+                        <Link
                           href="/claw/dashboard"
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
