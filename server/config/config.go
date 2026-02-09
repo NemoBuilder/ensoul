@@ -38,6 +38,10 @@ type Config struct {
 
 	// Twitter (for seed extraction)
 	TwitterBearerToken string
+
+	// SocialData API (primary Twitter data source)
+	SocialDataAPIKey  string
+	SocialDataBaseURL string // default: https://api.socialdata.tools
 }
 
 // Global config instance
@@ -68,6 +72,8 @@ func Load() *Config {
 		LLMModel:               getEnv("LLM_MODEL", "gpt-4o"),
 		LLMBaseURL:             getEnv("LLM_BASE_URL", ""),
 		TwitterBearerToken:     getEnv("TWITTER_BEARER_TOKEN", ""),
+		SocialDataAPIKey:       getEnv("SOCIALDATA_API_KEY", ""),
+		SocialDataBaseURL:      getEnv("SOCIALDATA_BASE_URL", ""),
 	}
 
 	// Auto-set log level based on environment if not explicitly configured

@@ -117,15 +117,38 @@ If you do not have sufficient knowledge about @%s, provide your best assessment
 with lower scores and honest summaries indicating limited information.`, handle, handle)
 	} else {
 		tweetsText := FormatTweetsForLLM(profile.Tweets)
+
+		// Build extended profile section — include SocialData fields when available
+		var profileExtra string
+		if profile.Location != "" {
+			profileExtra += fmt.Sprintf("Location: %s\n", profile.Location)
+		}
+		if profile.CreatedAt != "" {
+			profileExtra += fmt.Sprintf("Account Created: %s\n", profile.CreatedAt)
+		}
+		if profile.Verified {
+			profileExtra += "Verified: Yes\n"
+		}
+		if profile.ListedCount > 0 {
+			profileExtra += fmt.Sprintf("Listed Count: %d (reflects influence)\n", profile.ListedCount)
+		}
+		if profile.User.PublicMetrics.FollowingCount > 0 {
+			profileExtra += fmt.Sprintf("Following: %d\n", profile.User.PublicMetrics.FollowingCount)
+		}
+		if profile.FavouritesCount > 0 {
+			profileExtra += fmt.Sprintf("Favourites: %d\n", profile.FavouritesCount)
+		}
+		profileExtra += fmt.Sprintf("Data Source: %s\n", profile.DataSource)
+
 		dataSection = fmt.Sprintf(`=== PROFILE ===
 Handle: @%s
 Display Name: %s
 Bio: %s
 Followers: %d
-
+%s
 === RECENT TWEETS ===
 %s`, handle, profile.User.Name, profile.User.Description,
-			profile.User.PublicMetrics.FollowersCount, tweetsText)
+			profile.User.PublicMetrics.FollowersCount, profileExtra, tweetsText)
 	}
 
 	seedPrompt := fmt.Sprintf(`You are the seed extraction engine for Ensoul, a decentralized soul construction protocol.
