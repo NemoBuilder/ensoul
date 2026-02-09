@@ -1,6 +1,7 @@
 "use client";
 
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { stageConfig, type Stage, calcCompletion } from "@/lib/utils";
 import type { Shell } from "@/lib/api";
 
@@ -9,6 +10,7 @@ interface SoulCardProps {
 }
 
 export default function SoulCard({ soul }: SoulCardProps) {
+  const t = useTranslations("SoulCard");
   const stage = stageConfig[soul.stage as Stage] || stageConfig.embryo;
   const completion = calcCompletion(soul.dimensions || {});
 
@@ -45,7 +47,7 @@ export default function SoulCard({ soul }: SoulCardProps) {
         {/* Progress bar */}
         <div className="mb-3">
           <div className="mb-1 flex items-center justify-between">
-            <span className="text-xs text-[#94a3b8]">Completion</span>
+            <span className="text-xs text-[#94a3b8]">{t("completion")}</span>
             <span className="font-mono text-xs text-[#94a3b8]">
               {completion}%
             </span>
@@ -63,13 +65,13 @@ export default function SoulCard({ soul }: SoulCardProps) {
 
         {/* Stats row */}
         <div className="mb-3 flex items-center gap-4 text-xs text-[#94a3b8]">
-          <span title="Total fragments">
+          <span title={t("totalFragments")}>
             📄 {soul.total_frags}
           </span>
-          <span title="Contributing claws">
+          <span title={t("contributingClaws")}>
             🦞 {soul.total_claws}
           </span>
-          <span title="DNA version" className="font-mono">
+          <span title={t("dnaVersion")} className="font-mono">
             v{soul.dna_version}
           </span>
         </div>
@@ -86,7 +88,7 @@ export default function SoulCard({ soul }: SoulCardProps) {
             {stage.label}
           </span>
           <span className="text-xs text-[#94a3b8]/60 opacity-0 transition-opacity group-hover:opacity-100">
-            View Soul →
+            {t("viewSoul")}
           </span>
         </div>
       </div>

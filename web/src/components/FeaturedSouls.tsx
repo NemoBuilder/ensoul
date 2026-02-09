@@ -1,12 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { shellApi, Shell } from "@/lib/api";
 import SoulCard from "@/components/SoulCard";
 
-// Fetches and displays the top souls on the landing page.
 export default function FeaturedSouls() {
+  const t = useTranslations("Home");
   const [shells, setShells] = useState<Shell[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -29,9 +30,9 @@ export default function FeaturedSouls() {
   if (shells.length === 0) {
     return (
       <p className="text-center text-[#94a3b8]">
-        Souls will appear here once minted. Be the first to{" "}
+        {t("featuredEmpty")}{" "}
         <Link href="/mint" className="text-[#8b5cf6] hover:underline">
-          mint a shell
+          {t("featuredMintLink")}
         </Link>
         .
       </p>
@@ -51,7 +52,7 @@ export default function FeaturedSouls() {
             href="/explore"
             className="rounded-lg border border-[#1e1e2e] px-6 py-2.5 text-sm font-medium text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#8b5cf6]"
           >
-            View All Souls →
+            {t("viewAllSouls")}
           </Link>
         </div>
       )}

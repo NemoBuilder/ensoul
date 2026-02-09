@@ -1,24 +1,12 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { useTranslations } from "next-intl";
 import { shellApi, type Shell } from "@/lib/api";
 import SoulCard from "@/components/SoulCard";
 
-const stages = [
-  { key: "", label: "All" },
-  { key: "embryo", label: "Embryo" },
-  { key: "growing", label: "Growing" },
-  { key: "mature", label: "Mature" },
-  { key: "evolving", label: "Evolving" },
-];
-
-const sortOptions = [
-  { key: "newest", label: "Newest" },
-  { key: "most_fragments", label: "Most Fragments" },
-  { key: "hot", label: "Hot" },
-];
-
 export default function ExplorePage() {
+  const t = useTranslations("Explore");
   const [souls, setSouls] = useState<Shell[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -31,6 +19,20 @@ export default function ExplorePage() {
   const sentinelRef = useRef<HTMLDivElement>(null);
 
   const hasMore = souls.length < total;
+
+  const stages = [
+    { key: "", label: t("all") },
+    { key: "embryo", label: t("embryo") },
+    { key: "growing", label: t("growing") },
+    { key: "mature", label: t("mature") },
+    { key: "evolving", label: t("evolving") },
+  ];
+
+  const sortOptions = [
+    { key: "newest", label: t("newest") },
+    { key: "most_fragments", label: t("mostFragments") },
+    { key: "hot", label: t("hot") },
+  ];
 
   // Fetch first page (reset)
   const fetchSouls = useCallback(async () => {
@@ -81,7 +83,7 @@ export default function ExplorePage() {
           loadMore();
         }
       },
-      { rootMargin: "200px" } // trigger 200px before reaching bottom
+      { rootMargin: "200px" }
     );
 
     observer.observe(el);
@@ -91,10 +93,10 @@ export default function ExplorePage() {
   return (
     <div className="mx-auto max-w-7xl px-4 pt-24 pb-16">
       <h1 className="mb-2 text-3xl font-bold text-[#e2e8f0]">
-        Explore Souls
+        {t("title")}
       </h1>
       <p className="mb-8 text-[#94a3b8]">
-        Browse all minted souls. Filter by stage, search by handle.
+        {t("subtitle")}
       </p>
 
       {/* Filter bar */}
@@ -127,7 +129,7 @@ export default function ExplorePage() {
 
         <input
           type="text"
-          placeholder="Search by handle..."
+          placeholder={t("searchPlaceholder")}
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="ml-auto rounded-md border border-[#1e1e2e] bg-[#14141f] px-4 py-2 text-sm text-[#e2e8f0] placeholder-[#94a3b8]/50 outline-none focus:border-[#8b5cf6]"
@@ -141,11 +143,11 @@ export default function ExplorePage() {
         </div>
       ) : souls.length === 0 ? (
         <div className="flex min-h-[40vh] flex-col items-center justify-center text-[#94a3b8]">
-          <p className="text-lg">No souls found</p>
+          <p className="text-lg">{t("noSoulsFound")}</p>
           <p className="mt-2 text-sm">
             {search
-              ? `No results for "${search}". Try a different search.`
-              : "Be the first to mint a shell!"}
+              ? t("noSearchResults", { query: search })
+              : t("beFirstToMint")}
           </p>
         </div>
       ) : (
@@ -161,12 +163,12 @@ export default function ExplorePage() {
             {loadingMore && (
               <div className="flex items-center gap-2 text-sm text-[#94a3b8]">
                 <div className="h-4 w-4 animate-spin rounded-full border-2 border-[#8b5cf6] border-t-transparent" />
-                Loading more...
+                {t("loadingMore")}
               </div>
             )}
             {!hasMore && souls.length > 0 && (
               <p className="text-sm text-[#94a3b8]/50">
-                All {total} souls loaded
+                {t("allLoaded", { count: total })}
               </p>
             )}
           </div>

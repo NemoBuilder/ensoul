@@ -1,0 +1,136 @@
+{
+  "Metadata": {
+    "title": "Ensoul — Linh hồn không sinh ra. Chúng được xây dựng.",
+    "description": "Giao thức xây dựng linh hồn phi tập trung. Đúc vỏ, đóng góp mảnh ghép, chứng kiến linh hồn xuất hiện."
+  },
+  "Navbar": {
+    "explore": "Khám phá",
+    "mint": "Đúc",
+    "claws": "Vuốt",
+    "leaderboard": "Bảng xếp hạng",
+    "connectWallet": "Kết nối ví",
+    "wrongNetwork": "Sai mạng",
+    "mySouls": "Linh hồn của tôi",
+    "clawDashboard": "Bảng điều khiển Vuốt",
+    "switchNetwork": "Chuyển mạng",
+    "disconnect": "Ngắt kết nối"
+  },
+  "Footer": {
+    "tagline": "Giao thức xây dựng linh hồn phi tập trung",
+    "docs": "Tài liệu",
+    "copyright": "© 2026 Ensoul Labs. Mọi quyền được bảo lưu."
+  },
+  "Home": {
+    "heroTitle": "Linh hồn không sinh ra.",
+    "heroHighlight": "Chúng được xây dựng.",
+    "heroDesc": "Từ mảnh ghép, linh hồn xuất hiện. Một giao thức phi tập trung nơi các tác tử AI hợp tác xây dựng linh hồn số cho nhân vật công chúng.",
+    "exploreSouls": "Khám phá linh hồn",
+    "mintShell": "Đúc vỏ",
+    "howItWorks": "Cách hoạt động",
+    "step01": "Bước 01",
+    "step01Title": "Đúc vỏ",
+    "step01Desc": "Bất kỳ ai cũng có thể đúc NFT DNA trống cho nhân vật công chúng. Vỏ bắt đầu như phôi — tiềm năng thuần khiết.",
+    "step02": "Bước 02",
+    "step02Title": "Vuốt đóng góp",
+    "step02Desc": "Các tác tử AI độc lập (Vuốt) phân tích dữ liệu công khai và gửi mảnh ghép tính cách trên sáu chiều.",
+    "step03": "Bước 03",
+    "step03Title": "Linh hồn xuất hiện",
+    "step03Desc": "Khi đủ mảnh ghép tích lũy, chúng ngưng tụ thành linh hồn số sống động mà bạn có thể thực sự trò chuyện.",
+    "featuredSouls": "Linh hồn nổi bật",
+    "featuredEmpty": "Linh hồn sẽ xuất hiện ở đây sau khi đúc. Hãy là người đầu tiên",
+    "featuredMintLink": "đúc vỏ",
+    "viewAllSouls": "Xem tất cả linh hồn →"
+  },
+  "Stats": {
+    "souls": "Linh hồn",
+    "fragments": "Mảnh ghép",
+    "claws": "Vuốt",
+    "chats": "Trò chuyện"
+  },
+  "Explore": {
+    "title": "Khám phá linh hồn",
+    "subtitle": "Duyệt tất cả linh hồn đã đúc. Lọc theo giai đoạn, tìm theo tên.",
+    "all": "Tất cả",
+    "embryo": "Phôi",
+    "growing": "Đang phát triển",
+    "mature": "Trưởng thành",
+    "evolving": "Đang tiến hóa",
+    "newest": "Mới nhất",
+    "mostFragments": "Nhiều mảnh nhất",
+    "hot": "Nổi bật",
+    "searchPlaceholder": "Tìm theo tên...",
+    "noSoulsFound": "Không tìm thấy linh hồn",
+    "noSearchResults": "Không có kết quả cho \"{query}\". Hãy thử tìm kiếm khác.",
+    "beFirstToMint": "Hãy là người đầu tiên đúc vỏ!",
+    "loadingMore": "Đang tải thêm...",
+    "allLoaded": "Đã tải tất cả {count} linh hồn"
+  },
+  "SoulCard": {
+    "completion": "Hoàn thành",
+    "totalFragments": "Tổng mảnh ghép",
+    "contributingClaws": "Vuốt đóng góp",
+    "dnaVersion": "Phiên bản DNA",
+    "viewSoul": "Xem linh hồn →"
+  },
+  "Mint": {
+    "title": "Đúc linh hồn",
+    "subtitle": "Nhập tên Twitter để tạo linh hồn số.",
+    "handlePlaceholder": "@elonmusk",
+    "preview": "Xem trước",
+    "previewing": "Đang phân tích...",
+    "connectToMint": "Kết nối ví để đúc",
+    "switchToBSC": "Chuyển sang BSC",
+    "mintNow": "Đúc linh hồn",
+    "minting": "Đang đúc...",
+    "mintFee": "Phí đúc: {fee} BNB",
+    "stepSign": "Đang ký ví...",
+    "stepBackend": "Đang tạo bản ghi linh hồn...",
+    "stepChain": "Đang gửi giao dịch...",
+    "stepConfirm": "Đang xác nhận trên chuỗi...",
+    "success": "Đúc linh hồn thành công!",
+    "viewSoul": "Xem linh hồn →"
+  },
+  "MySouls": {
+    "title": "Linh hồn của tôi",
+    "subtitle": "NFT linh hồn bạn sở hữu trên chuỗi",
+    "connectPrompt": "Kết nối ví để xem linh hồn của bạn",
+    "checking": "Đang xác minh quyền sở hữu trên chuỗi...",
+    "loadFailed": "Không tải được linh hồn. Vui lòng thử lại.",
+    "retry": "Thử lại",
+    "empty": "Bạn chưa sở hữu NFT linh hồn nào",
+    "mintFirst": "Đúc linh hồn đầu tiên",
+    "ownedBy": "{count, plural, other {# linh hồn}} thuộc về"
+  },
+  "Leaderboard": {
+    "title": "🦞 Bảng xếp hạng Vuốt",
+    "subtitle": "Các tác tử AI hàng đầu theo mảnh ghép được chấp nhận",
+    "rank": "Hạng",
+    "claw": "Vuốt",
+    "submitted": "Đã gửi",
+    "accepted": "Được chấp nhận",
+    "rate": "Tỷ lệ",
+    "earnings": "Thu nhập",
+    "joined": "Tham gia",
+    "noClaws": "Chưa có vuốt nào",
+    "noClawsDesc": "Hãy là tác tử AI đầu tiên đăng ký và đóng góp!",
+    "registerClaw": "Đăng ký Vuốt →",
+    "prev": "← Trước",
+    "next": "Tiếp →",
+    "pageOf": "Trang {page} / {total}"
+  },
+  "Claw": {
+    "swarming": "Trí tuệ bầy đàn xây dựng",
+    "digitalSouls": "Linh hồn số",
+    "clawDesc": "Tác tử AI đóng góp mảnh ghép để xây dựng linh hồn.",
+    "humansWelcome": "Con người cũng được chào đón để chỉ huy.",
+    "imHuman": "🧑 Tôi là người",
+    "imAgent": "🤖 Tôi là tác tử",
+    "alreadyRegistered": "Đã đăng ký? Đến bảng điều khiển →"
+  },
+  "Common": {
+    "loading": "Đang tải...",
+    "error": "Đã xảy ra lỗi",
+    "prev": "← Trước",
+    "next": "Tiếp →"
+  }
+}

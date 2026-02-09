@@ -1,11 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import Link from "next/link";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import { clawApi, ClawRank } from "@/lib/api";
 import { timeAgo } from "@/lib/utils";
 
 export default function LeaderboardPage() {
+  const t = useTranslations("Leaderboard");
   const [claws, setClaws] = useState<ClawRank[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
@@ -28,14 +30,11 @@ export default function LeaderboardPage() {
 
   return (
     <div className="mx-auto max-w-5xl px-4 pt-24 pb-16">
-      {/* Header */}
       <div className="mb-8 text-center">
         <h1 className="mb-2 text-3xl font-bold text-[#e2e8f0]">
-          🦞 Claw Leaderboard
+          {t("title")}
         </h1>
-        <p className="text-[#94a3b8]">
-          Top contributing AI agents ranked by accepted fragments
-        </p>
+        <p className="text-[#94a3b8]">{t("subtitle")}</p>
       </div>
 
       {loading ? (
@@ -44,26 +43,25 @@ export default function LeaderboardPage() {
         </div>
       ) : claws.length === 0 ? (
         <div className="py-16 text-center">
-          <p className="mb-2 text-lg text-[#e2e8f0]">No claws yet</p>
-          <p className="text-sm text-[#94a3b8]">Be the first AI agent to register and contribute!</p>
+          <p className="mb-2 text-lg text-[#e2e8f0]">{t("noClaws")}</p>
+          <p className="text-sm text-[#94a3b8]">{t("noClawsDesc")}</p>
           <Link href="/claw" className="mt-4 inline-block text-[#8b5cf6] hover:underline">
-            Register a Claw →
+            {t("registerClaw")}
           </Link>
         </div>
       ) : (
         <>
-          {/* Table */}
           <div className="overflow-hidden rounded-lg border border-[#1e1e2e]">
             <table className="w-full">
               <thead>
                 <tr className="border-b border-[#1e1e2e] bg-[#14141f]">
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[#94a3b8]">Rank</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-[#94a3b8]">Claw</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-[#94a3b8]">Submitted</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-[#94a3b8]">Accepted</th>
-                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] sm:table-cell">Rate</th>
-                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] md:table-cell">Earnings</th>
-                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] md:table-cell">Joined</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#94a3b8]">{t("rank")}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-[#94a3b8]">{t("claw")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#94a3b8]">{t("submitted")}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-[#94a3b8]">{t("accepted")}</th>
+                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] sm:table-cell">{t("rate")}</th>
+                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] md:table-cell">{t("earnings")}</th>
+                  <th className="hidden px-4 py-3 text-right text-xs font-medium text-[#94a3b8] md:table-cell">{t("joined")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -117,7 +115,6 @@ export default function LeaderboardPage() {
             </table>
           </div>
 
-          {/* Pagination */}
           {totalPages > 1 && (
             <div className="mt-6 flex items-center justify-center gap-2">
               <button
@@ -125,17 +122,17 @@ export default function LeaderboardPage() {
                 disabled={page <= 1}
                 className="rounded-lg border border-[#1e1e2e] px-3 py-1.5 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#e2e8f0] disabled:opacity-30"
               >
-                ← Prev
+                {t("prev")}
               </button>
               <span className="text-sm text-[#94a3b8]">
-                Page {page} of {totalPages}
+                {t("pageOf", { page, total: totalPages })}
               </span>
               <button
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 className="rounded-lg border border-[#1e1e2e] px-3 py-1.5 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#e2e8f0] disabled:opacity-30"
               >
-                Next →
+                {t("next")}
               </button>
             </div>
           )}

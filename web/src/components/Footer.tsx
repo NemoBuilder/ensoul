@@ -1,7 +1,12 @@
-import Link from "next/link";
+"use client";
+
 import Image from "next/image";
+import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 
 export default function Footer() {
+  const t = useTranslations("Footer");
+
   return (
     <footer className="border-t border-[#1e1e2e] bg-[#0a0a0f] py-8">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
@@ -12,27 +17,27 @@ export default function Footer() {
               <span className="text-lg font-bold text-[#8b5cf6]">Ensoul</span>
             </div>
             <span className="text-sm text-[#94a3b8]">
-              A Decentralized Protocol for Soul Construction
+              {t("tagline")}
             </span>
           </div>
           <div className="flex items-center gap-6">
-            <Link
+            <a
               href="https://x.com/NemoBuilder"
               target="_blank"
               className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
             >
               Twitter
-            </Link>
+            </a>
             <Link
               href="/docs"
               className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
             >
-              Docs
+              {t("docs")}
             </Link>
           </div>
         </div>
         <div className="mt-4 text-center text-xs text-[#94a3b8]/60">
-          © 2026 Ensoul Labs. All rights reserved.
+          {t("copyright")}
         </div>
       </div>
     </footer>

@@ -1,19 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { Link, usePathname } from "@/i18n/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-
-const navItems = [
-  { href: "/explore", label: "Explore" },
-  { href: "/mint", label: "Mint" },
-  { href: "/claw", label: "Claws" },
-  { href: "/leaderboard", label: "Leaderboard" },
-];
+import LanguageSwitcher from "@/components/LanguageSwitcher";
 
 export default function Navbar() {
+  const t = useTranslations("Navbar");
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -46,11 +41,16 @@ export default function Navbar() {
 
           {/* Navigation links */}
           <div className="flex items-center gap-6">
-            {navItems.map((item) => (
+            {[
+              { href: "/explore" as const, label: t("explore") },
+              { href: "/mint" as const, label: t("mint") },
+              { href: "/claw" as const, label: t("claws") },
+              { href: "/leaderboard" as const, label: t("leaderboard") },
+            ].map((item) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`text-sm font-medium transition-colors ${
+                className={`hidden text-sm font-medium transition-colors sm:block ${
                   pathname === item.href
                     ? "text-[#8b5cf6]"
                     : "text-[#94a3b8] hover:text-[#e2e8f0]"
@@ -59,6 +59,8 @@ export default function Navbar() {
                 {item.label}
               </Link>
             ))}
+
+            <LanguageSwitcher />
 
             {/* Wallet button with user menu */}
             <ConnectButton.Custom>
@@ -87,7 +89,7 @@ export default function Navbar() {
                       onClick={openConnectModal}
                       className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
                     >
-                      Connect Wallet
+                      {t("connectWallet")}
                     </button>
                   );
                 }
@@ -98,7 +100,7 @@ export default function Navbar() {
                       onClick={openChainModal}
                       className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-400"
                     >
-                      Wrong Network
+                      {t("wrongNetwork")}
                     </button>
                   );
                 }
@@ -140,21 +142,21 @@ export default function Navbar() {
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🧬</span>
-                          <span>My Souls</span>
+                          <span>{t("mySouls")}</span>
                         </Link>
                         <Link
                           href="/claw/dashboard"
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🦞</span>
-                          <span>Claw Dashboard</span>
+                          <span>{t("clawDashboard")}</span>
                         </Link>
                         <button
                           onClick={() => { setMenuOpen(false); openChainModal(); }}
                           className="flex w-full items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🔗</span>
-                          <span>Switch Network</span>
+                          <span>{t("switchNetwork")}</span>
                         </button>
                         <div className="border-t border-[#1e1e2e]" />
                         <button
@@ -162,7 +164,7 @@ export default function Navbar() {
                           className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🚪</span>
-                          <span>Disconnect</span>
+                          <span>{t("disconnect")}</span>
                         </button>
                       </div>
                     )}

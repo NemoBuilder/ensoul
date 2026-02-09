@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
+import { useRouter } from "@/i18n/navigation";
 import { shellApi, SeedPreview } from "@/lib/api";
 import { dimensionLabels } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
@@ -18,12 +19,10 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { bsc } from "wagmi/chains";
 import { parseAbi, decodeEventLog } from "viem";
 
-// ERC-8004 Identity Registry (for parsing Registered event from inner call)
 const IDENTITY_REGISTRY_ABI = parseAbi([
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)",
 ]);
 
-// EnsoulMinter wrapper contract (charges BNB fee → calls register → transfers NFT to user)
 const ENSOUL_MINTER_ADDRESS = (process.env.NEXT_PUBLIC_MINTER_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 const ENSOUL_MINTER_ABI = parseAbi([
   "function mint(string agentURI) payable returns (uint256 agentId)",
@@ -31,10 +30,10 @@ const ENSOUL_MINTER_ABI = parseAbi([
   "event Minted(address indexed user, uint256 indexed agentId, uint256 fee)",
 ]);
 
-// Default mint fee (~1 USD in BNB, fixed at 700 USD/BNB), overridden by on-chain read
-const DEFAULT_MINT_FEE = BigInt("1430000000000000"); // 0.00143 BNB ≈ $1 @700U
+const DEFAULT_MINT_FEE = BigInt("1430000000000000");
 
 export default function MintPage() {
+  const t = useTranslations("Mint");
   const router = useRouter();
   const { address, isConnected } = useAccount();
   const chainId = useChainId();
@@ -52,7 +51,6 @@ export default function MintPage() {
   const [imgErr, setImgErr] = useState(false);
   const [mintFee, setMintFee] = useState<bigint>(DEFAULT_MINT_FEE);
 
-  // Read the current mint fee from the contract on mount
   useEffect(() => {
     if (!publicClient || !isConnected || !isCorrectChain) return;
     if (ENSOUL_MINTER_ADDRESS === "0x0000000000000000000000000000000000000000") return;
@@ -62,9 +60,7 @@ export default function MintPage() {
       functionName: "mintFee",
     }).then((fee) => {
       setMintFee(fee as bigint);
-    }).catch(() => {
-      // Use default fee if read fails
-    });
+    }).catch(() => {});
   }, [publicClient, isConnected, isCorrectChain]);
 
   const formatBNB = (wei: bigint) => {
@@ -72,13 +68,11 @@ export default function MintPage() {
     return bnb < 0.001 ? bnb.toFixed(6) : bnb.toFixed(4);
   };
 
-  // Preview seed extraction
   async function handlePreview() {
     if (!handle.trim()) return;
     setError("");
     setPreview(null);
     setImgErr(false);
-    // Validate handle: only ASCII letters, numbers, underscores (Twitter format)
     const cleanHandle = handle.trim().replace(/^@/, "");
     if (!/^[a-zA-Z0-9_]{1,15}$/.test(cleanHandle)) {
       setError("Invalid handle: only letters, numbers, and underscores are allowed (max 15 characters)");
@@ -95,7 +89,6 @@ export default function MintPage() {
     }
   }
 
-  // Build ERC-8004 AgentRegistrationFile data URI
   function buildAgentURI(p: SeedPreview): string {
     const regFile = {
       type: "https://eips.ethereum.org/EIPS/eip-8004#registration-v1",
@@ -107,7 +100,6 @@ export default function MintPage() {
         { name: "chat", endpoint: `https://ensoul.ac/soul/${p.handle}/chat` },
       ],
       active: true,
-      // Custom Ensoul metadata (allowed by spec — extra fields are MAY)
       ensoul: { handle: p.handle, stage: "embryo", dnaVersion: 1 },
     };
     const json = JSON.stringify(regFile);
@@ -115,24 +107,20 @@ export default function MintPage() {
     return `data:application/json;base64,${base64}`;
   }
 
-  // Full mint flow: sign → save DB → on-chain register → confirm
   async function handleMint() {
     if (!preview || !address) return;
     setError("");
     setMinting(true);
 
     try {
-      // Step 1: Sign message to prove wallet ownership
-      setMintStep("Requesting wallet signature...");
+      setMintStep(t("stepSign"));
       const message = `ensoul:mint:${preview.handle}`;
       const signature = await signMessageAsync({ message });
 
-      // Step 2: Save to database (with preview data, no LLM re-fetch)
-      setMintStep("Saving soul data...");
+      setMintStep(t("stepBackend"));
       await shellApi.mint(preview.handle, address, signature, preview);
 
-      // Step 3: On-chain registration via EnsoulMinter (user pays mint fee + gas)
-      setMintStep(`Minting on BNB Chain — ${formatBNB(mintFee)} BNB (confirm in wallet)...`);
+      setMintStep(t("stepChain"));
       const agentURI = buildAgentURI(preview);
 
       const txHash = await writeContractAsync({
@@ -144,12 +132,10 @@ export default function MintPage() {
         chainId: bsc.id,
       });
 
-      // Step 4: Wait for tx confirmation and parse agentId from event log
-      setMintStep("Waiting for transaction confirmation...");
+      setMintStep(t("stepConfirm"));
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
 
       let agentId = 0;
-      // Try parsing Registered event from IdentityRegistry (inner call)
       for (const log of receipt.logs) {
         try {
           const decoded = decodeEventLog({
@@ -161,11 +147,8 @@ export default function MintPage() {
             agentId = Number((decoded.args as { agentId: bigint }).agentId);
             break;
           }
-        } catch {
-          // not our event, skip
-        }
+        } catch {}
       }
-      // Fallback: try parsing Minted event from EnsoulMinter
       if (agentId === 0) {
         for (const log of receipt.logs) {
           try {
@@ -178,15 +161,11 @@ export default function MintPage() {
               agentId = Number((decoded.args as { agentId: bigint }).agentId);
               break;
             }
-          } catch {
-            // not our event, skip
-          }
+          } catch {}
         }
       }
 
-      setMintStep("Confirming on-chain registration...");
       await shellApi.confirm(preview.handle, txHash, agentId);
-
       router.push(`/soul/${preview.handle}`);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Minting failed");
@@ -197,37 +176,26 @@ export default function MintPage() {
 
   return (
     <div className="mx-auto max-w-3xl px-4 pt-24 pb-16">
-      <h1 className="mb-2 text-3xl font-bold text-[#e2e8f0]">Mint a Shell</h1>
-      <p className="mb-8 text-[#94a3b8]">
-        Create a DNA NFT for a public figure. We analyze their Twitter presence
-        to extract an initial soul seed.
-      </p>
+      <h1 className="mb-2 text-3xl font-bold text-[#e2e8f0]">{t("title")}</h1>
+      <p className="mb-8 text-[#94a3b8]">{t("subtitle")}</p>
 
-      {/* Wallet gate: must connect wallet on BSC before anything */}
       {!isConnected ? (
         <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-8 text-center">
-          <h3 className="mb-3 text-lg font-bold text-[#e2e8f0]">Connect Your Wallet</h3>
-          <p className="mb-5 text-sm text-[#94a3b8]">
-            You need to connect your wallet on BNB Smart Chain before minting.
-          </p>
+          <h3 className="mb-3 text-lg font-bold text-[#e2e8f0]">{t("connectToMint")}</h3>
           <ConnectButton />
         </div>
       ) : !isCorrectChain ? (
         <div className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-8 text-center">
-          <h3 className="mb-3 text-lg font-bold text-[#e2e8f0]">Wrong Network</h3>
-          <p className="mb-5 text-sm text-[#94a3b8]">
-            Please switch to BNB Smart Chain to continue.
-          </p>
+          <h3 className="mb-3 text-lg font-bold text-[#e2e8f0]">{t("switchToBSC")}</h3>
           <button
             onClick={() => switchChain({ chainId: bsc.id })}
             className="rounded-lg bg-yellow-500 px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-yellow-400"
           >
-            Switch to BNB Smart Chain
+            {t("switchToBSC")}
           </button>
         </div>
       ) : (
       <>
-      {/* Input form */}
       <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
         <label className="mb-2 block text-sm font-medium text-[#e2e8f0]">
           Twitter Handle
@@ -237,7 +205,7 @@ export default function MintPage() {
             <span className="text-[#94a3b8]">@</span>
             <input
               type="text"
-              placeholder="elonmusk"
+              placeholder={t("handlePlaceholder").replace("@", "")}
               value={handle}
               onChange={(e) => setHandle(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handlePreview()}
@@ -250,36 +218,26 @@ export default function MintPage() {
             disabled={loading || !handle.trim()}
             className="rounded-md bg-[#8b5cf6] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa] disabled:opacity-50"
           >
-            {loading ? "Analyzing..." : "Preview"}
+            {loading ? t("previewing") : t("preview")}
           </button>
         </div>
-        <p className="mt-3 text-xs text-[#94a3b8]">
-          Our AI analyzes recent tweets to build an initial personality profile
-          across 6 dimensions.
-        </p>
       </div>
 
-      {/* Error */}
       {error && (
         <div className="mt-4 rounded-lg border border-red-500/30 bg-red-500/5 p-4 text-sm text-red-400">
           {error}
         </div>
       )}
 
-      {/* Loading state */}
       {loading && (
         <div className="mt-8 flex flex-col items-center gap-3 py-12">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#8b5cf6] border-t-transparent" />
-          <p className="text-sm text-[#94a3b8]">
-            Fetching profile & analyzing soul dimensions...
-          </p>
+          <p className="text-sm text-[#94a3b8]">{t("previewing")}</p>
         </div>
       )}
 
-      {/* Preview result */}
       {preview && !loading && (
         <div className="mt-8 space-y-6">
-          {/* Profile header */}
           <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
             <div className="mb-4 flex items-center gap-4">
               <div className="relative h-16 w-16 overflow-hidden rounded-full border border-[#1e1e2e]">
@@ -310,7 +268,6 @@ export default function MintPage() {
             </p>
           </div>
 
-          {/* Radar + Dimensions */}
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
               <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">
@@ -344,21 +301,13 @@ export default function MintPage() {
             </div>
           </div>
 
-          {/* Mint action */}
           <div className="rounded-lg border border-[#8b5cf6]/30 bg-[#8b5cf6]/5 p-6 text-center">
-            <h3 className="mb-2 text-lg font-bold text-[#e2e8f0]">
-              Ready to Mint?
-            </h3>
-            <p className="mb-4 text-sm text-[#94a3b8]">
-              This will register an ERC-8004 identity on BNB Chain (≈$1 in BNB).
-              The shell starts as an embryo and evolves as Claws contribute fragments.
-            </p>
             <button
               onClick={handleMint}
               disabled={minting}
               className="rounded-lg bg-[#8b5cf6] px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-[#a78bfa] disabled:opacity-50"
             >
-              {minting ? "Minting..." : `Mint Shell (${formatBNB(mintFee)} BNB + Gas)`}
+              {minting ? t("minting") : t("mintNow") + ` (${formatBNB(mintFee)} BNB)`}
             </button>
             {mintStep && (
               <p className="mt-3 text-sm text-[#8b5cf6]">{mintStep}</p>

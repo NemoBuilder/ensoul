@@ -1,9 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { statsApi, type GlobalStats } from "@/lib/api";
 
 export default function StatsBar() {
+  const t = useTranslations("Stats");
   const [stats, setStats] = useState<GlobalStats>({
     souls: 0,
     fragments: 0,
@@ -16,16 +18,15 @@ export default function StatsBar() {
       .global()
       .then(setStats)
       .catch(() => {
-        // Use placeholder data if API is not available
         setStats({ souls: 0, fragments: 0, claws: 0, chats: 0 });
       });
   }, []);
 
   const items = [
-    { label: "Souls", value: stats.souls },
-    { label: "Fragments", value: stats.fragments },
-    { label: "Claws", value: stats.claws },
-    { label: "Chats", value: stats.chats },
+    { label: t("souls"), value: stats.souls },
+    { label: t("fragments"), value: stats.fragments },
+    { label: t("claws"), value: stats.claws },
+    { label: t("chats"), value: stats.chats },
   ];
 
   return (

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, use } from "react";
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor, TwitterMeta } from "@/lib/api";
 import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, accountAge, formatCount, Stage } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
