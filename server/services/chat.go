@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -228,23 +229,31 @@ func GetGlobalStats() (map[string]interface{}, error) {
 }
 
 // GetTaskBoard returns dimensions that need more fragments.
+// Tasks are sorted by follower count (high-value souls first).
 func GetTaskBoard() ([]map[string]interface{}, error) {
 	var shells []models.Shell
-	database.DB.Order("created_at DESC").Limit(20).Find(&shells)
+	database.DB.Order("created_at DESC").Limit(50).Find(&shells)
+
+	// Sort shells by follower count descending (high-value targets first)
+	sort.Slice(shells, func(i, j int) bool {
+		return getFollowers(shells[i]) > getFollowers(shells[j])
+	})
 
 	var tasks []map[string]interface{}
 	dimensions := []string{"personality", "knowledge", "stance", "style", "relationship", "timeline"}
 
 	for _, shell := range shells {
 		dims := shell.GetDimensions()
+		followers := getFollowers(shell)
+
 		for _, dim := range dimensions {
 			d, exists := dims[dim]
 			if !exists || d.Score < 30 {
-				priority := "🆕"
+				priority := "medium"
 				if d.Score == 0 {
-					priority = "💎"
+					priority = "high"
 				} else if d.Score < 15 {
-					priority = "🔥"
+					priority = "high"
 				}
 
 				tasks = append(tasks, map[string]interface{}{
@@ -252,6 +261,7 @@ func GetTaskBoard() ([]map[string]interface{}, error) {
 					"dimension": dim,
 					"score":     d.Score,
 					"priority":  priority,
+					"followers": followers,
 					"message":   fmt.Sprintf("@%s needs more fragments for %s (current score: %d)", shell.Handle, dim, d.Score),
 				})
 			}
@@ -259,4 +269,22 @@ func GetTaskBoard() ([]map[string]interface{}, error) {
 	}
 
 	return tasks, nil
+}
+
+// getFollowers extracts followers_count from a shell's twitter_meta.
+func getFollowers(shell models.Shell) int {
+	if shell.TwitterMeta == nil {
+		return 0
+	}
+	if v, ok := shell.TwitterMeta["followers_count"]; ok {
+		switch n := v.(type) {
+		case float64:
+			return int(n)
+		case int:
+			return n
+		case int64:
+			return int(n)
+		}
+	}
+	return 0
 }
