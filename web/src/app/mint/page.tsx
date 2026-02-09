@@ -103,9 +103,11 @@ export default function MintPage() {
       description: p.seed_summary,
       image: p.avatar_url,
       services: [
-        { name: "web", url: `https://ensoul.ac/soul/${p.handle}`, protocol: "https" },
-        { name: "chat", url: `https://ensoul.ac/soul/${p.handle}/chat`, protocol: "https" },
+        { name: "web", endpoint: `https://ensoul.ac/soul/${p.handle}` },
+        { name: "chat", endpoint: `https://ensoul.ac/soul/${p.handle}/chat` },
       ],
+      active: true,
+      // Custom Ensoul metadata (allowed by spec — extra fields are MAY)
       ensoul: { handle: p.handle, stage: "embryo", dnaVersion: 1 },
     };
     const json = JSON.stringify(regFile);
