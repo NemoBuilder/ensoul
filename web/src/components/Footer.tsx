@@ -26,7 +26,14 @@ export default function Footer() {
               target="_blank"
               className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
             >
-              Twitter
+              𝕏
+            </a>
+            <a
+              href="https://github.com/NemoBuilder/ensoul"
+              target="_blank"
+              className="text-sm text-[#94a3b8] transition-colors hover:text-[#e2e8f0]"
+            >
+              GitHub
             </a>
             <Link
               href="/docs"
