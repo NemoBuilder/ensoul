@@ -18,6 +18,7 @@ export const routing = defineRouting({
     "hi",
   ],
   defaultLocale: "en",
+  localePrefix: "as-needed",
 });
 
 // Label map for the language switcher UI
