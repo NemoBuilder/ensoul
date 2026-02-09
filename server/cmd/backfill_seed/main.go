@@ -10,6 +10,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -33,6 +34,8 @@ func main() {
 	handle := flag.String("handle", "", "Re-seed a specific handle only")
 	all := flag.Bool("all", false, "Re-seed ALL shells, not just bad ones")
 	flag.Parse()
+
+	util.InitLogger("debug")
 
 	cfg := config.Load()
 
@@ -102,6 +105,14 @@ func main() {
 			log.Printf("    %s: %d — %s\n", dim, data.Score, truncate(data.Summary, 50))
 		}
 
+		// Show twitter_meta (avatar, banner, followers, etc.)
+		if preview.TwitterMeta != nil {
+			log.Printf("  📋 TwitterMeta:")
+			for k, v := range preview.TwitterMeta {
+				log.Printf("    %s: %v\n", k, v)
+			}
+		}
+
 		if *apply {
 			// Serialize dimensions to JSON for the JSONB column
 			dimJSON, err := json.Marshal(preview.Dimensions)
@@ -111,11 +122,20 @@ func main() {
 				continue
 			}
 
+			// Serialize twitter_meta (banner, followers, bio, location, etc.)
+			metaJSON, err := json.Marshal(preview.TwitterMeta)
+			if err != nil {
+				log.Printf("  ✗ Failed to marshal twitter_meta: %v\n", err)
+				failed++
+				continue
+			}
+
 			err = db.Model(&models.Shell{}).Where("id = ?", s.ID).Updates(map[string]interface{}{
 				"seed_summary": preview.SeedSummary,
 				"dimensions":   json.RawMessage(dimJSON),
 				"display_name": preview.DisplayName,
 				"avatar_url":   preview.AvatarURL,
+				"twitter_meta": json.RawMessage(metaJSON),
 			}).Error
 
 			if err != nil {
