@@ -48,6 +48,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.ClawBinding{},
 		&models.ChatSession{},
 		&models.ChatMessage{},
+		&models.ChatShare{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}

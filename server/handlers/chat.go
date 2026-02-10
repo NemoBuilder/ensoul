@@ -151,3 +151,51 @@ func GetTasks(c *gin.Context) {
 
 	c.JSON(http.StatusOK, tasks)
 }
+
+// ChatCreateShare handles POST /api/chat/share
+// Creates a publicly shareable link for a conversation excerpt.
+func ChatCreateShare(c *gin.Context) {
+	var req struct {
+		SessionID    string `json:"session_id" binding:"required"`
+		MessageIndex int    `json:"message_index"` // -1 = last 3 pairs, 0+ = specific assistant message
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "session_id is required"})
+		return
+	}
+
+	sessionID, err := uuid.Parse(req.SessionID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid session ID"})
+		return
+	}
+
+	share, err := services.CreateChatShare(sessionID, req.MessageIndex)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code":      share.Code,
+		"share_url": "https://ensoul.ac/s/" + share.Code,
+	})
+}
+
+// ChatGetShare handles GET /api/chat/share/:code
+// Returns a public chat share by its short code. No authentication required.
+func ChatGetShare(c *gin.Context) {
+	code := c.Param("code")
+	if code == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "share code is required"})
+		return
+	}
+
+	share, err := services.GetChatShare(code)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "share not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, share)
+}

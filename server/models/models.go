@@ -180,3 +180,17 @@ type ChatMessage struct {
 	Content   string    `gorm:"type:text;not null" json:"content"`
 	CreatedAt time.Time `json:"created_at"`
 }
+
+// ChatShare represents a publicly shareable snapshot of a conversation excerpt.
+type ChatShare struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Code      string    `gorm:"type:varchar(16);uniqueIndex;not null" json:"code"`
+	SessionID uuid.UUID `gorm:"type:uuid;not null;index" json:"session_id"`
+	ShellID   uuid.UUID `gorm:"type:uuid;not null;index" json:"shell_id"`
+	Handle    string    `gorm:"type:varchar(255);not null" json:"handle"`
+	AvatarURL string    `gorm:"type:text" json:"avatar_url"`
+	Stage     string    `gorm:"type:varchar(20)" json:"stage"`
+	DNAVer    int       `gorm:"default:0" json:"dna_version"`
+	Messages  string    `gorm:"type:text;not null" json:"messages"` // JSON array of [{role, content}]
+	CreatedAt time.Time `json:"created_at"`
+}

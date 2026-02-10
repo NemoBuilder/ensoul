@@ -130,6 +130,10 @@ func Setup() *gin.Engine {
 			chat.GET("/sessions", middleware.AuthSession(), handlers.ChatListSessions)
 			// Delete a session (requires login + ownership)
 			chat.DELETE("/sessions/:id", middleware.AuthSession(), handlers.ChatDeleteSession)
+			// Share: create a public share link
+			chat.POST("/share", middleware.RateLimit(middleware.GeneralLimiter), handlers.ChatCreateShare)
+			// Share: get a public share by code (no auth)
+			chat.GET("/share/:code", handlers.ChatGetShare)
 		}
 
 		// Stats endpoint — public

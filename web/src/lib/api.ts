@@ -407,6 +407,39 @@ export const chatApi = {
     }),
 };
 
+// --- Share API ---
+
+export interface ChatShareMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+export interface ChatShareData {
+  id: string;
+  code: string;
+  session_id: string;
+  shell_id: string;
+  handle: string;
+  avatar_url: string;
+  stage: string;
+  dna_version: number;
+  messages: string; // JSON string of ChatShareMessage[]
+  created_at: string;
+}
+
+export const shareApi = {
+  // Create a share link for a chat session
+  create: (sessionId: string, messageIndex: number = -1) =>
+    apiFetch<{ code: string; share_url: string }>("/api/chat/share", {
+      method: "POST",
+      body: JSON.stringify({ session_id: sessionId, message_index: messageIndex }),
+    }),
+
+  // Get a share by its short code (public, no auth)
+  get: (code: string) =>
+    apiFetch<ChatShareData>(`/api/chat/share/${code}`),
+};
+
 // --- Stats API ---
 
 export const statsApi = {

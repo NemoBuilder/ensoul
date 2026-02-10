@@ -1,8 +1,10 @@
 package services
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"sort"
 	"strings"
 
@@ -367,6 +369,121 @@ func GetTaskBoard() ([]map[string]interface{}, error) {
 	}
 
 	return tasks, nil
+}
+
+// ── Share ─────────────────────────────────────────────────────────
+
+// generateShareCode creates a short random alphanumeric code (8 chars).
+func generateShareCode() string {
+	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789"
+	code := make([]byte, 8)
+	for i := range code {
+		n, _ := rand.Int(rand.Reader, big.NewInt(int64(len(charset))))
+		code[i] = charset[n.Int64()]
+	}
+	return string(code)
+}
+
+// ShareMessagePair is a single Q&A pair in a share snapshot.
+type ShareMessagePair struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// CreateChatShare creates a publicly shareable snapshot from a chat session.
+// messageIndex specifies which assistant message (0-based) to share;
+// if -1, the last 3 Q&A pairs are shared.
+func CreateChatShare(sessionID uuid.UUID, messageIndex int) (*models.ChatShare, error) {
+	var session models.ChatSession
+	if err := database.DB.Preload("Shell").Preload("Messages", func(db *gorm.DB) *gorm.DB {
+		return db.Order("created_at ASC")
+	}).Where("id = ?", sessionID).First(&session).Error; err != nil {
+		return nil, fmt.Errorf("session not found")
+	}
+
+	shell := session.Shell
+
+	// Build message pairs from the session
+	msgs := session.Messages
+	var pairs []ShareMessagePair
+
+	if messageIndex >= 0 {
+		// Share a specific Q&A pair: find the assistant message at the given index
+		assistantIdx := 0
+		for i, m := range msgs {
+			if m.Role == "assistant" {
+				if assistantIdx == messageIndex {
+					// Include the preceding user message if it exists
+					if i > 0 && msgs[i-1].Role == "user" {
+						pairs = append(pairs, ShareMessagePair{Role: "user", Content: msgs[i-1].Content})
+					}
+					pairs = append(pairs, ShareMessagePair{Role: "assistant", Content: m.Content})
+					break
+				}
+				assistantIdx++
+			}
+		}
+	} else {
+		// Share the last 3 Q&A pairs (up to 6 messages)
+		maxPairs := 3
+		// Walk backwards to find Q&A pairs
+		var collected []ShareMessagePair
+		for i := len(msgs) - 1; i >= 0 && len(collected)/2 < maxPairs; i-- {
+			collected = append([]ShareMessagePair{{Role: msgs[i].Role, Content: msgs[i].Content}}, collected...)
+		}
+		pairs = collected
+		// Cap to last 6 messages
+		if len(pairs) > 6 {
+			pairs = pairs[len(pairs)-6:]
+		}
+	}
+
+	if len(pairs) == 0 {
+		return nil, fmt.Errorf("no messages to share")
+	}
+
+	// Convert pairs to JSON string
+	pairsJSON, err := json.Marshal(pairs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to encode messages: %w", err)
+	}
+
+	// Generate a unique short code
+	var code string
+	for i := 0; i < 10; i++ {
+		code = generateShareCode()
+		var existing models.ChatShare
+		if err := database.DB.Where("code = ?", code).First(&existing).Error; err != nil {
+			break // Code is unique
+		}
+	}
+
+	share := &models.ChatShare{
+		Code:      code,
+		SessionID: session.ID,
+		ShellID:   shell.ID,
+		Handle:    shell.Handle,
+		AvatarURL: shell.AvatarURL,
+		Stage:     shell.Stage,
+		DNAVer:    shell.DNAVersion,
+		Messages:  string(pairsJSON),
+	}
+
+	if err := database.DB.Create(share).Error; err != nil {
+		return nil, fmt.Errorf("failed to create share: %w", err)
+	}
+
+	util.Log.Info("[share] Created share %s for @%s session=%s", code, shell.Handle, session.ID)
+	return share, nil
+}
+
+// GetChatShare retrieves a public chat share by its short code.
+func GetChatShare(code string) (*models.ChatShare, error) {
+	var share models.ChatShare
+	if err := database.DB.Where("code = ?", code).First(&share).Error; err != nil {
+		return nil, fmt.Errorf("share not found")
+	}
+	return &share, nil
 }
 
 // getFollowers extracts followers_count from a shell's twitter_meta.

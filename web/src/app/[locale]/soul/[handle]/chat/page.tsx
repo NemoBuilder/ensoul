@@ -3,10 +3,12 @@
 import { useState, useRef, useEffect, use, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
+import { useAccount, useSignMessage } from "wagmi";
 import {
   chatApi,
   shellApi,
   sessionApi,
+  shareApi,
   Shell,
   ChatSession,
   ChatSessionMessage,
@@ -14,6 +16,7 @@ import {
 import { stageConfig, Stage } from "@/lib/utils";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import ShareCardModal from "@/components/ShareCardModal";
 
 interface DisplayMessage {
   role: "user" | "assistant";
@@ -29,6 +32,8 @@ export default function ChatPage({
 }) {
   const { handle } = use(params);
   const t = useTranslations("Chat");
+  const { address, isConnected } = useAccount();
+  const { signMessageAsync } = useSignMessage();
   const [shell, setShell] = useState<Shell | null>(null);
   const [messages, setMessages] = useState<DisplayMessage[]>([]);
   const [input, setInput] = useState("");
@@ -47,6 +52,16 @@ export default function ChatPage({
   const [sessionHistory, setSessionHistory] = useState<ChatSession[]>([]);
   const [showHistory, setShowHistory] = useState(true);
 
+  // Share state
+  const [shareLoading, setShareLoading] = useState(false);
+  const [shareToast, setShareToast] = useState<string | null>(null);
+  const [hoveredMsg, setHoveredMsg] = useState<number | null>(null);
+
+  // Share card modal state
+  const [showShareCard, setShowShareCard] = useState(false);
+  const [shareCardMessages, setShareCardMessages] = useState<{role: "user" | "assistant"; content: string}[]>([]);
+  const [shareCardUrl, setShareCardUrl] = useState<string | undefined>(undefined);
+
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const loginChecked = useRef(false);
@@ -56,7 +71,7 @@ export default function ChatPage({
     let cancelled = false;
 
     async function init() {
-      // Step 1: Check login state
+      // Step 1: Check existing session cookie
       let loggedIn = false;
       try {
         const res = await sessionApi.session();
@@ -66,7 +81,25 @@ export default function ChatPage({
           loggedIn = true;
         }
       } catch {
-        if (!cancelled) {
+        // No session cookie — try auto-login if wallet is connected
+        if (!cancelled && isConnected && address) {
+          try {
+            const message = `ensoul:login:${Date.now()}`;
+            const signature = await signMessageAsync({ message });
+            await sessionApi.login(address, signature, message);
+            if (!cancelled) {
+              setWalletAddr(address);
+              setIsLoggedIn(true);
+              loggedIn = true;
+            }
+          } catch {
+            // User rejected signature or login failed — continue as guest
+            if (!cancelled) {
+              setWalletAddr(null);
+              setIsLoggedIn(false);
+            }
+          }
+        } else if (!cancelled) {
           setWalletAddr(null);
           setIsLoggedIn(false);
         }
@@ -133,7 +166,8 @@ export default function ChatPage({
     return () => {
       cancelled = true;
     };
-  }, [handle]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handle, isConnected, address]);
 
   // Load shell info
   useEffect(() => {
@@ -212,6 +246,117 @@ export default function ChatPage({
       setError(
         err instanceof Error ? err.message : "Failed to create session"
       );
+    }
+  }
+
+  // Share a specific assistant message (by its index among assistant messages)
+  async function shareMessage(assistantIndex: number) {
+    if (!sessionId || shareLoading) return;
+    setShareLoading(true);
+    try {
+      const res = await shareApi.create(sessionId, assistantIndex);
+      const url = res.share_url;
+      await navigator.clipboard.writeText(url);
+      setShareToast(t("shareCopied"));
+      setTimeout(() => setShareToast(null), 3000);
+    } catch (err: unknown) {
+      setShareToast(err instanceof Error ? err.message : t("shareFailed"));
+      setTimeout(() => setShareToast(null), 3000);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  // Share the entire conversation (last 3 Q&A pairs)
+  async function shareConversation() {
+    if (!sessionId || shareLoading || messages.length === 0) return;
+    setShareLoading(true);
+    try {
+      const res = await shareApi.create(sessionId, -1);
+      const url = res.share_url;
+      await navigator.clipboard.writeText(url);
+      setShareToast(t("shareCopied"));
+      setTimeout(() => setShareToast(null), 3000);
+    } catch (err: unknown) {
+      setShareToast(err instanceof Error ? err.message : t("shareFailed"));
+      setTimeout(() => setShareToast(null), 3000);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  // Share to Twitter/X
+  function shareToTwitter(url: string) {
+    const text = t("twitterShareText", { handle });
+    const twitterUrl = `https://x.com/intent/tweet?text=${encodeURIComponent(text)}&url=${encodeURIComponent(url)}`;
+    window.open(twitterUrl, "_blank");
+  }
+
+  // Share a specific message to Twitter
+  async function shareMessageToTwitter(assistantIndex: number) {
+    if (!sessionId || shareLoading) return;
+    setShareLoading(true);
+    try {
+      const res = await shareApi.create(sessionId, assistantIndex);
+      shareToTwitter(res.share_url);
+    } catch (err: unknown) {
+      setShareToast(err instanceof Error ? err.message : t("shareFailed"));
+      setTimeout(() => setShareToast(null), 3000);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  // Generate share card for a specific assistant message
+  async function generateCard(assistantIndex: number) {
+    if (!sessionId || shareLoading) return;
+    setShareLoading(true);
+    try {
+      // Create share link first so we can embed it in the card
+      const res = await shareApi.create(sessionId, assistantIndex);
+      // Find the Q&A pair for this assistant message
+      let assistantCount = 0;
+      for (let i = 0; i < messages.length; i++) {
+        if (messages[i].role === "assistant") {
+          if (assistantCount === assistantIndex) {
+            // Get the user message before this assistant message
+            const pair: {role: "user" | "assistant"; content: string}[] = [];
+            if (i > 0 && messages[i - 1].role === "user") {
+              pair.push(messages[i - 1]);
+            }
+            pair.push(messages[i]);
+            setShareCardMessages(pair);
+            break;
+          }
+          assistantCount++;
+        }
+      }
+      setShareCardUrl(res.share_url);
+      setShowShareCard(true);
+    } catch (err: unknown) {
+      setShareToast(err instanceof Error ? err.message : t("shareFailed"));
+      setTimeout(() => setShareToast(null), 3000);
+    } finally {
+      setShareLoading(false);
+    }
+  }
+
+  // Generate share card for entire conversation
+  async function generateConversationCard() {
+    if (!sessionId || shareLoading || messages.length === 0) return;
+    setShareLoading(true);
+    try {
+      const res = await shareApi.create(sessionId, -1);
+      // Take last 2 Q&A pairs (up to 4 messages)
+      const lastMsgs = messages.slice(-4);
+      setShareCardMessages(lastMsgs);
+      setShareCardUrl(res.share_url);
+      setShowShareCard(true);
+    } catch (err: unknown) {
+      setShareToast(err instanceof Error ? err.message : t("shareFailed"));
+      setTimeout(() => setShareToast(null), 3000);
+    } finally {
+      setShareLoading(false);
     }
   }
 
@@ -416,6 +561,27 @@ export default function ChatPage({
               </div>
             </div>
             <div className="flex items-center gap-3">
+              {/* Share conversation button */}
+              {messages.length > 0 && !streaming && (
+                <>
+                  <button
+                    onClick={generateConversationCard}
+                    disabled={shareLoading}
+                    className="rounded-full bg-[#1e1e2e] px-2.5 py-1 text-xs text-[#94a3b8] transition-colors hover:bg-[#8b5cf6]/20 hover:text-[#8b5cf6] disabled:opacity-40"
+                    title={t("generateCard")}
+                  >
+                    📸 {t("card")}
+                  </button>
+                  <button
+                    onClick={shareConversation}
+                    disabled={shareLoading}
+                    className="rounded-full bg-[#1e1e2e] px-2.5 py-1 text-xs text-[#94a3b8] transition-colors hover:bg-[#8b5cf6]/20 hover:text-[#8b5cf6] disabled:opacity-40"
+                    title={t("shareChat")}
+                  >
+                    🔗 {t("share")}
+                  </button>
+                </>
+              )}
               {/* Round counter */}
               {tier === "guest" && (
                 <span className="rounded-full bg-[#1e1e2e] px-2 py-0.5 text-xs text-[#f59e0b]">
@@ -464,7 +630,7 @@ export default function ChatPage({
                     ? t("embryoHint")
                     : t("chatHint", { handle })}
                 </p>
-                {tier === "guest" && (
+                {tier === "guest" && !isLoggedIn && (
                   <p className="mt-3 text-xs text-[#f59e0b]">
                     {t("guestMode", { max: GUEST_MAX_ROUNDS })}
                   </p>
@@ -472,46 +638,86 @@ export default function ChatPage({
               </div>
             ) : null}
 
-            {messages.map((msg, i) => (
-              <div
-                key={i}
-                className={`flex ${
-                  msg.role === "user" ? "justify-end" : "justify-start"
-                }`}
-              >
-                {msg.role === "user" ? (
-                  <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#8b5cf6] px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap">
-                    {msg.content}
-                  </div>
-                ) : (
-                  <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-[#1e1e2e] bg-[#14141f] px-5 py-4 text-sm text-[#e2e8f0]">
-                    {msg.content ? (
-                      <div className="chat-markdown">
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                          {msg.content}
-                        </ReactMarkdown>
-                      </div>
-                    ) : (
-                      <span className="inline-flex gap-1">
-                        <span className="animate-pulse">●</span>
-                        <span
-                          className="animate-pulse"
-                          style={{ animationDelay: "0.2s" }}
-                        >
-                          ●
+            {messages.map((msg, i) => {
+              // Count which assistant message index this is
+              const assistantIndex = msg.role === "assistant"
+                ? messages.slice(0, i + 1).filter((m) => m.role === "assistant").length - 1
+                : -1;
+
+              return (
+                <div
+                  key={i}
+                  className={`group/msg relative flex ${
+                    msg.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                  onMouseEnter={() => setHoveredMsg(i)}
+                  onMouseLeave={() => setHoveredMsg(null)}
+                >
+                  {msg.role === "user" ? (
+                    <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-[#8b5cf6] px-4 py-3 text-sm leading-relaxed text-white whitespace-pre-wrap">
+                      {msg.content}
+                    </div>
+                  ) : (
+                    <div className="max-w-[85%] rounded-2xl rounded-bl-sm border border-[#1e1e2e] bg-[#14141f] px-5 py-4 text-sm text-[#e2e8f0]">
+                      {msg.content ? (
+                        <>
+                          <div className="chat-markdown">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {msg.content}
+                            </ReactMarkdown>
+                          </div>
+                          {/* Share buttons — visible on hover */}
+                          {hoveredMsg === i && !streaming && (
+                            <div className="mt-2 flex items-center gap-2 border-t border-[#1e1e2e] pt-2">
+                              <button
+                                onClick={() => generateCard(assistantIndex)}
+                                disabled={shareLoading}
+                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-[#94a3b8] transition-colors hover:bg-[#1e1e2e] hover:text-[#8b5cf6] disabled:opacity-40"
+                                title={t("generateCard")}
+                              >
+                                📸 {t("card")}
+                              </button>
+                              <button
+                                onClick={() => shareMessage(assistantIndex)}
+                                disabled={shareLoading}
+                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-[#94a3b8] transition-colors hover:bg-[#1e1e2e] hover:text-[#e2e8f0] disabled:opacity-40"
+                                title={t("copyLink")}
+                              >
+                                🔗 {t("copyLink")}
+                              </button>
+                              <button
+                                onClick={() => shareMessageToTwitter(assistantIndex)}
+                                disabled={shareLoading}
+                                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-[#94a3b8] transition-colors hover:bg-[#1e1e2e] hover:text-[#1d9bf0] disabled:opacity-40"
+                                title={t("shareTwitter")}
+                              >
+                                𝕏 {t("shareTwitter")}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <span className="inline-flex gap-1">
+                          <span className="animate-pulse">●</span>
+                          <span
+                            className="animate-pulse"
+                            style={{ animationDelay: "0.2s" }}
+                          >
+                            ●
+                          </span>
+                          <span
+                            className="animate-pulse"
+                            style={{ animationDelay: "0.4s" }}
+                          >
+                            ●
+                          </span>
                         </span>
-                        <span
-                          className="animate-pulse"
-                          style={{ animationDelay: "0.4s" }}
-                        >
-                          ●
-                        </span>
-                      </span>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             {/* Guest limit reached banner */}
             {guestLimitReached && !streaming && (
@@ -606,6 +812,34 @@ export default function ChatPage({
           </div>
         </div>
       </div>
+
+      {/* Share toast notification */}
+      {shareToast && (
+        <div className="fixed bottom-6 left-1/2 z-50 -translate-x-1/2 rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-medium text-white shadow-lg animate-in fade-in slide-in-from-bottom-4">
+          {shareToast}
+        </div>
+      )}
+
+      {/* Share card modal */}
+      {showShareCard && shell && (
+        <ShareCardModal
+          handle={handle}
+          avatarUrl={shell.avatar_url}
+          stage={shell.stage || "embryo"}
+          stageColor={stage.color}
+          dnaVersion={shell.dna_version}
+          messages={shareCardMessages}
+          shareUrl={shareCardUrl}
+          onClose={() => setShowShareCard(false)}
+          labels={{
+            title: t("generateCard"),
+            download: t("downloadCard"),
+            shareTwitter: t("shareTwitter"),
+            copied: t("shareCopied"),
+            generating: t("generatingCard"),
+          }}
+        />
+      )}
     </div>
   );
 }
