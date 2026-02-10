@@ -1,6 +1,9 @@
 package database
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
@@ -58,6 +61,11 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Step 2: Now that duplicates are removed, normalize all remaining handles
 	// to lowercase. "VitalikButerin" → "vitalikbuterin", etc.
 	normalizeHandlesToLower()
+
+	// Step 3: Backfill content_hash for existing fragments that were created
+	// before the content protection feature. Idempotent: skips fragments
+	// that already have a hash.
+	backfillContentHashes()
 
 	return DB
 }
@@ -117,4 +125,37 @@ func cleanupDuplicateHandles() {
 	}
 
 	util.Log.Info("Duplicate handle cleanup completed")
+}
+
+// backfillContentHashes computes SHA-256 content hashes for fragments that
+// were created before the content protection feature was added.
+// Processes in batches of 500 to avoid memory issues with large datasets.
+func backfillContentHashes() {
+	var count int64
+	DB.Model(&models.Fragment{}).Where("content_hash = '' OR content_hash IS NULL").Count(&count)
+	if count == 0 {
+		return
+	}
+
+	util.Log.Info("Backfilling content_hash for %d fragments...", count)
+
+	batchSize := 500
+	updated := 0
+	for {
+		var fragments []models.Fragment
+		DB.Where("content_hash = '' OR content_hash IS NULL").
+			Limit(batchSize).Find(&fragments)
+		if len(fragments) == 0 {
+			break
+		}
+		for _, f := range fragments {
+			h := sha256.Sum256([]byte(f.Content))
+			hash := hex.EncodeToString(h[:])
+			DB.Model(&f).Update("content_hash", hash)
+		}
+		updated += len(fragments)
+		util.Log.Info("  backfilled %d / %d fragments", updated, count)
+	}
+
+	util.Log.Info("Content hash backfill completed: %d fragments updated", updated)
 }

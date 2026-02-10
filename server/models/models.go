@@ -71,7 +71,8 @@ type Fragment struct {
 	ShellID      uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
 	ClawID       uuid.UUID      `gorm:"type:uuid;not null;index" json:"claw_id"`
 	Dimension    string         `gorm:"type:varchar(20);not null" json:"dimension"`
-	Content      string         `gorm:"type:text;not null" json:"content"`
+	Content      string         `gorm:"type:text;not null" json:"content,omitempty"`
+	ContentHash  string         `gorm:"type:varchar(64);not null;default:''" json:"content_hash"`
 	Status       string         `gorm:"type:varchar(20);default:'pending'" json:"status"`
 	Confidence   float64        `gorm:"type:decimal(3,2);default:0" json:"confidence"`
 	RejectReason string         `gorm:"type:text" json:"reject_reason,omitempty"`

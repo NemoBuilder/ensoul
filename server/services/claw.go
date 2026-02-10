@@ -249,6 +249,11 @@ func GetClawPublicProfile(clawID string) (map[string]interface{}, error) {
 		Limit(10).
 		Find(&recentAccepted)
 
+	// Strip content from public response — only expose content_hash as fingerprint
+	for i := range recentAccepted {
+		recentAccepted[i].Content = ""
+	}
+
 	return map[string]interface{}{
 		"claw": map[string]interface{}{
 			"id":              claw.ID,

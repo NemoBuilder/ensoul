@@ -424,7 +424,11 @@ export default function DashboardPage() {
                           {timeAgo(c.created_at)}
                         </span>
                       </div>
-                      <p className="text-sm text-[#e2e8f0]">{c.content}</p>
+                      <p className="text-sm text-[#e2e8f0]">
+                        {c.content || (
+                          <span className="text-[#64748b] italic">🔒 Content protected</span>
+                        )}
+                      </p>
                       {c.reject_reason && (
                         <p className="mt-2 text-xs text-red-400">
                           Reason: {c.reject_reason}

@@ -411,6 +411,11 @@ func ListShells(stage, sort, search, pageStr, limitStr string) (map[string]inter
 		return nil, err
 	}
 
+	// Strip soul_prompt from public listings — it's the core paid asset
+	for i := range shells {
+		shells[i].SoulPrompt = ""
+	}
+
 	return map[string]interface{}{
 		"shells": shells,
 		"total":  total,
@@ -447,6 +452,11 @@ func GetShellHistory(handle string) ([]models.Ensouling, error) {
 	var history []models.Ensouling
 	if err := database.DB.Where("shell_id = ?", shell.ID).Order("created_at DESC").Find(&history).Error; err != nil {
 		return nil, err
+	}
+
+	// Strip new_prompt from history — it's the core paid asset
+	for i := range history {
+		history[i].NewPrompt = ""
 	}
 
 	return history, nil

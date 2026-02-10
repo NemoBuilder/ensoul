@@ -340,12 +340,18 @@ func GetTaskBoard() ([]map[string]interface{}, error) {
 
 		for _, dim := range dimensions {
 			d, exists := dims[dim]
-			if !exists || d.Score < 30 {
-				priority := "medium"
-				if d.Score == 0 {
+			if !exists || d.Score < 80 {
+				// Priority tiers:
+				//   high   = score 0-29  (empty or barely started)
+				//   medium = score 30-59 (some depth but needs more)
+				//   low    = score 60-79 (decent but room to grow)
+				priority := "low"
+				if d.Score < 15 {
 					priority = "high"
-				} else if d.Score < 15 {
+				} else if d.Score < 30 {
 					priority = "high"
+				} else if d.Score < 60 {
+					priority = "medium"
 				}
 
 				tasks = append(tasks, map[string]interface{}{

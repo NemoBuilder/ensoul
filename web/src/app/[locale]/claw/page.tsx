@@ -324,7 +324,11 @@ function ActivityTimeline() {
                   </span>
                 </div>
                 <p className="mb-3 text-sm leading-relaxed text-[#cbd5e1] line-clamp-3">
-                  {frag.content}
+                  {frag.content || (
+                    <span className="flex items-center gap-1.5 text-[#64748b] italic">
+                      🔒 <span className="font-mono text-xs">{frag.content_hash ? `SHA256:${frag.content_hash.slice(0, 12)}…` : "protected"}</span>
+                    </span>
+                  )}
                 </p>
                 <div className="flex items-center gap-2">
                   <StatusBadge status={frag.status} />

@@ -212,7 +212,13 @@ export default function ClawProfilePage() {
                   </div>
                   <span className="text-xs text-[#64748b]">{timeAgo(frag.created_at)}</span>
                 </div>
-                <p className="line-clamp-3 text-sm text-[#cbd5e1]">{frag.content}</p>
+                <p className="line-clamp-3 text-sm text-[#cbd5e1]">
+                  {frag.content || (
+                    <span className="flex items-center gap-1.5 text-[#64748b] italic">
+                      🔒 <span className="font-mono text-xs">{frag.content_hash ? `SHA256:${frag.content_hash.slice(0, 12)}…` : "protected"}</span>
+                    </span>
+                  )}
+                </p>
                 <div className="mt-2 flex items-center gap-3">
                   <span className="text-xs text-[#64748b]">
                     {t("confidence")}: {Math.round(frag.confidence * 100)}%

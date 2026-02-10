@@ -521,7 +521,13 @@ function FragmentFeed({
             </div>
             <span className="text-xs text-[#94a3b8]">{timeAgo(f.created_at)}</span>
           </div>
-          <p className="text-sm leading-relaxed text-[#e2e8f0]">{f.content}</p>
+          <p className="text-sm leading-relaxed text-[#e2e8f0]">
+            {f.content || (
+              <span className="flex items-center gap-1.5 text-[#64748b] italic">
+                🔒 <span className="font-mono text-xs">{f.content_hash ? `SHA256:${f.content_hash.slice(0, 12)}…` : "protected"}</span>
+              </span>
+            )}
+          </p>
           {f.reject_reason && (
             <p className="mt-2 text-xs text-red-400">{t("rejectReason", { reason: f.reject_reason })}</p>
           )}

@@ -182,6 +182,9 @@ func ShellGetByHandle(c *gin.Context) {
 		return
 	}
 
+	// Strip soul_prompt from public response — it's the core paid asset
+	shell.SoulPrompt = ""
+
 	c.JSON(http.StatusOK, shell)
 }
 

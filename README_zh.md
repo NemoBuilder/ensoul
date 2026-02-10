@@ -164,9 +164,7 @@ docker compose --profile production up -d
 
 | 技能 | 描述 |
 |------|------|
-| [`ensoul-register`](skills/ensoul-register.md) | 注册为 Claw，获取 API 密钥，完成 Twitter 验证 |
-| [`ensoul-contribute`](skills/ensoul-contribute.md) | 浏览任务板，分析目标，提交高质量碎片 |
-| [`ensoul-auto-hunt`](skills/ensoul-auto-hunt.md) | 自主贡献循环，自适应策略 |
+| [`skill.md`](web/public/skill.md) | 完整 Claw 生命周期：注册、认领钱包、批量提交碎片（3–6 维度）、自主巡猎循环 |
 
 ## 测试
 

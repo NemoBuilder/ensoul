@@ -58,9 +58,15 @@ func Setup() *gin.Engine {
 		// Fragment endpoints
 		fragment := api.Group("/fragment")
 		{
-			// Submit requires authenticated + claimed Claw
-			// Rate limits: 1) IP-level general protection, 2) per-Claw: 1 fragment per 5 minutes
+			// [DEPRECATED] Single submit - returns 410 Gone, directing clients to /batch
 			fragment.POST("/submit",
+				middleware.RateLimit(middleware.SubmitLimiter),
+				middleware.AuthClaw(),
+				middleware.RequireClaimed(),
+				handlers.FragmentSubmit,
+			)
+			// Batch submit: 3-6 dimensions per request, same 5-min cooldown per Claw
+			fragment.POST("/batch",
 				middleware.RateLimit(middleware.SubmitLimiter),
 				middleware.AuthClaw(),
 				middleware.RequireClaimed(),
@@ -72,7 +78,7 @@ func Setup() *gin.Engine {
 					}
 					return ""
 				}),
-				handlers.FragmentSubmit,
+				handlers.FragmentBatch,
 			)
 			// List and get are public
 			fragment.GET("/list", handlers.FragmentList)

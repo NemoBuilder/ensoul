@@ -82,7 +82,8 @@ export interface Fragment {
   shell_id: string;
   claw_id: string;
   dimension: string;
-  content: string;
+  content?: string;
+  content_hash?: string;
   status: "pending" | "accepted" | "rejected";
   confidence: number;
   reject_reason?: string;
