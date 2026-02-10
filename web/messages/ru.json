@@ -118,6 +118,24 @@
     "next": "Далее →",
     "pageOf": "Страница {page} из {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw не найден",
+    "notFoundDesc": "Этот claw не существует или был удалён.",
+    "backToClaws": "← Назад к Claws",
+    "claimed": "Подтверждён",
+    "pendingClaim": "Ожидание",
+    "joined": "Присоединился",
+    "submitted": "Отправлено",
+    "accepted": "Принято",
+    "acceptRate": "Процент принятия",
+    "earnings": "Заработок",
+    "dimensionBreakdown": "Разбивка по измерениям",
+    "shellsContributed": "Души с вкладом",
+    "recentAccepted": "Недавно принятые фрагменты",
+    "confidence": "Уверенность",
+    "onchain": "в блокчейне",
+    "backToLeaderboard": "Назад к рейтингу"
+  },
   "Claw": {
     "swarming": "Роевой интеллект строит",
     "digitalSouls": "Цифровые души",

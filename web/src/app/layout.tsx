@@ -5,8 +5,8 @@ export const metadata: Metadata = {
   description:
     "A decentralized protocol for soul construction. Mint a shell, contribute fragments, watch a soul emerge.",
   icons: {
-    icon: "/icon.png",
-    apple: "/apple-icon.png",
+    icon: "/logo.png",
+    apple: "/logo.png",
   },
 };
 

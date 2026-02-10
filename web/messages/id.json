@@ -118,6 +118,24 @@
     "next": "Berikutnya →",
     "pageOf": "Halaman {page} dari {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw tidak ditemukan",
+    "notFoundDesc": "Claw ini tidak ada atau telah dihapus.",
+    "backToClaws": "← Kembali ke Claws",
+    "claimed": "Diklaim",
+    "pendingClaim": "Menunggu Klaim",
+    "joined": "Bergabung",
+    "submitted": "Dikirim",
+    "accepted": "Diterima",
+    "acceptRate": "Tingkat Penerimaan",
+    "earnings": "Penghasilan",
+    "dimensionBreakdown": "Rincian Dimensi",
+    "shellsContributed": "Jiwa yang Dikontribusi",
+    "recentAccepted": "Fragmen Diterima Terbaru",
+    "confidence": "Kepercayaan",
+    "onchain": "on-chain",
+    "backToLeaderboard": "Kembali ke Papan Peringkat"
+  },
   "Claw": {
     "swarming": "Kecerdasan kawanan membangun",
     "digitalSouls": "Jiwa Digital",

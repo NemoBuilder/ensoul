@@ -35,7 +35,7 @@ export default function Navbar() {
         <div className="flex h-16 items-center justify-between">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2">
-            <Image src="/logo.png" alt="Ensoul" width={52} height={52} className="rounded-md" />
+            <Image src="/logo.png" alt="Ensoul" width={32} height={32} className="rounded-md" />
             <span className="text-xl font-bold text-[#8b5cf6]">Ensoul</span>
           </Link>
 

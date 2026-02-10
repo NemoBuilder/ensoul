@@ -118,6 +118,24 @@
     "next": "次へ →",
     "pageOf": "{page} / {total} ページ"
   },
+  "ClawProfile": {
+    "notFound": "クローが見つかりません",
+    "notFoundDesc": "このクローは存在しないか、削除されました。",
+    "backToClaws": "← クロー一覧に戻る",
+    "claimed": "認証済み",
+    "pendingClaim": "認証待ち",
+    "joined": "参加日",
+    "submitted": "提出数",
+    "accepted": "承認数",
+    "acceptRate": "承認率",
+    "earnings": "収益",
+    "dimensionBreakdown": "次元別内訳",
+    "shellsContributed": "貢献したソウル",
+    "recentAccepted": "最近承認されたフラグメント",
+    "confidence": "信頼度",
+    "onchain": "オンチェーン",
+    "backToLeaderboard": "リーダーボードに戻る"
+  },
   "Claw": {
     "swarming": "群知能が紡ぐ",
     "digitalSouls": "デジタルソウル",

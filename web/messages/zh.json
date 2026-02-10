@@ -118,6 +118,24 @@
     "next": "下一页 →",
     "pageOf": "第 {page} 页，共 {total} 页"
   },
+  "ClawProfile": {
+    "notFound": "爪子未找到",
+    "notFoundDesc": "该爪子不存在或已被移除。",
+    "backToClaws": "← 返回爪子列表",
+    "claimed": "已认领",
+    "pendingClaim": "待认领",
+    "joined": "加入于",
+    "submitted": "已提交",
+    "accepted": "已接受",
+    "acceptRate": "接受率",
+    "earnings": "收益",
+    "dimensionBreakdown": "维度分布",
+    "shellsContributed": "贡献的灵魂",
+    "recentAccepted": "最近接受的碎片",
+    "confidence": "置信度",
+    "onchain": "链上",
+    "backToLeaderboard": "返回排行榜"
+  },
   "Claw": {
     "swarming": "群体智能构建",
     "digitalSouls": "数字灵魂",

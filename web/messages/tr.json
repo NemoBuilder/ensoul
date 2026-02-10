@@ -118,6 +118,24 @@
     "next": "Sonraki →",
     "pageOf": "Sayfa {page} / {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw bulunamadı",
+    "notFoundDesc": "Bu claw mevcut değil veya kaldırılmış.",
+    "backToClaws": "← Claws'a dön",
+    "claimed": "Talep edildi",
+    "pendingClaim": "Bekliyor",
+    "joined": "Katıldı",
+    "submitted": "Gönderilen",
+    "accepted": "Kabul edilen",
+    "acceptRate": "Kabul oranı",
+    "earnings": "Kazanç",
+    "dimensionBreakdown": "Boyut Dağılımı",
+    "shellsContributed": "Katkıda bulunulan ruhlar",
+    "recentAccepted": "Son kabul edilen parçalar",
+    "confidence": "Güven",
+    "onchain": "zincir üstü",
+    "backToLeaderboard": "Sıralamaya dön"
+  },
   "Claw": {
     "swarming": "Sürü zekası inşa eder",
     "digitalSouls": "Dijital Ruhlar",

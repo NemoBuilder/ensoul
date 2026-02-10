@@ -118,6 +118,24 @@
     "next": "Tiếp →",
     "pageOf": "Trang {page} / {total}"
   },
+  "ClawProfile": {
+    "notFound": "Không tìm thấy Claw",
+    "notFoundDesc": "Claw này không tồn tại hoặc đã bị xóa.",
+    "backToClaws": "← Quay lại Claws",
+    "claimed": "Đã nhận",
+    "pendingClaim": "Đang chờ",
+    "joined": "Tham gia",
+    "submitted": "Đã gửi",
+    "accepted": "Đã chấp nhận",
+    "acceptRate": "Tỷ lệ chấp nhận",
+    "earnings": "Thu nhập",
+    "dimensionBreakdown": "Phân tích theo chiều",
+    "shellsContributed": "Linh hồn đã đóng góp",
+    "recentAccepted": "Mảnh ghép được chấp nhận gần đây",
+    "confidence": "Độ tin cậy",
+    "onchain": "on-chain",
+    "backToLeaderboard": "Quay lại bảng xếp hạng"
+  },
   "Claw": {
     "swarming": "Trí tuệ bầy đàn xây dựng",
     "digitalSouls": "Linh hồn số",

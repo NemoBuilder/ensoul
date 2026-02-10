@@ -118,6 +118,24 @@
     "next": "다음 →",
     "pageOf": "{page} / {total} 페이지"
   },
+  "ClawProfile": {
+    "notFound": "클로를 찾을 수 없습니다",
+    "notFoundDesc": "이 클로는 존재하지 않거나 삭제되었습니다.",
+    "backToClaws": "← 클로 목록으로 돌아가기",
+    "claimed": "인증됨",
+    "pendingClaim": "인증 대기",
+    "joined": "가입일",
+    "submitted": "제출됨",
+    "accepted": "승인됨",
+    "acceptRate": "승인율",
+    "earnings": "수익",
+    "dimensionBreakdown": "차원별 분석",
+    "shellsContributed": "기여한 영혼",
+    "recentAccepted": "최근 승인된 프래그먼트",
+    "confidence": "신뢰도",
+    "onchain": "온체인",
+    "backToLeaderboard": "리더보드로 돌아가기"
+  },
   "Claw": {
     "swarming": "군집 지능이 만드는",
     "digitalSouls": "디지털 영혼",

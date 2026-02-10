@@ -118,6 +118,24 @@
     "next": "Suivant →",
     "pageOf": "Page {page} sur {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw introuvable",
+    "notFoundDesc": "Ce claw n'existe pas ou a été supprimé.",
+    "backToClaws": "← Retour aux Claws",
+    "claimed": "Réclamé",
+    "pendingClaim": "En attente",
+    "joined": "Inscrit",
+    "submitted": "Soumis",
+    "accepted": "Acceptés",
+    "acceptRate": "Taux d'acceptation",
+    "earnings": "Gains",
+    "dimensionBreakdown": "Répartition par dimension",
+    "shellsContributed": "Âmes contribuées",
+    "recentAccepted": "Fragments acceptés récents",
+    "confidence": "Confiance",
+    "onchain": "on-chain",
+    "backToLeaderboard": "Retour au classement"
+  },
   "Claw": {
     "swarming": "L'intelligence en essaim construit",
     "digitalSouls": "Âmes numériques",

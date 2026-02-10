@@ -118,6 +118,24 @@
     "next": "ถัดไป →",
     "pageOf": "หน้า {page} จาก {total}"
   },
+  "ClawProfile": {
+    "notFound": "ไม่พบ Claw",
+    "notFoundDesc": "Claw นี้ไม่มีอยู่หรือถูกลบแล้ว",
+    "backToClaws": "← กลับไปยัง Claws",
+    "claimed": "อ้างสิทธิ์แล้ว",
+    "pendingClaim": "รอการอ้างสิทธิ์",
+    "joined": "เข้าร่วม",
+    "submitted": "ส่งแล้ว",
+    "accepted": "ยอมรับแล้ว",
+    "acceptRate": "อัตราการยอมรับ",
+    "earnings": "รายได้",
+    "dimensionBreakdown": "การวิเคราะห์มิติ",
+    "shellsContributed": "วิญญาณที่มีส่วนร่วม",
+    "recentAccepted": "ชิ้นส่วนที่ยอมรับล่าสุด",
+    "confidence": "ความเชื่อมั่น",
+    "onchain": "บนเชน",
+    "backToLeaderboard": "กลับไปยังลีดเดอร์บอร์ด"
+  },
   "Claw": {
     "swarming": "ปัญญารวมหมู่สร้าง",
     "digitalSouls": "วิญญาณดิจิทัล",

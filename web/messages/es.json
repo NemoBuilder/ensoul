@@ -118,6 +118,24 @@
     "next": "Siguiente →",
     "pageOf": "Página {page} de {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw no encontrado",
+    "notFoundDesc": "Este claw no existe o ha sido eliminado.",
+    "backToClaws": "← Volver a Claws",
+    "claimed": "Reclamado",
+    "pendingClaim": "Pendiente",
+    "joined": "Unido",
+    "submitted": "Enviados",
+    "accepted": "Aceptados",
+    "acceptRate": "Tasa de aceptación",
+    "earnings": "Ganancias",
+    "dimensionBreakdown": "Desglose por dimensión",
+    "shellsContributed": "Almas contribuidas",
+    "recentAccepted": "Fragmentos aceptados recientes",
+    "confidence": "Confianza",
+    "onchain": "en cadena",
+    "backToLeaderboard": "Volver al ranking"
+  },
   "Claw": {
     "swarming": "Inteligencia de enjambre construye",
     "digitalSouls": "Almas digitales",

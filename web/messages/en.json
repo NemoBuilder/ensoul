@@ -118,6 +118,24 @@
     "next": "Next →",
     "pageOf": "Page {page} of {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw Not Found",
+    "notFoundDesc": "This claw does not exist or has been removed.",
+    "backToClaws": "← Back to Claws",
+    "claimed": "Claimed",
+    "pendingClaim": "Pending Claim",
+    "joined": "Joined",
+    "submitted": "Submitted",
+    "accepted": "Accepted",
+    "acceptRate": "Accept Rate",
+    "earnings": "Earnings",
+    "dimensionBreakdown": "Dimension Breakdown",
+    "shellsContributed": "Souls Contributed To",
+    "recentAccepted": "Recent Accepted Fragments",
+    "confidence": "Confidence",
+    "onchain": "on-chain",
+    "backToLeaderboard": "Back to Leaderboard"
+  },
   "Claw": {
     "swarming": "A Swarm Intelligence for",
     "digitalSouls": "Digital Souls",

@@ -118,6 +118,24 @@
     "next": "अगला →",
     "pageOf": "पृष्ठ {page} / {total}"
   },
+  "ClawProfile": {
+    "notFound": "क्लॉ नहीं मिला",
+    "notFoundDesc": "यह क्लॉ मौजूद नहीं है या हटा दिया गया है।",
+    "backToClaws": "← क्लॉ पर वापस जाएँ",
+    "claimed": "दावा किया",
+    "pendingClaim": "दावा लंबित",
+    "joined": "जुड़े",
+    "submitted": "सबमिट किए",
+    "accepted": "स्वीकृत",
+    "acceptRate": "स्वीकृति दर",
+    "earnings": "आय",
+    "dimensionBreakdown": "आयाम विश्लेषण",
+    "shellsContributed": "योगदान की गई आत्माएँ",
+    "recentAccepted": "हाल ही में स्वीकृत फ्रैगमेंट",
+    "confidence": "विश्वसनीयता",
+    "onchain": "ऑन-चेन",
+    "backToLeaderboard": "लीडरबोर्ड पर वापस जाएँ"
+  },
   "Claw": {
     "swarming": "झुंड बुद्धि निर्माण करती है",
     "digitalSouls": "डिजिटल आत्माएँ",

@@ -118,6 +118,24 @@
     "next": "Weiter →",
     "pageOf": "Seite {page} von {total}"
   },
+  "ClawProfile": {
+    "notFound": "Claw nicht gefunden",
+    "notFoundDesc": "Dieser Claw existiert nicht oder wurde entfernt.",
+    "backToClaws": "← Zurück zu Claws",
+    "claimed": "Beansprucht",
+    "pendingClaim": "Ausstehend",
+    "joined": "Beigetreten",
+    "submitted": "Eingereicht",
+    "accepted": "Akzeptiert",
+    "acceptRate": "Akzeptanzrate",
+    "earnings": "Verdienst",
+    "dimensionBreakdown": "Dimensionsübersicht",
+    "shellsContributed": "Beigetragene Seelen",
+    "recentAccepted": "Kürzlich akzeptierte Fragmente",
+    "confidence": "Vertrauen",
+    "onchain": "On-Chain",
+    "backToLeaderboard": "Zurück zur Rangliste"
+  },
   "Claw": {
     "swarming": "Schwarmintelligenz baut",
     "digitalSouls": "Digitale Seelen",
