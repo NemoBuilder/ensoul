@@ -120,6 +120,7 @@ func ShellMint(c *gin.Context) {
 
 // ShellConfirmMint handles POST /api/shell/confirm
 // Updates a shell record with on-chain tx hash after user mints.
+// Requires wallet signature authentication to prevent unauthorized confirmation.
 func ShellConfirmMint(c *gin.Context) {
 	var req struct {
 		Handle  string `json:"handle" binding:"required"`
@@ -139,12 +140,81 @@ func ShellConfirmMint(c *gin.Context) {
 	}
 	req.Handle = cleanHandle
 
-	if err := services.ConfirmMint(req.Handle, req.TxHash, req.AgentID); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to confirm mint: " + err.Error()})
+	// Verify wallet signature proves ownership
+	walletAddr := c.GetHeader("X-Wallet-Address")
+	signature := c.GetHeader("X-Wallet-Signature")
+
+	if walletAddr == "" || signature == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Wallet authentication required"})
+		return
+	}
+
+	if !common.IsHexAddress(walletAddr) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid wallet address format"})
+		return
+	}
+
+	signedMessage := "ensoul:mint:" + req.Handle
+	claimedAddr := common.HexToAddress(walletAddr)
+	if err := middleware.VerifyWalletSignature(signedMessage, signature, claimedAddr); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid wallet signature: " + err.Error()})
+		return
+	}
+
+	if err := services.ConfirmMint(req.Handle, req.TxHash, req.AgentID, walletAddr); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Failed to confirm mint: " + err.Error()})
 		return
 	}
 
 	c.JSON(http.StatusOK, gin.H{"status": "confirmed"})
+}
+
+// ShellCancelMint handles POST /api/shell/cancel
+// Removes a pending shell record when the on-chain mint fails or is abandoned.
+func ShellCancelMint(c *gin.Context) {
+	var req struct {
+		Handle string `json:"handle" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+
+	// Sanitize handle
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	req.Handle = cleanHandle
+
+	// Verify wallet ownership: only the wallet that created the pending shell can cancel it
+	walletAddr := c.GetHeader("X-Wallet-Address")
+	signature := c.GetHeader("X-Wallet-Signature")
+
+	if walletAddr == "" || signature == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Wallet authentication required"})
+		return
+	}
+
+	if !common.IsHexAddress(walletAddr) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid wallet address format"})
+		return
+	}
+
+	signedMessage := "ensoul:mint:" + req.Handle
+	claimedAddr := common.HexToAddress(walletAddr)
+	if err := middleware.VerifyWalletSignature(signedMessage, signature, claimedAddr); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid wallet signature: " + err.Error()})
+		return
+	}
+
+	if err := services.CancelPendingMint(req.Handle, walletAddr); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})
 }
 
 // ShellList handles GET /api/shell/list

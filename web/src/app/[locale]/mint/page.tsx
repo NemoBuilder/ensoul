@@ -111,14 +111,18 @@ export default function MintPage() {
     if (!preview || !address) return;
     setError("");
     setMinting(true);
+    let signature = "";
+    let dbCreated = false;   // DB record was created (pending)
+    let chainSuccess = false; // On-chain tx was confirmed successful
 
     try {
       setMintStep(t("stepSign"));
       const message = `ensoul:mint:${preview.handle}`;
-      const signature = await signMessageAsync({ message });
+      signature = await signMessageAsync({ message });
 
       setMintStep(t("stepBackend"));
       await shellApi.mint(preview.handle, address, signature, preview);
+      dbCreated = true;
 
       setMintStep(t("stepChain"));
       const agentURI = buildAgentURI(preview);
@@ -134,6 +138,11 @@ export default function MintPage() {
 
       setMintStep(t("stepConfirm"));
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
+      chainSuccess = receipt.status === "success";
+
+      if (!chainSuccess) {
+        throw new Error("On-chain transaction reverted");
+      }
 
       let agentId = 0;
       for (const log of receipt.logs) {
@@ -165,9 +174,20 @@ export default function MintPage() {
         }
       }
 
-      await shellApi.confirm(preview.handle, txHash, agentId);
+      await shellApi.confirm(preview.handle, txHash, address, signature, agentId);
       router.push(`/soul/${preview.handle}`);
     } catch (err: unknown) {
+      // Only cancel the pending DB record if:
+      // 1. DB record was actually created (dbCreated)
+      // 2. On-chain tx did NOT succeed (chainSuccess is false)
+      // If chain succeeded but confirm failed, do NOT cancel — the NFT exists on-chain!
+      if (dbCreated && !chainSuccess && preview && address && signature) {
+        try {
+          await shellApi.cancel(preview.handle, address, signature);
+        } catch {
+          // Best-effort cleanup; pending_cleanup cron will catch it eventually
+        }
+      }
       setError(err instanceof Error ? err.message : "Minting failed");
       setMinting(false);
       setMintStep("");

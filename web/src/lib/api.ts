@@ -217,10 +217,24 @@ export const shellApi = {
       },
     }),
 
-  confirm: (handle: string, txHash: string, agentId?: number) =>
+  confirm: (handle: string, txHash: string, ownerAddr: string, signature: string, agentId?: number) =>
     apiFetch<{ status: string }>("/api/shell/confirm", {
       method: "POST",
       body: JSON.stringify({ handle, tx_hash: txHash, agent_id: agentId ?? 0 }),
+      headers: {
+        "X-Wallet-Address": ownerAddr,
+        "X-Wallet-Signature": signature,
+      },
+    }),
+
+  cancel: (handle: string, ownerAddr: string, signature: string) =>
+    apiFetch<{ status: string }>("/api/shell/cancel", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        "X-Wallet-Address": ownerAddr,
+        "X-Wallet-Signature": signature,
+      },
     }),
 
   list: (params?: {

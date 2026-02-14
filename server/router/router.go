@@ -48,6 +48,7 @@ func Setup() *gin.Engine {
 			shell.POST("/preview", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellPreview)
 			shell.POST("/mint", middleware.RateLimit(middleware.RegisterLimiter), handlers.ShellMint)
 			shell.POST("/confirm", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellConfirmMint)
+			shell.POST("/cancel", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellCancelMint)
 			shell.GET("/list", handlers.ShellList)
 			shell.GET("/:handle", handlers.ShellGetByHandle)
 			shell.GET("/:handle/dimensions", handlers.ShellGetDimensions)

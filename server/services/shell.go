@@ -350,19 +350,55 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 
 // ConfirmMint updates a shell record with on-chain data after the user mints.
 // Transitions the shell from pending → embryo.
-func ConfirmMint(handle, txHash string, agentID uint64) error {
-	result := database.DB.Model(&models.Shell{}).Where("LOWER(handle) = ?", handle).Updates(map[string]interface{}{
-		"agent_id":     &agentID,
-		"mint_tx_hash": txHash,
-		"stage":        models.StageEmbryo,
-	})
+// Only the original minter wallet can confirm, and only pending shells can be confirmed.
+func ConfirmMint(handle, txHash string, agentID uint64, walletAddr string) error {
+	// Atomic update: only succeeds if stage is still pending AND wallet matches
+	result := database.DB.Model(&models.Shell{}).
+		Where("LOWER(handle) = ? AND stage = ? AND LOWER(owner_addr) = LOWER(?)", handle, models.StagePending, walletAddr).
+		Updates(map[string]interface{}{
+			"agent_id":     &agentID,
+			"mint_tx_hash": txHash,
+			"stage":        models.StageEmbryo,
+		})
 	if result.Error != nil {
 		return fmt.Errorf("failed to update shell: %w", result.Error)
 	}
 	if result.RowsAffected == 0 {
-		return fmt.Errorf("shell @%s not found", handle)
+		// Check why: not found, wrong stage, or wrong wallet?
+		var shell models.Shell
+		if err := database.DB.Where("LOWER(handle) = ?", handle).First(&shell).Error; err != nil {
+			return fmt.Errorf("shell @%s not found", handle)
+		}
+		if shell.Stage != models.StagePending {
+			return fmt.Errorf("shell @%s is not in pending state (stage=%s)", handle, shell.Stage)
+		}
+		return fmt.Errorf("wallet mismatch: only the original minter can confirm")
 	}
 	util.Log.Info("[services] Shell @%s confirmed on-chain: agentId=%d, tx=%s", handle, agentID, txHash)
+	return nil
+}
+
+// CancelPendingMint removes a pending shell record when the on-chain mint fails.
+// Only the same wallet that created the pending record can cancel it.
+// Uses atomic SELECT + stage check to prevent TOCTOU race with ConfirmMint.
+func CancelPendingMint(handle, walletAddr string) error {
+	var shell models.Shell
+	// Atomic query: only find shells that are still pending AND owned by this wallet
+	if err := database.DB.Where("LOWER(handle) = ? AND stage = ? AND LOWER(owner_addr) = LOWER(?)",
+		handle, models.StagePending, walletAddr).First(&shell).Error; err != nil {
+		// Provide a specific error message based on what went wrong
+		var any models.Shell
+		if errAny := database.DB.Where("LOWER(handle) = ?", handle).First(&any).Error; errAny != nil {
+			return fmt.Errorf("shell @%s not found", handle)
+		}
+		if any.Stage != models.StagePending {
+			return fmt.Errorf("shell @%s is no longer pending (stage=%s), cannot cancel", handle, any.Stage)
+		}
+		return fmt.Errorf("only the original minter can cancel this pending shell")
+	}
+
+	HardDeleteShell(shell.ID)
+	util.Log.Info("[services] Pending shell @%s cancelled by owner %s (chain mint failed)", handle, walletAddr)
 	return nil
 }
 
