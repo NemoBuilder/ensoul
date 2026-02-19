@@ -88,7 +88,8 @@
     "stepChain": "Enviando transacción...",
     "stepConfirm": "Confirmando en cadena...",
     "success": "¡Alma acuñada con éxito!",
-    "viewSoul": "Ver alma →"
+    "viewSoul": "Ver alma →",
+    "mintLimitReached": "Ya has acuñado {minted}/{limit} almas. Cada wallet puede acuñar como máximo {limit} almas."
   },
   "MySouls": {
     "title": "Mis almas",

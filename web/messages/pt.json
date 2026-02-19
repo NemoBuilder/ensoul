@@ -88,7 +88,8 @@
     "stepChain": "Enviando transação...",
     "stepConfirm": "Confirmando na cadeia...",
     "success": "Alma cunhada com sucesso!",
-    "viewSoul": "Ver alma →"
+    "viewSoul": "Ver alma →",
+    "mintLimitReached": "Você já cunhou {minted}/{limit} almas. Cada carteira pode cunhar no máximo {limit} almas."
   },
   "MySouls": {
     "title": "Minhas almas",

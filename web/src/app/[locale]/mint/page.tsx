@@ -78,6 +78,20 @@ export default function MintPage() {
       setError("Invalid handle: only letters, numbers, and underscores are allowed (max 15 characters)");
       return;
     }
+
+    // Check mint quota before preview to fail fast
+    if (address) {
+      try {
+        const quota = await shellApi.mintQuota(address);
+        if (!quota.can_mint) {
+          setError(t("mintLimitReached", { minted: quota.minted, limit: quota.limit }));
+          return;
+        }
+      } catch {
+        // If quota check fails, continue with preview — mint endpoint will catch it
+      }
+    }
+
     setLoading(true);
     try {
       const data = await shellApi.preview(cleanHandle);

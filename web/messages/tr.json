@@ -88,7 +88,8 @@
     "stepChain": "İşlem gönderiliyor...",
     "stepConfirm": "Zincir üstü onay bekleniyor...",
     "success": "Ruh başarıyla oluşturuldu!",
-    "viewSoul": "Ruhu Gör →"
+    "viewSoul": "Ruhu Gör →",
+    "mintLimitReached": "{minted}/{limit} ruh oluşturdunuz. Her cüzdan en fazla {limit} ruh oluşturabilir."
   },
   "MySouls": {
     "title": "Ruhlarım",

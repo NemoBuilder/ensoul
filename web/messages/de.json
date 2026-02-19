@@ -88,7 +88,8 @@
     "stepChain": "Transaktion wird gesendet...",
     "stepConfirm": "On-Chain-Bestätigung...",
     "success": "Seele erfolgreich geprägt!",
-    "viewSoul": "Seele ansehen →"
+    "viewSoul": "Seele ansehen →",
+    "mintLimitReached": "Sie haben bereits {minted}/{limit} Seelen geprägt. Jede Wallet kann maximal {limit} Seelen prägen."
   },
   "MySouls": {
     "title": "Meine Seelen",

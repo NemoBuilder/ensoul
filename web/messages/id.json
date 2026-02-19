@@ -88,7 +88,8 @@
     "stepChain": "Mengirim transaksi...",
     "stepConfirm": "Konfirmasi on-chain...",
     "success": "Jiwa berhasil dicetak!",
-    "viewSoul": "Lihat Jiwa →"
+    "viewSoul": "Lihat Jiwa →",
+    "mintLimitReached": "Anda sudah mencetak {minted}/{limit} jiwa. Setiap wallet hanya bisa mencetak maksimal {limit} jiwa."
   },
   "MySouls": {
     "title": "Jiwa Saya",

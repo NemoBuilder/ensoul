@@ -217,6 +217,27 @@ func ShellCancelMint(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"status": "cancelled"})
 }
 
+// ShellMintQuota handles GET /api/shell/mint-quota?wallet=0x...
+// Returns how many shells the wallet has minted and the maximum allowed.
+// This allows the frontend to check the limit before preview.
+func ShellMintQuota(c *gin.Context) {
+	wallet := c.Query("wallet")
+	if wallet == "" || !common.IsHexAddress(wallet) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "valid wallet address is required"})
+		return
+	}
+
+	var mintCount int64
+	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", wallet, "pending").Count(&mintCount)
+
+	const maxMints = 3
+	c.JSON(http.StatusOK, gin.H{
+		"minted":   mintCount,
+		"limit":    maxMints,
+		"can_mint": mintCount < maxMints,
+	})
+}
+
 // ShellList handles GET /api/shell/list
 // Returns a paginated list of shells with optional filters.
 func ShellList(c *gin.Context) {

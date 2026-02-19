@@ -88,7 +88,8 @@
     "stepChain": "发送交易...",
     "stepConfirm": "链上确认中...",
     "success": "灵魂铸造成功！",
-    "viewSoul": "查看灵魂 →"
+    "viewSoul": "查看灵魂 →",
+    "mintLimitReached": "你已铸造 {minted}/{limit} 个灵魂，每个钱包最多可铸造 {limit} 个灵魂。"
   },
   "MySouls": {
     "title": "我的灵魂",

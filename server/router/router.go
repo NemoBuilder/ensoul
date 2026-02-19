@@ -45,6 +45,7 @@ func Setup() *gin.Engine {
 		// Shell (Soul) endpoints
 		shell := api.Group("/shell")
 		{
+			shell.GET("/mint-quota", handlers.ShellMintQuota)
 			shell.POST("/preview", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellPreview)
 			shell.POST("/mint", middleware.RateLimit(middleware.RegisterLimiter), handlers.ShellMint)
 			shell.POST("/confirm", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellConfirmMint)

@@ -88,7 +88,8 @@
     "stepChain": "Envoi de la transaction...",
     "stepConfirm": "Confirmation sur la chaîne...",
     "success": "Âme forgée avec succès !",
-    "viewSoul": "Voir l'âme →"
+    "viewSoul": "Voir l'âme →",
+    "mintLimitReached": "Vous avez déjà forgé {minted}/{limit} âmes. Chaque portefeuille peut forger au maximum {limit} âmes."
   },
   "MySouls": {
     "title": "Mes âmes",

@@ -88,7 +88,8 @@
     "stepChain": "Đang gửi giao dịch...",
     "stepConfirm": "Đang xác nhận trên chuỗi...",
     "success": "Đúc linh hồn thành công!",
-    "viewSoul": "Xem linh hồn →"
+    "viewSoul": "Xem linh hồn →",
+    "mintLimitReached": "Bạn đã đúc {minted}/{limit} linh hồn. Mỗi ví chỉ có thể đúc tối đa {limit} linh hồn."
   },
   "MySouls": {
     "title": "Linh hồn của tôi",

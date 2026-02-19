@@ -303,11 +303,11 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		}
 	}
 
-	// Limit: each wallet can mint at most 5 confirmed shells (exclude pending)
+	// Limit: each wallet can mint at most 3 confirmed shells (exclude pending)
 	var mintCount int64
-	database.DB.Model(&models.Shell{}).Where("owner_addr = ? AND stage != ?", ownerAddr, models.StagePending).Count(&mintCount)
-	if mintCount >= 5 {
-		return nil, fmt.Errorf("each wallet can mint at most 5 souls")
+	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", ownerAddr, models.StagePending).Count(&mintCount)
+	if mintCount >= 3 {
+		return nil, fmt.Errorf("each wallet can mint at most 3 souls")
 	}
 
 	// Build dimensions JSON

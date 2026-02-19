@@ -200,7 +200,16 @@ export interface PaginatedResult<T> {
 
 // --- Shell API ---
 
+export interface MintQuota {
+  minted: number;
+  limit: number;
+  can_mint: boolean;
+}
+
 export const shellApi = {
+  mintQuota: (wallet: string) =>
+    apiFetch<MintQuota>(`/api/shell/mint-quota?wallet=${encodeURIComponent(wallet)}`),
+
   preview: (handle: string) =>
     apiFetch<SeedPreview>("/api/shell/preview", {
       method: "POST",

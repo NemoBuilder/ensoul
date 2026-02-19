@@ -88,7 +88,8 @@
     "stepChain": "トランザクション送信中...",
     "stepConfirm": "オンチェーン確認中...",
     "success": "ソウルのミントに成功！",
-    "viewSoul": "ソウルを見る →"
+    "viewSoul": "ソウルを見る →",
+    "mintLimitReached": "既に{minted}/{limit}個のソウルをミントしています。各ウォレットは最大{limit}個までミントできます。"
   },
   "MySouls": {
     "title": "マイソウル",
