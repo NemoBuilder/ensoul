@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"math/big"
 	"net/http"
 	"strings"
+	"time"
 
+	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/middleware"
 	"github.com/ensoul-labs/ensoul-server/models"
@@ -98,14 +101,6 @@ func ShellMint(c *gin.Context) {
 	claimedAddr := common.HexToAddress(walletAddr)
 	if err := middleware.VerifyWalletSignature(signedMessage, signature, claimedAddr); err != nil {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid wallet signature: " + err.Error()})
-		return
-	}
-
-	// Enforce per-wallet mint limit (max 3 confirmed shells per address)
-	var mintCount int64
-	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", walletAddr, "pending").Count(&mintCount)
-	if mintCount >= 3 {
-		c.JSON(http.StatusForbidden, gin.H{"error": "Each wallet can mint at most 3 shells"})
 		return
 	}
 
@@ -218,8 +213,7 @@ func ShellCancelMint(c *gin.Context) {
 }
 
 // ShellMintQuota handles GET /api/shell/mint-quota?wallet=0x...
-// Returns how many shells the wallet has minted and the maximum allowed.
-// This allows the frontend to check the limit before preview.
+// Returns how many shells the wallet has minted.
 func ShellMintQuota(c *gin.Context) {
 	wallet := c.Query("wallet")
 	if wallet == "" || !common.IsHexAddress(wallet) {
@@ -230,11 +224,9 @@ func ShellMintQuota(c *gin.Context) {
 	var mintCount int64
 	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", wallet, "pending").Count(&mintCount)
 
-	const maxMints = 3
 	c.JSON(http.StatusOK, gin.H{
 		"minted":   mintCount,
-		"limit":    maxMints,
-		"can_mint": mintCount < maxMints,
+		"can_mint": true,
 	})
 }
 
@@ -319,4 +311,130 @@ func ShellGetHistory(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, history)
+}
+
+// ShellMintPrice handles GET /api/shell/mint-price?handle=xxx
+// Returns the tiered mint price for a handle based on follower count.
+func ShellMintPrice(c *gin.Context) {
+	handle := c.Query("handle")
+	if handle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+
+	cleanHandle, err := services.ValidateHandle(handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	priceWei, followers, tier, err := services.GetMintPriceForHandle(cleanHandle)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get price: " + err.Error()})
+		return
+	}
+
+	// Check if handle is already minted on-chain
+	alreadyMinted := false
+	if minted, err := chain.IsHandleMinted(cleanHandle); err == nil {
+		alreadyMinted = minted
+	}
+
+	// Convert wei to BNB string for display
+	priceBNB := new(big.Float).Quo(
+		new(big.Float).SetInt(priceWei),
+		new(big.Float).SetFloat64(1e18),
+	)
+	priceBNBStr, _ := priceBNB.Float64()
+
+	c.JSON(http.StatusOK, gin.H{
+		"handle":         cleanHandle,
+		"followers":      followers,
+		"tier":           tier,
+		"price_wei":      priceWei.String(),
+		"price_bnb":      priceBNBStr,
+		"already_minted": alreadyMinted,
+	})
+}
+
+// ShellMintPermit handles POST /api/shell/mint-permit
+// Generates a signed permit for the EnsoulMinterV2 contract.
+// The permit includes the price (based on real follower count), deadline, and nonce.
+func ShellMintPermit(c *gin.Context) {
+	var req struct {
+		Handle string `json:"handle" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+
+	cleanHandle, err := services.ValidateHandle(req.Handle)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Verify wallet authentication
+	walletAddr := c.GetHeader("X-Wallet-Address")
+	signature := c.GetHeader("X-Wallet-Signature")
+
+	if walletAddr == "" || signature == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Wallet authentication required"})
+		return
+	}
+
+	if !common.IsHexAddress(walletAddr) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid wallet address format"})
+		return
+	}
+
+	signedMessage := "ensoul:mint:" + cleanHandle
+	claimedAddr := common.HexToAddress(walletAddr)
+	if err := middleware.VerifyWalletSignature(signedMessage, signature, claimedAddr); err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid wallet signature: " + err.Error()})
+		return
+	}
+
+	// Check if shell already exists (non-pending)
+	var existing models.Shell
+	if err := database.DB.Where("LOWER(handle) = ?", cleanHandle).First(&existing).Error; err == nil {
+		if existing.Stage != "pending" {
+			c.JSON(http.StatusConflict, gin.H{"error": "A soul for @" + cleanHandle + " already exists"})
+			return
+		}
+	}
+
+	// Get price based on real follower count
+	priceWei, followers, tier, err := services.GetMintPriceForHandle(cleanHandle)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get price: " + err.Error()})
+		return
+	}
+
+	// Generate permit
+	deadline := time.Now().Unix() + 1800 // 30 minutes
+	nonce := uint64(time.Now().UnixNano())
+
+	permit, err := chain.SignMintPermit(cleanHandle, priceWei, claimedAddr, deadline, nonce)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate permit: " + err.Error()})
+		return
+	}
+
+	// Convert price for display
+	priceBNB := new(big.Float).Quo(
+		new(big.Float).SetInt(priceWei),
+		new(big.Float).SetFloat64(1e18),
+	)
+	priceBNBFloat, _ := priceBNB.Float64()
+
+	c.JSON(http.StatusOK, gin.H{
+		"permit":    permit,
+		"handle":    cleanHandle,
+		"followers": followers,
+		"tier":      tier,
+		"price_wei": priceWei.String(),
+		"price_bnb": priceBNBFloat,
+	})
 }

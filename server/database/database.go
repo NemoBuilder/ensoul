@@ -49,6 +49,22 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.ChatSession{},
 		&models.ChatMessage{},
 		&models.ChatShare{},
+		// Economic system models
+		&models.MiningPool{},
+		&models.FragmentDemand{},
+		&models.MiningReward{},
+		&models.BuybackRecord{},
+		&models.PublicSoul{},
+		// Soul Sniper models
+		&models.Subscription{},
+		&models.SniperKOL{},
+		&models.SniperReply{},
+		&models.UserPersona{},
+		// Holder Revenue & KOL Claim models
+		&models.HolderRevenue{},
+		&models.RevenuePool{},
+		&models.KOLClaim{},
+		&models.SoulUsage{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}

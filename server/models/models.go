@@ -194,3 +194,250 @@ type ChatShare struct {
 	Messages  string    `gorm:"type:text;not null" json:"messages"` // JSON array of [{role, content}]
 	CreatedAt time.Time `json:"created_at"`
 }
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// Economic System Models (Ensoul-Next)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Fragment demand status constants
+const (
+	DemandStatusOpen      = "open"
+	DemandStatusFulfilled = "fulfilled"
+	DemandStatusExpired   = "expired"
+)
+
+// Mining reward status constants
+const (
+	RewardStatusPending   = "pending"
+	RewardStatusSent      = "sent"
+	RewardStatusConfirmed = "confirmed"
+	RewardStatusFailed    = "failed"
+)
+
+// MiningPool tracks the global mining pool state (single row).
+type MiningPool struct {
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Balance        float64   `gorm:"type:decimal(28,8);default:0" json:"balance"`          // Current $Ensoul in pool
+	TotalDeposited float64   `gorm:"type:decimal(28,8);default:0" json:"total_deposited"`  // Cumulative deposits
+	TotalReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"total_released"`   // Cumulative releases
+	DailyReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"daily_released"`   // Released today
+	LastResetAt    time.Time `json:"last_reset_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+// FragmentDemand represents a Crab-published fragment demand with bounty.
+type FragmentDemand struct {
+	ID          uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID     uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
+	Dimension   string         `gorm:"type:varchar(20);not null" json:"dimension"`
+	Description string         `gorm:"type:text" json:"description"`
+	Bounty      float64        `gorm:"type:decimal(18,8);not null" json:"bounty"` // $Ensoul bounty
+	Status      string         `gorm:"type:varchar(20);default:'open'" json:"status"`
+	CreatedAt   time.Time      `json:"created_at"`
+	ExpiresAt   time.Time      `json:"expires_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relations
+	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// MiningReward records a reward paid to a Claw for a fragment contribution.
+type MiningReward struct {
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ClawID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"claw_id"`
+	FragmentID uuid.UUID  `gorm:"type:uuid;not null;index" json:"fragment_id"`
+	DemandID   *uuid.UUID `gorm:"type:uuid;index" json:"demand_id,omitempty"`
+	Amount     float64    `gorm:"type:decimal(18,8);not null" json:"amount"` // $Ensoul amount
+	TxHash     string     `gorm:"type:varchar(66)" json:"tx_hash,omitempty"`
+	Status     string     `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	CreatedAt  time.Time  `json:"created_at"`
+
+	// Relations
+	Claw     Claw     `gorm:"foreignKey:ClawID" json:"claw,omitempty"`
+	Fragment Fragment `gorm:"foreignKey:FragmentID" json:"fragment,omitempty"`
+}
+
+// BuybackRecord tracks each BNB → $Ensoul buyback operation.
+type BuybackRecord struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Source      string    `gorm:"type:varchar(30);not null" json:"source"` // mint_revenue / subscription_revenue
+	BNBAmount   float64   `gorm:"type:decimal(18,8)" json:"bnb_amount"`
+	TokenAmount float64   `gorm:"type:decimal(28,8)" json:"token_amount"` // $Ensoul received
+	SwapTxHash  string    `gorm:"type:varchar(66)" json:"swap_tx_hash"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Soul Sniper Models (Phase 3)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Subscription tier constants
+const (
+	SubTierStarter = "starter" // 3 KOLs, 10 replies/day, deepseek-v3
+	SubTierPro     = "pro"     // 10 KOLs, 50 replies/day, gpt-4o
+	SubTierElite   = "elite"   // 30 KOLs, unlimited, claude-opus
+)
+
+// Subscription status constants
+const (
+	SubStatusActive    = "active"
+	SubStatusExpired   = "expired"
+	SubStatusCancelled = "cancelled"
+)
+
+// Subscription represents a user's Soul Sniper subscription.
+type Subscription struct {
+	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr    string         `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	Tier          string         `gorm:"type:varchar(20);not null" json:"tier"`
+	LLMModel      string         `gorm:"type:varchar(50)" json:"llm_model"`
+	Status        string         `gorm:"type:varchar(20);default:'active'" json:"status"`
+	ExpiresAt     time.Time      `gorm:"not null" json:"expires_at"`
+	PaymentTxHash string         `gorm:"type:varchar(66)" json:"payment_tx_hash"`
+	PaymentToken  string         `gorm:"type:varchar(10);default:'USDT'" json:"payment_token"` // USDT/BNB/ENSOUL
+	PaymentAmount float64        `gorm:"type:decimal(18,8)" json:"payment_amount"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// SniperKOL represents a KOL that a subscriber is tracking.
+type SniperKOL struct {
+	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	SubscriptionID uuid.UUID      `gorm:"type:uuid;not null;index" json:"subscription_id"`
+	ShellID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
+	Handle         string         `gorm:"type:varchar(15);not null" json:"handle"`
+	CreatedAt      time.Time      `json:"created_at"`
+	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relations
+	Subscription Subscription `gorm:"foreignKey:SubscriptionID" json:"subscription,omitempty"`
+	Shell        Shell        `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// SniperReply represents a generated reply for a KOL's tweet.
+type SniperReply struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID    uuid.UUID `gorm:"type:uuid;not null;index" json:"shell_id"`
+	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	TweetID    string    `gorm:"type:varchar(30);not null;index" json:"tweet_id"`
+	TweetText  string    `gorm:"type:text" json:"tweet_text"`
+	Replies    JSON      `gorm:"type:jsonb;default:'[]'" json:"replies"` // [{style, content, model}]
+	CreatedAt  time.Time `json:"created_at"`
+
+	// Relations
+	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// UserPersona represents a user's custom persona for reply generation.
+type UserPersona struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr string    `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
+	Bio        string    `gorm:"type:text" json:"bio"`
+	Style      string    `gorm:"type:text" json:"style"`
+	Materials  string    `gorm:"type:text" json:"materials"` // reference materials
+	Language   string    `gorm:"type:varchar(10);default:'en'" json:"language"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}
+
+// SubscriptionTierConfig holds the limits for each subscription tier.
+type SubscriptionTierConfig struct {
+	MaxKOLs       int
+	DailyReplies  int // -1 = unlimited
+	DefaultModel  string
+	MonthlyPriceUSDT float64
+}
+
+// SubscriptionTiers maps tier names to their configurations.
+var SubscriptionTiers = map[string]SubscriptionTierConfig{
+	SubTierStarter: {MaxKOLs: 3, DailyReplies: 10, DefaultModel: "deepseek-chat", MonthlyPriceUSDT: 9.9},
+	SubTierPro:     {MaxKOLs: 10, DailyReplies: 50, DefaultModel: "gpt-4o", MonthlyPriceUSDT: 29.9},
+	SubTierElite:   {MaxKOLs: 30, DailyReplies: -1, DefaultModel: "claude-sonnet-4-20250514", MonthlyPriceUSDT: 99.9},
+}
+
+// PublicSoul tracks Soul NFTs minted by the Tax Wallet as public assets.
+type PublicSoul struct {
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID   uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
+	MintCost  float64        `gorm:"type:decimal(18,8)" json:"mint_cost"`  // BNB spent
+	SalePrice float64        `gorm:"type:decimal(18,8)" json:"sale_price"` // Listed price (with premium)
+	Status    string         `gorm:"type:varchar(20);default:'minted'" json:"status"` // minted/listed/sold
+	BuyerAddr string         `gorm:"type:varchar(42)" json:"buyer_addr,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+
+	// Relations
+	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// ═══════════════════════════════════════════════════════════════════════
+// Holder Revenue & KOL Claim Models (Phase 4)
+// ═══════════════════════════════════════════════════════════════════════
+
+// Holder revenue status constants
+const (
+	HolderRevenueStatusPending   = "pending"
+	HolderRevenueStatusSent      = "sent"
+	HolderRevenueStatusConfirmed = "confirmed"
+	HolderRevenueStatusClaimed   = "claimed"
+)
+
+// KOL claim status constants
+const (
+	ClaimStatusPending  = "pending"
+	ClaimStatusVerified = "verified"
+	ClaimStatusRejected = "rejected"
+)
+
+// HolderRevenue records a monthly revenue share for a Soul holder.
+type HolderRevenue struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID    uuid.UUID `gorm:"type:uuid;not null;index" json:"shell_id"`
+	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	Period     string    `gorm:"type:varchar(7);not null;index" json:"period"` // "2026-02"
+	UsageCount int       `gorm:"default:0" json:"usage_count"`
+	Weight     float64   `gorm:"type:decimal(18,8);default:0" json:"weight"`
+	Amount     float64   `gorm:"type:decimal(18,8);default:0" json:"amount"` // $Ensoul
+	TxHash     string    `gorm:"type:varchar(66)" json:"tx_hash,omitempty"`
+	Status     string    `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	CreatedAt  time.Time `json:"created_at"`
+
+	// Relations
+	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// RevenuePool tracks the monthly revenue pool state.
+type RevenuePool struct {
+	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Period       string    `gorm:"type:varchar(7);uniqueIndex;not null" json:"period"` // "2026-02"
+	TotalRevenue float64  `gorm:"type:decimal(28,8);default:0" json:"total_revenue"`
+	PoolAmount   float64   `gorm:"type:decimal(28,8);default:0" json:"pool_amount"` // 15% of total
+	Distributed  bool      `gorm:"default:false" json:"distributed"`
+	CreatedAt    time.Time `json:"created_at"`
+}
+
+// KOLClaim records a KOL's claim request for their Soul.
+type KOLClaim struct {
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID       uuid.UUID  `gorm:"type:uuid;not null;uniqueIndex" json:"shell_id"`
+	KOLWalletAddr string     `gorm:"type:varchar(42);not null" json:"kol_wallet_addr"`
+	VerifyCode    string     `gorm:"type:varchar(20);not null" json:"verify_code"`
+	VerifyTweetID string     `gorm:"type:varchar(30)" json:"verify_tweet_id"`
+	Status        string     `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	ClaimedAt     *time.Time `json:"claimed_at,omitempty"`
+	TransitionEnd *time.Time `json:"transition_end,omitempty"` // +3 months after claim
+	CreatedAt     time.Time  `json:"created_at"`
+
+	// Relations
+	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// SoulUsage tracks monthly usage counts per Soul.
+type SoulUsage struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID    uuid.UUID `gorm:"type:uuid;not null;index:idx_soul_usage_period" json:"shell_id"`
+	Period     string    `gorm:"type:varchar(7);not null;index:idx_soul_usage_period" json:"period"` // "2026-02"
+	UsageCount int       `gorm:"default:0" json:"usage_count"`
+	UpdatedAt  time.Time `json:"updated_at"`
+}

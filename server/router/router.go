@@ -46,8 +46,10 @@ func Setup() *gin.Engine {
 		shell := api.Group("/shell")
 		{
 			shell.GET("/mint-quota", handlers.ShellMintQuota)
+			shell.GET("/mint-price", handlers.ShellMintPrice)
 			shell.POST("/preview", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellPreview)
 			shell.POST("/mint", middleware.RateLimit(middleware.RegisterLimiter), handlers.ShellMint)
+			shell.POST("/mint-permit", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellMintPermit)
 			shell.POST("/confirm", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellConfirmMint)
 			shell.POST("/cancel", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellCancelMint)
 			shell.GET("/list", handlers.ShellList)
@@ -143,6 +145,45 @@ func Setup() *gin.Engine {
 
 		// Task board — public
 		api.GET("/tasks", handlers.GetTasks)
+
+		// Mining endpoints (economic system)
+		mining := api.Group("/mining")
+		{
+			mining.GET("/pool", handlers.MiningPoolStatus)
+			mining.GET("/demands", handlers.MiningDemands)
+			mining.GET("/rewards/:claw_id", handlers.MiningRewards)
+			mining.POST("/deposit", middleware.AuthSession(), handlers.MiningDeposit) // admin
+		}
+
+		// Soul Sniper endpoints (Phase 3)
+		sniper := api.Group("/sniper")
+		{
+			sniper.POST("/subscribe", middleware.AuthSession(), handlers.SniperSubscribe)
+			sniper.GET("/subscription", middleware.AuthSession(), handlers.SniperGetSubscription)
+			sniper.POST("/kols", middleware.AuthSession(), handlers.SniperAddKOL)
+			sniper.GET("/kols", middleware.AuthSession(), handlers.SniperListKOLs)
+			sniper.DELETE("/kols/:id", middleware.AuthSession(), handlers.SniperRemoveKOL)
+			sniper.POST("/reply", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperGenerateReply)
+			sniper.GET("/replies", middleware.AuthSession(), handlers.SniperGetReplies)
+			sniper.POST("/persona", middleware.AuthSession(), handlers.SniperSetPersona)
+			sniper.GET("/persona", middleware.AuthSession(), handlers.SniperGetPersona)
+		}
+
+		// Holder revenue endpoints (Phase 4)
+		holder := api.Group("/holder")
+		{
+			holder.GET("/dashboard", middleware.AuthSession(), handlers.HolderDashboard)
+			holder.GET("/revenue/:period", middleware.AuthSession(), handlers.HolderRevenuePeriod)
+			holder.POST("/claim", middleware.AuthSession(), handlers.HolderClaimRevenue)
+		}
+
+		// KOL claim endpoints (Phase 4)
+		claim := api.Group("/claim")
+		{
+			claim.POST("/initiate", middleware.AuthSession(), handlers.ClaimInitiate)
+			claim.POST("/verify", middleware.AuthSession(), handlers.ClaimVerify)
+			claim.GET("/:handle", handlers.ClaimStatus)
+		}
 	}
 
 	return r

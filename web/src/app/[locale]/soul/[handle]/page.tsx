@@ -4,7 +4,7 @@ import { useState, useEffect, use } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { shellApi, fragmentApi, Shell, Fragment, Ensouling, ShellContributor, TwitterMeta } from "@/lib/api";
+import { shellApi, fragmentApi, kolClaimApi, Shell, Fragment, Ensouling, ShellContributor, TwitterMeta, ClaimStatusData } from "@/lib/api";
 import { stageConfig, dimensionLabels, timeAgo, truncateAddr, calcCompletion, accountAge, formatCount, Stage } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
 
@@ -25,6 +25,7 @@ export default function SoulPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [imgErr, setImgErr] = useState(false);
+  const [claimStatus, setClaimStatus] = useState<ClaimStatusData | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -40,6 +41,8 @@ export default function SoulPage({
         setFragments(fragRes.fragments || []);
         setHistory(hist || []);
         setContributors(contribs.contributors || []);
+        // Fetch KOL claim status
+        kolClaimApi.status(handle).then(setClaimStatus).catch(() => {});
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : "Failed to load soul");
       } finally {
@@ -315,6 +318,46 @@ export default function SoulPage({
           )}
 
         </div>
+
+        {/* KOL Claim Status */}
+        {claimStatus && (
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-[#1e1e2e]/40 pt-4">
+            {claimStatus.claimed ? (
+              <>
+                <span className="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-2.5 py-1 text-xs font-medium text-green-400">
+                  ✓ {t("claimed")}
+                </span>
+                {claimStatus.kol_wallet && (
+                  <span className="text-xs text-[#94a3b8]">
+                    KOL: <span className="font-mono text-[#e2e8f0]">{claimStatus.kol_wallet.slice(0, 6)}...{claimStatus.kol_wallet.slice(-4)}</span>
+                  </span>
+                )}
+                {claimStatus.in_transition && (
+                  <span className="rounded-full bg-yellow-500/10 px-2.5 py-1 text-xs text-yellow-400">
+                    {t("transitionPeriod")}
+                  </span>
+                )}
+                {claimStatus.kol_share != null && claimStatus.holder_share != null && (
+                  <span className="text-xs text-[#94a3b8]">
+                    {t("revenueShare", { kol: claimStatus.kol_share, holder: claimStatus.holder_share })}
+                  </span>
+                )}
+              </>
+            ) : claimStatus.claimable ? (
+              <>
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#8b5cf6]/10 px-2.5 py-1 text-xs font-medium text-[#8b5cf6]">
+                  {t("unclaimed")}
+                </span>
+                <Link
+                  href="/claim"
+                  className="rounded-md bg-[#8b5cf6] px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+                >
+                  {t("claimSoul")}
+                </Link>
+              </>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Radar + Soul Prompt side by side */}

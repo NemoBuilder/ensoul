@@ -416,6 +416,13 @@ func acceptFragment(fragment *models.Fragment, shell *models.Shell, confidence f
 
 	// Submit reputation feedback on-chain via Claw's independent wallet
 	submitOnChainFeedback(fragment, shell)
+
+	// Trigger mining reward via Crab economic system
+	go func() {
+		if err := ReviewAndReward(fragment, confidence); err != nil {
+			util.Log.Warn("[mining] Failed to distribute reward for fragment %s: %v", fragment.ID, err)
+		}
+	}()
 }
 
 // rejectFragment marks a fragment as rejected.

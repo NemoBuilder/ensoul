@@ -531,3 +531,255 @@ export const clawKeyApi = {
       recent_contributions: Fragment[];
     }>(`/api/claw/keys/${bindingId}/dashboard`),
 };
+
+// ═══════════════════════════════════════════════════════════════
+// Mining API (Phase 1)
+// ═══════════════════════════════════════════════════════════════
+
+export interface MiningPoolStatus {
+  balance: number;
+  total_deposited: number;
+  total_released: number;
+  daily_limit: number;
+  daily_released: number;
+  daily_remaining: number;
+  paused: boolean;
+  last_reset_at: string;
+}
+
+export interface FragmentDemand {
+  id: string;
+  shell_id: string;
+  dimension: string;
+  description: string;
+  bounty: number;
+  status: string;
+  created_at: string;
+  expires_at: string;
+  shell?: Shell;
+}
+
+export interface MiningReward {
+  id: string;
+  claw_id: string;
+  fragment_id: string;
+  demand_id?: string;
+  amount: number;
+  tx_hash?: string;
+  status: string;
+  created_at: string;
+}
+
+export const miningApi = {
+  pool: () => apiFetch<MiningPoolStatus>("/api/mining/pool"),
+  demands: () => apiFetch<FragmentDemand[]>("/api/mining/demands"),
+  rewards: (clawId: string) => apiFetch<MiningReward[]>(`/api/mining/rewards/${clawId}`),
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Mint V2 API (Phase 2) — Tiered pricing + Permit
+// ═══════════════════════════════════════════════════════════════
+
+export interface MintPriceInfo {
+  handle: string;
+  followers: number;
+  tier: string;
+  price_wei: string;
+  price_bnb: number;
+  already_minted: boolean;
+}
+
+export interface MintPermit {
+  handle_hash: string;
+  price: string;
+  deadline: number;
+  nonce: string;
+  signature: string;
+}
+
+export interface MintPermitResponse {
+  permit: MintPermit;
+  handle: string;
+  followers: number;
+  tier: string;
+  price_wei: string;
+  price_bnb: number;
+}
+
+export const mintV2Api = {
+  getPrice: (handle: string) =>
+    apiFetch<MintPriceInfo>(`/api/shell/mint-price?handle=${encodeURIComponent(handle)}`),
+
+  getPermit: (handle: string, walletAddr: string, signature: string) =>
+    apiFetch<MintPermitResponse>("/api/shell/mint-permit", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+      headers: {
+        "X-Wallet-Address": walletAddr,
+        "X-Wallet-Signature": signature,
+      },
+    }),
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Soul Sniper API (Phase 3)
+// ═══════════════════════════════════════════════════════════════
+
+export interface Subscription {
+  id: string;
+  wallet_addr: string;
+  tier: string;
+  llm_model: string;
+  status: string;
+  expires_at: string;
+  payment_tx_hash: string;
+  payment_token: string;
+  payment_amount: number;
+}
+
+export interface SubscriptionStatus {
+  active: boolean;
+  tier?: string;
+  llm_model?: string;
+  expires_at?: string;
+  kol_count?: number;
+  kol_limit?: number;
+  daily_replies?: number;
+  daily_limit?: number;
+  payment_token?: string;
+}
+
+export interface SniperKOL {
+  id: string;
+  subscription_id: string;
+  shell_id: string;
+  handle: string;
+  shell?: Shell;
+}
+
+export interface ReplyVariant {
+  style: string;
+  content: string;
+  model: string;
+}
+
+export interface SniperReply {
+  id: string;
+  shell_id: string;
+  wallet_addr: string;
+  tweet_id: string;
+  tweet_text: string;
+  replies: ReplyVariant[];
+  created_at: string;
+  shell?: Shell;
+}
+
+export interface UserPersona {
+  id: string;
+  wallet_addr: string;
+  bio: string;
+  style: string;
+  materials: string;
+  language: string;
+}
+
+export const sniperApi = {
+  subscribe: (tier: string, paymentTxHash: string, paymentToken = "USDT", paymentAmount = 0) =>
+    apiFetch<Subscription>("/api/sniper/subscribe", {
+      method: "POST",
+      body: JSON.stringify({ tier, payment_tx_hash: paymentTxHash, payment_token: paymentToken, payment_amount: paymentAmount }),
+    }),
+
+  getSubscription: () => apiFetch<SubscriptionStatus>("/api/sniper/subscription"),
+
+  addKOL: (handle: string) =>
+    apiFetch<SniperKOL>("/api/sniper/kols", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    }),
+
+  listKOLs: () => apiFetch<{ kols: SniperKOL[] }>("/api/sniper/kols"),
+
+  removeKOL: (id: string) =>
+    apiFetch<{ status: string }>(`/api/sniper/kols/${id}`, { method: "DELETE" }),
+
+  generateReply: (handle: string, tweetId: string, tweetText: string) =>
+    apiFetch<SniperReply>("/api/sniper/reply", {
+      method: "POST",
+      body: JSON.stringify({ handle, tweet_id: tweetId, tweet_text: tweetText }),
+    }),
+
+  getReplies: () => apiFetch<{ replies: SniperReply[] }>("/api/sniper/replies"),
+
+  setPersona: (bio: string, style: string, materials: string, language: string) =>
+    apiFetch<UserPersona>("/api/sniper/persona", {
+      method: "POST",
+      body: JSON.stringify({ bio, style, materials, language }),
+    }),
+
+  getPersona: () => apiFetch<{ configured: boolean; persona?: UserPersona }>("/api/sniper/persona"),
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Holder Revenue API (Phase 4)
+// ═══════════════════════════════════════════════════════════════
+
+export interface HolderRevenue {
+  id: string;
+  shell_id: string;
+  wallet_addr: string;
+  period: string;
+  usage_count: number;
+  weight: number;
+  amount: number;
+  tx_hash?: string;
+  status: string;
+  shell?: Shell;
+}
+
+export interface HolderDashboard {
+  total_earned: number;
+  total_pending: number;
+  shells: { handle: string; stage: string; avatar_url: string; current_usage: number }[];
+  recent_revenue: HolderRevenue[];
+}
+
+export const holderApi = {
+  dashboard: () => apiFetch<HolderDashboard>("/api/holder/dashboard"),
+  revenue: (period: string) => apiFetch<{ revenues: HolderRevenue[] }>(`/api/holder/revenue/${period}`),
+  claim: () => apiFetch<{ amount: number; tx_hash: string; status: string }>("/api/holder/claim", { method: "POST" }),
+};
+
+// ═══════════════════════════════════════════════════════════════
+// KOL Claim API (Phase 4)
+// ═══════════════════════════════════════════════════════════════
+
+export interface ClaimStatusData {
+  claimed: boolean;
+  claimable: boolean;
+  status?: string;
+  handle: string;
+  kol_wallet?: string;
+  verify_code?: string;
+  claimed_at?: string;
+  transition_end?: string;
+  kol_share?: number;
+  holder_share?: number;
+  in_transition?: boolean;
+}
+
+export const kolClaimApi = {
+  initiate: (handle: string) =>
+    apiFetch<{ claim_id: string; verify_code: string; instruction: string }>(
+      "/api/claim/initiate",
+      { method: "POST", body: JSON.stringify({ handle }) },
+    ),
+
+  verify: (handle: string, tweetId: string) =>
+    apiFetch<{ status: string }>("/api/claim/verify", {
+      method: "POST",
+      body: JSON.stringify({ handle, tweet_id: tweetId }),
+    }),
+
+  status: (handle: string) => apiFetch<ClaimStatusData>(`/api/claim/${handle}`),
+};

@@ -37,6 +37,24 @@ func main() {
 	// Start pending shell cleanup (checks every 5 min, deletes pending > 30 min)
 	services.StartPendingShellCleanup(5 * time.Minute)
 
+	// Start mining pool daily release reset (resets at 00:00 UTC)
+	services.StartMiningDailyReset()
+
+	// Start Crab demand publisher (every 6 hours)
+	services.StartCrabScheduler(6 * time.Hour)
+
+	// Start tax wallet auto-mint scheduler (weekly, Monday 00:00 UTC)
+	services.StartTaxWalletScheduler()
+
+	// Start Soul Sniper KOL tweet monitor (every 1 minute)
+	services.StartSniperMonitor(1 * time.Minute)
+
+	// Start subscription expiry checker (every 1 hour)
+	services.StartSubscriptionCleanup(1 * time.Hour)
+
+	// Start monthly revenue settlement (1st of each month, 00:00 UTC)
+	services.StartMonthlySettlement()
+
 	// Setup routes
 	r := router.Setup()
 

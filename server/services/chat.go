@@ -144,6 +144,9 @@ func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
 	// Increment shell chat count
 	database.DB.Model(&shell).UpdateColumn("total_chats", shell.TotalChats+1)
 
+	// Record usage for holder revenue calculation
+	RecordUsage(shell.ID)
+
 	// If LLM is not configured, return a mock response
 	if config.Cfg.LLMAPIKey == "" {
 		response := fmt.Sprintf("I am the digital soul of @%s (DNA v%d). You asked: \"%s\". "+

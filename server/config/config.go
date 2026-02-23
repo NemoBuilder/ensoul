@@ -42,6 +42,20 @@ type Config struct {
 	// SocialData API (primary Twitter data source)
 	SocialDataAPIKey  string
 	SocialDataBaseURL string // default: https://api.socialdata.tools
+
+	// Economic System — Contract Addresses
+	EnsoulTokenAddr    string // $Ensoul ERC-20 token
+	EnsoulLPAddr       string // $Ensoul/BNB LP (PancakeSwap V2)
+	EnsoulMinterV2Addr string // EnsoulMinterV2 contract
+	PancakeRouterAddr  string // PancakeSwap V2 Router
+	USDTAddr           string // BSC USDT
+
+	// Economic System — Wallet Keys (6-wallet scheme)
+	TreasuryAddr         string // Treasury address (cold wallet, no private key on server)
+	TaxWalletPrivateKey  string // Tax Wallet — receives 3% token tax, mints public Souls
+	BuybackPrivateKey    string // Buyback Wallet — executes PancakeSwap swaps
+	MiningPoolPrivateKey string // Mining Pool Wallet — holds & distributes mining rewards
+	RevenuePoolPrivateKey string // Revenue Pool Wallet — holds holder revenue for claim
 }
 
 // Global config instance
@@ -74,6 +88,20 @@ func Load() *Config {
 		TwitterBearerToken:     getEnv("TWITTER_BEARER_TOKEN", ""),
 		SocialDataAPIKey:       getEnv("SOCIALDATA_API_KEY", ""),
 		SocialDataBaseURL:      getEnv("SOCIALDATA_BASE_URL", ""),
+
+		// Economic System — Contract Addresses
+		EnsoulTokenAddr:    getEnv("ENSOUL_TOKEN_ADDR", "0x38c4b187834f6351c5e523182f23ed64adf9ffff"),
+		EnsoulLPAddr:       getEnv("ENSOUL_LP_ADDR", "0xeb966A3CFbc213ad759d9B185399797b632332952"),
+		EnsoulMinterV2Addr: getEnv("ENSOUL_MINTER_V2_ADDR", ""),
+		PancakeRouterAddr:  getEnv("PANCAKE_ROUTER_ADDR", "0x10ED43C718714eb63d5aA57B78B54704E256024E"),
+		USDTAddr:           getEnv("USDT_ADDR", "0x55d398326f99059fF775485246999027B3197955"),
+
+		// Economic System — Wallet Keys
+		TreasuryAddr:         getEnv("TREASURY_ADDR", ""),
+		TaxWalletPrivateKey:  getEnv("TAX_WALLET_PRIVATE_KEY", ""),
+		BuybackPrivateKey:    getEnv("BUYBACK_PRIVATE_KEY", ""),
+		MiningPoolPrivateKey: getEnv("MINING_POOL_PRIVATE_KEY", ""),
+		RevenuePoolPrivateKey: getEnv("REVENUE_POOL_PRIVATE_KEY", ""),
 	}
 
 	// Auto-set log level based on environment if not explicitly configured

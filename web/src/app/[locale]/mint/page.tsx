@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
-import { shellApi, SeedPreview } from "@/lib/api";
+import { shellApi, mintV2Api, SeedPreview, MintPriceInfo, MintPermitResponse } from "@/lib/api";
 import { dimensionLabels } from "@/lib/utils";
 import RadarChart from "@/components/RadarChart";
 import {
@@ -23,14 +23,11 @@ const IDENTITY_REGISTRY_ABI = parseAbi([
   "event Registered(uint256 indexed agentId, string agentURI, address indexed owner)",
 ]);
 
-const ENSOUL_MINTER_ADDRESS = (process.env.NEXT_PUBLIC_MINTER_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
-const ENSOUL_MINTER_ABI = parseAbi([
-  "function mint(string agentURI) payable returns (uint256 agentId)",
-  "function mintFee() view returns (uint256)",
-  "event Minted(address indexed user, uint256 indexed agentId, uint256 fee)",
+const ENSOUL_MINTER_V2_ADDRESS = (process.env.NEXT_PUBLIC_MINTER_V2_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
+const ENSOUL_MINTER_V2_ABI = parseAbi([
+  "function mint(string agentURI, bytes32 handleHash, uint256 price, uint256 deadline, uint256 nonce, bytes signature) payable returns (uint256 agentId)",
+  "event Minted(address indexed user, uint256 indexed agentId, bytes32 indexed handleHash, uint256 fee)",
 ]);
-
-const DEFAULT_MINT_FEE = BigInt("1430000000000000");
 
 export default function MintPage() {
   const t = useTranslations("Mint");
@@ -42,36 +39,26 @@ export default function MintPage() {
   const { writeContractAsync } = useWriteContract();
   const publicClient = usePublicClient();
   const isCorrectChain = chainId === bsc.id;
+
   const [handle, setHandle] = useState("");
   const [preview, setPreview] = useState<SeedPreview | null>(null);
+  const [priceInfo, setPriceInfo] = useState<MintPriceInfo | null>(null);
   const [loading, setLoading] = useState(false);
   const [minting, setMinting] = useState(false);
   const [mintStep, setMintStep] = useState("");
   const [error, setError] = useState("");
   const [imgErr, setImgErr] = useState(false);
-  const [mintFee, setMintFee] = useState<bigint>(DEFAULT_MINT_FEE);
 
-  useEffect(() => {
-    if (!publicClient || !isConnected || !isCorrectChain) return;
-    if (ENSOUL_MINTER_ADDRESS === "0x0000000000000000000000000000000000000000") return;
-    publicClient.readContract({
-      address: ENSOUL_MINTER_ADDRESS,
-      abi: ENSOUL_MINTER_ABI,
-      functionName: "mintFee",
-    }).then((fee) => {
-      setMintFee(fee as bigint);
-    }).catch(() => {});
-  }, [publicClient, isConnected, isCorrectChain]);
-
-  const formatBNB = (wei: bigint) => {
-    const bnb = Number(wei) / 1e18;
-    return bnb < 0.001 ? bnb.toFixed(6) : bnb.toFixed(4);
+  const formatBNB = (price: number) => {
+    const s = price < 0.001 ? price.toFixed(6) : price.toFixed(4);
+    return s.replace(/\.?0+$/, "");
   };
 
   async function handlePreview() {
     if (!handle.trim()) return;
     setError("");
     setPreview(null);
+    setPriceInfo(null);
     setImgErr(false);
     const cleanHandle = handle.trim().replace(/^@/, "");
     if (!/^[a-zA-Z0-9_]{1,15}$/.test(cleanHandle)) {
@@ -79,7 +66,6 @@ export default function MintPage() {
       return;
     }
 
-    // Check mint quota before preview to fail fast
     if (address) {
       try {
         const quota = await shellApi.mintQuota(address);
@@ -87,15 +73,22 @@ export default function MintPage() {
           setError(t("mintLimitReached", { minted: quota.minted, limit: quota.limit }));
           return;
         }
-      } catch {
-        // If quota check fails, continue with preview — mint endpoint will catch it
-      }
+      } catch {}
     }
 
     setLoading(true);
     try {
-      const data = await shellApi.preview(cleanHandle);
+      const [data, price] = await Promise.all([
+        shellApi.preview(cleanHandle),
+        mintV2Api.getPrice(cleanHandle),
+      ]);
+      if (price.already_minted) {
+        setError(t("handleAlreadyMinted", { handle: cleanHandle }));
+        setLoading(false);
+        return;
+      }
       setPreview(data);
+      setPriceInfo(price);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Preview failed");
     } finally {
@@ -122,34 +115,49 @@ export default function MintPage() {
   }
 
   async function handleMint() {
-    if (!preview || !address) return;
+    if (!preview || !address || !priceInfo) return;
     setError("");
     setMinting(true);
     let signature = "";
-    let dbCreated = false;   // DB record was created (pending)
-    let chainSuccess = false; // On-chain tx was confirmed successful
+    let dbCreated = false;
+    let chainSuccess = false;
 
     try {
+      // Step 1: Sign wallet message
       setMintStep(t("stepSign"));
       const message = `ensoul:mint:${preview.handle}`;
       signature = await signMessageAsync({ message });
 
+      // Step 2: Create DB record
       setMintStep(t("stepBackend"));
       await shellApi.mint(preview.handle, address, signature, preview);
       dbCreated = true;
 
+      // Step 3: Get permit from backend
+      setMintStep(t("stepPermit"));
+      const permitData: MintPermitResponse = await mintV2Api.getPermit(preview.handle, address, signature);
+
+      // Step 4: Send on-chain tx with permit
       setMintStep(t("stepChain"));
       const agentURI = buildAgentURI(preview);
 
       const txHash = await writeContractAsync({
-        address: ENSOUL_MINTER_ADDRESS,
-        abi: ENSOUL_MINTER_ABI,
+        address: ENSOUL_MINTER_V2_ADDRESS,
+        abi: ENSOUL_MINTER_V2_ABI,
         functionName: "mint",
-        args: [agentURI],
-        value: mintFee,
+        args: [
+          agentURI,
+          (permitData.permit.handle_hash.startsWith("0x") ? permitData.permit.handle_hash : `0x${permitData.permit.handle_hash}`) as `0x${string}`,
+          BigInt(permitData.permit.price),
+          BigInt(permitData.permit.deadline),
+          BigInt(permitData.permit.nonce),
+          (permitData.permit.signature.startsWith("0x") ? permitData.permit.signature : `0x${permitData.permit.signature}`) as `0x${string}`,
+        ],
+        value: BigInt(permitData.price_wei),
         chainId: bsc.id,
       });
 
+      // Step 5: Wait for confirmation
       setMintStep(t("stepConfirm"));
       const receipt = await publicClient!.waitForTransactionReceipt({ hash: txHash });
       chainSuccess = receipt.status === "success";
@@ -176,7 +184,7 @@ export default function MintPage() {
         for (const log of receipt.logs) {
           try {
             const decoded = decodeEventLog({
-              abi: ENSOUL_MINTER_ABI,
+              abi: ENSOUL_MINTER_V2_ABI,
               data: log.data,
               topics: log.topics,
             });
@@ -191,16 +199,10 @@ export default function MintPage() {
       await shellApi.confirm(preview.handle, txHash, address, signature, agentId);
       router.push(`/soul/${preview.handle}`);
     } catch (err: unknown) {
-      // Only cancel the pending DB record if:
-      // 1. DB record was actually created (dbCreated)
-      // 2. On-chain tx did NOT succeed (chainSuccess is false)
-      // If chain succeeded but confirm failed, do NOT cancel — the NFT exists on-chain!
       if (dbCreated && !chainSuccess && preview && address && signature) {
         try {
           await shellApi.cancel(preview.handle, address, signature);
-        } catch {
-          // Best-effort cleanup; pending_cleanup cron will catch it eventually
-        }
+        } catch {}
       }
       setError(err instanceof Error ? err.message : "Minting failed");
       setMinting(false);
@@ -302,6 +304,22 @@ export default function MintPage() {
             </p>
           </div>
 
+          {/* Price info card */}
+          {priceInfo && (
+            <div className="rounded-lg border border-[#8b5cf6]/20 bg-[#8b5cf6]/5 p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <span className="text-sm text-[#94a3b8]">
+                    {priceInfo.followers.toLocaleString()} {t("followers")} · {t("tier")}: {priceInfo.tier}
+                  </span>
+                </div>
+                <span className="font-mono text-lg font-bold text-[#8b5cf6]">
+                  {formatBNB(priceInfo.price_bnb)} BNB
+                </span>
+              </div>
+            </div>
+          )}
+
           <div className="grid gap-6 lg:grid-cols-2">
             <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
               <h3 className="mb-4 text-sm font-medium text-[#94a3b8]">
@@ -341,7 +359,9 @@ export default function MintPage() {
               disabled={minting}
               className="rounded-lg bg-[#8b5cf6] px-8 py-3 text-sm font-bold text-white transition-colors hover:bg-[#a78bfa] disabled:opacity-50"
             >
-              {minting ? t("minting") : t("mintNow") + ` (${formatBNB(mintFee)} BNB)`}
+              {minting
+                ? t("minting")
+                : `${t("mintNow")} (${priceInfo ? formatBNB(priceInfo.price_bnb) : "..."} BNB)`}
             </button>
             {mintStep && (
               <p className="mt-3 text-sm text-[#8b5cf6]">{mintStep}</p>

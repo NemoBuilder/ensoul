@@ -1,0 +1,153 @@
+package services
+
+import (
+	"context"
+	"fmt"
+	"math/big"
+	"time"
+
+	"github.com/ensoul-labs/ensoul-server/chain"
+	"github.com/ensoul-labs/ensoul-server/config"
+	"github.com/ensoul-labs/ensoul-server/database"
+	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/util"
+)
+
+const (
+	// MintRevenueRetainPct — percentage of mint BNB retained by Treasury
+	MintRevenueRetainPct = 30
+	// MintRevenueBuybackPct — percentage of mint BNB used for buyback
+	MintRevenueBuybackPct = 70
+	// SubscriptionRevenueBuybackPct — percentage of subscription revenue for buyback
+	SubscriptionRevenueBuybackPct = 40
+	// SwapSlippageBps — default slippage tolerance for PancakeSwap (5%)
+	SwapSlippageBps = 500
+)
+
+// ProcessMintRevenue handles BNB received from an NFT mint.
+// 30% retained in Treasury, 70% swapped to $Ensoul and deposited to mining pool.
+func ProcessMintRevenue(bnbAmountWei *big.Int) error {
+	if bnbAmountWei == nil || bnbAmountWei.Sign() <= 0 {
+		return fmt.Errorf("invalid BNB amount")
+	}
+
+	// Calculate 70% for buyback
+	buybackAmount := new(big.Int).Mul(bnbAmountWei, big.NewInt(MintRevenueBuybackPct))
+	buybackAmount.Div(buybackAmount, big.NewInt(100))
+
+	if buybackAmount.Sign() <= 0 {
+		util.Log.Info("[buyback] Mint revenue too small for buyback, skipping")
+		return nil
+	}
+
+	return executeBuyback(buybackAmount, "mint_revenue")
+}
+
+// ProcessSubscriptionRevenue handles USDT received from subscriptions.
+// 40% converted to BNB then swapped to $Ensoul and deposited to mining pool.
+// Note: In Phase 3, this will be called after subscription payment verification.
+func ProcessSubscriptionRevenue(usdAmountWei *big.Int) error {
+	if usdAmountWei == nil || usdAmountWei.Sign() <= 0 {
+		return fmt.Errorf("invalid USD amount")
+	}
+
+	// Calculate 40% for buyback
+	buybackAmount := new(big.Int).Mul(usdAmountWei, big.NewInt(SubscriptionRevenueBuybackPct))
+	buybackAmount.Div(buybackAmount, big.NewInt(100))
+
+	if buybackAmount.Sign() <= 0 {
+		util.Log.Info("[buyback] Subscription revenue too small for buyback, skipping")
+		return nil
+	}
+
+	// TODO Phase 3: Convert USDT → BNB first, then BNB → $Ensoul
+	// For now, log and skip the USDT→BNB step
+	util.Log.Info("[buyback] Subscription buyback queued: %s USDT (40%%)", buybackAmount.String())
+	return nil
+}
+
+// executeBuyback performs the actual BNB → $Ensoul swap and deposits to mining pool.
+func executeBuyback(bnbAmountWei *big.Int, source string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	buybackKey, err := chain.ParsePrivateKey(config.Cfg.BuybackPrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse buyback wallet key: %w", err)
+	}
+
+	// Get swap quote for logging
+	quote, err := chain.GetSwapQuote(ctx, bnbAmountWei)
+	if err != nil {
+		util.Log.Warn("[buyback] Failed to get swap quote: %v", err)
+		// Continue anyway — the swap will use on-chain slippage protection
+	} else {
+		util.Log.Info("[buyback] Swap quote: %s BNB → ~%s $Ensoul", bnbAmountWei.String(), quote.String())
+	}
+
+	// Execute swap
+	txHash, minOut, err := chain.SwapBNBForToken(ctx, buybackKey, bnbAmountWei, SwapSlippageBps)
+	if err != nil {
+		return fmt.Errorf("buyback swap failed: %w", err)
+	}
+
+	// Wait for confirmation
+	success, err := chain.WaitForTokenTx(ctx, txHash)
+	if err != nil || !success {
+		util.Log.Error("[buyback] Swap tx failed: %s, err: %v", txHash, err)
+		// Record failed buyback
+		record := &models.BuybackRecord{
+			Source:     source,
+			BNBAmount:  weiToFloat(bnbAmountWei),
+			SwapTxHash: txHash,
+		}
+		database.DB.Create(record)
+		return fmt.Errorf("buyback swap tx failed: %s", txHash)
+	}
+
+	tokenAmount := weiToFloat(minOut)
+
+	// Record successful buyback
+	record := &models.BuybackRecord{
+		Source:      source,
+		BNBAmount:   weiToFloat(bnbAmountWei),
+		TokenAmount: tokenAmount,
+		SwapTxHash:  txHash,
+	}
+	if err := database.DB.Create(record).Error; err != nil {
+		util.Log.Error("[buyback] Failed to save buyback record: %v", err)
+	}
+
+	// Deposit swapped $Ensoul to mining pool
+	if err := DepositToPool(tokenAmount, "buyback_"+source); err != nil {
+		util.Log.Error("[buyback] Failed to deposit to mining pool: %v", err)
+		return err
+	}
+
+	util.Log.Info("[buyback] Completed: %s BNB → %.4f $Ensoul (source: %s, tx: %s)",
+		bnbAmountWei.String(), tokenAmount, source, txHash)
+	return nil
+}
+
+// weiToFloat converts a *big.Int wei value to float64 token amount (18 decimals).
+func weiToFloat(wei *big.Int) float64 {
+	if wei == nil {
+		return 0
+	}
+	f := new(big.Float).SetInt(wei)
+	divisor := new(big.Float).SetFloat64(1e18)
+	result, _ := new(big.Float).Quo(f, divisor).Float64()
+	return result
+}
+
+// GetBuybackHistory returns recent buyback records.
+func GetBuybackHistory(limit int) ([]models.BuybackRecord, error) {
+	if limit <= 0 || limit > 100 {
+		limit = 20
+	}
+	var records []models.BuybackRecord
+	if err := database.DB.Order("created_at DESC").Limit(limit).Find(&records).Error; err != nil {
+		return nil, err
+	}
+	return records, nil
+}

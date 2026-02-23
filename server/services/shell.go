@@ -2,11 +2,13 @@ package services
 
 import (
 	"fmt"
+	"math/big"
 	"regexp"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
@@ -272,6 +274,21 @@ func buildTwitterMeta(profile *TwitterProfile) map[string]interface{} {
 	return meta
 }
 
+// GetMintPriceForHandle fetches the follower count for a handle via SocialData
+// and returns the tiered mint price in wei.
+func GetMintPriceForHandle(handle string) (priceWei *big.Int, followers int, tier string, err error) {
+	profile, err := FetchTwitterProfile(handle)
+	if err != nil {
+		return nil, 0, "", fmt.Errorf("failed to fetch profile for @%s: %w", handle, err)
+	}
+
+	followers = profile.User.PublicMetrics.FollowersCount
+	priceWei = chain.GetMintPrice(followers)
+	tier = chain.GetMintPriceTier(followers)
+
+	return priceWei, followers, tier, nil
+}
+
 // PendingMintTimeout is how long a pending mint reservation lasts before cleanup.
 const PendingMintTimeout = 30 * time.Minute
 
@@ -301,13 +318,6 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 		} else {
 			return nil, fmt.Errorf("a soul for @%s already exists", handle)
 		}
-	}
-
-	// Limit: each wallet can mint at most 3 confirmed shells (exclude pending)
-	var mintCount int64
-	database.DB.Model(&models.Shell{}).Where("LOWER(owner_addr) = LOWER(?) AND stage != ?", ownerAddr, models.StagePending).Count(&mintCount)
-	if mintCount >= 3 {
-		return nil, fmt.Errorf("each wallet can mint at most 3 souls")
 	}
 
 	// Build dimensions JSON

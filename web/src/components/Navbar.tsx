@@ -45,6 +45,8 @@ export default function Navbar() {
               { href: "/explore" as const, label: t("explore") },
               { href: "/mint" as const, label: t("mint") },
               { href: "/claw" as const, label: t("claws") },
+              { href: "/mining" as const, label: t("mining") },
+              { href: "/sniper" as const, label: t("sniper") },
               { href: "/leaderboard" as const, label: t("leaderboard") },
             ].map((item) => (
               <Link
@@ -150,6 +152,20 @@ export default function Navbar() {
                         >
                           <span>🦞</span>
                           <span>{t("clawDashboard")}</span>
+                        </Link>
+                        <Link
+                          href="/sniper/dashboard"
+                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                        >
+                          <span>🎯</span>
+                          <span>{t("sniperDashboard")}</span>
+                        </Link>
+                        <Link
+                          href="/holder"
+                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                        >
+                          <span>💰</span>
+                          <span>{t("holderRevenue")}</span>
                         </Link>
                         <button
                           onClick={() => { setMenuOpen(false); openChainModal(); }}
