@@ -14,24 +14,30 @@ import (
 )
 
 const (
+	// MintRevenueBuybackPct — percentage of mint BNB used for buyback
+	MintRevenueBuybackPct = 60
+	// MintRevenuePoolPct — percentage of mint BNB added to holder revenue pool
+	MintRevenuePoolPct = 10
 	// MintRevenueRetainPct — percentage of mint BNB retained by Treasury
 	MintRevenueRetainPct = 30
-	// MintRevenueBuybackPct — percentage of mint BNB used for buyback
-	MintRevenueBuybackPct = 70
 	// SubscriptionRevenueBuybackPct — percentage of subscription revenue for buyback
 	SubscriptionRevenueBuybackPct = 40
+	// SubscriptionRevenuePoolPct — percentage of subscription revenue for holder revenue pool
+	SubscriptionRevenuePoolPct = 10
+	// SubscriptionRevenueRetainPct — percentage of subscription revenue retained by Treasury
+	SubscriptionRevenueRetainPct = 50
 	// SwapSlippageBps — default slippage tolerance for PancakeSwap (5%)
 	SwapSlippageBps = 500
 )
 
 // ProcessMintRevenue handles BNB received from an NFT mint.
-// 30% retained in Treasury, 70% swapped to $Ensoul and deposited to mining pool.
+// 60% swapped to $Ensoul → mining pool, 10% → holder revenue pool, 30% retained in Treasury.
 func ProcessMintRevenue(bnbAmountWei *big.Int) error {
 	if bnbAmountWei == nil || bnbAmountWei.Sign() <= 0 {
 		return fmt.Errorf("invalid BNB amount")
 	}
 
-	// Calculate 70% for buyback
+	// Calculate 60% for buyback
 	buybackAmount := new(big.Int).Mul(bnbAmountWei, big.NewInt(MintRevenueBuybackPct))
 	buybackAmount.Div(buybackAmount, big.NewInt(100))
 
@@ -40,12 +46,18 @@ func ProcessMintRevenue(bnbAmountWei *big.Int) error {
 		return nil
 	}
 
+	// Feed 10% into holder revenue pool
+	totalFloat := weiToFloat(bnbAmountWei)
+	poolAmount := totalFloat * float64(MintRevenuePoolPct) / 100.0
+	AddToRevenuePool(poolAmount)
+	util.Log.Info("[buyback] Mint revenue: added %.4f to revenue pool (10%%)", poolAmount)
+
 	return executeBuyback(buybackAmount, "mint_revenue")
 }
 
 // ProcessSubscriptionRevenue handles USDT received from subscriptions.
 // 40% converted: USDT → BNB via PancakeSwap, then BNB → $Ensoul, deposited to mining pool.
-// 60% split: 15% to Revenue Pool (holder revenue), 45% retained in Treasury.
+// 10% to Revenue Pool (holder revenue), 50% retained in Treasury.
 func ProcessSubscriptionRevenue(usdAmountWei *big.Int) error {
 	if usdAmountWei == nil || usdAmountWei.Sign() <= 0 {
 		return fmt.Errorf("invalid USD amount")
@@ -214,9 +226,40 @@ func ProcessSubscriptionRevenueAsync(paymentAmountWei *big.Int) {
 			util.Log.Error("[buyback] Subscription revenue buyback failed: %v", err)
 		}
 
-		// 2. Feed revenue into monthly holder pool (15% of total)
+		// 2. Feed 10% into monthly holder revenue pool
 		totalFloat := weiToFloat(amount)
-		AddToRevenuePool(totalFloat)
-		util.Log.Info("[buyback] Added %.4f to revenue pool from subscription", totalFloat)
+		poolAmount := totalFloat * float64(SubscriptionRevenuePoolPct) / 100.0
+		AddToRevenuePool(poolAmount)
+		util.Log.Info("[buyback] Subscription revenue: added %.4f to revenue pool (10%%)", poolAmount)
+	}()
+}
+
+// ProcessBNBSubscriptionRevenueAsync handles BNB-denominated subscription payments.
+// Same 40/10/50 split as USDT subscriptions, but skips the USDT→BNB conversion step.
+func ProcessBNBSubscriptionRevenueAsync(bnbAmountWei *big.Int) {
+	if config.Cfg.BuybackPrivateKey == "" {
+		util.Log.Debug("[buyback] BUYBACK_PRIVATE_KEY not configured, skipping subscription buyback")
+		return
+	}
+	if bnbAmountWei == nil || bnbAmountWei.Sign() <= 0 {
+		return
+	}
+	amount := new(big.Int).Set(bnbAmountWei)
+	go func() {
+		// 1. Take 40% BNB → directly swap to $Ensoul → mining pool
+		buybackAmount := new(big.Int).Mul(amount, big.NewInt(SubscriptionRevenueBuybackPct))
+		buybackAmount.Div(buybackAmount, big.NewInt(100))
+
+		if buybackAmount.Sign() > 0 {
+			if err := executeBuyback(buybackAmount, "subscription_revenue_bnb"); err != nil {
+				util.Log.Error("[buyback] BNB subscription buyback failed: %v", err)
+			}
+		}
+
+		// 2. Feed 10% into monthly holder revenue pool
+		totalFloat := weiToFloat(amount)
+		poolAmount := totalFloat * float64(SubscriptionRevenuePoolPct) / 100.0
+		AddToRevenuePool(poolAmount)
+		util.Log.Info("[buyback] BNB subscription revenue: added %.4f to revenue pool (10%%)", poolAmount)
 	}()
 }

@@ -303,22 +303,26 @@ func GetRevenueForPeriod(walletAddr, period string) ([]models.HolderRevenue, err
 	return revenues, nil
 }
 
-// AddToRevenuePool adds subscription revenue to the monthly pool.
-// Called when subscription payments are processed.
-func AddToRevenuePool(amount float64) {
+// AddToRevenuePool adds a pre-calculated amount to the monthly holder revenue pool.
+// The caller is responsible for computing the correct pool amount (e.g. 10% of revenue).
+// TotalRevenue tracks the cumulative pool deposits for the period.
+func AddToRevenuePool(poolAmount float64) {
+	if poolAmount <= 0 {
+		return
+	}
 	period := currentPeriod()
 
 	var pool models.RevenuePool
 	if err := database.DB.Where("period = ?", period).First(&pool).Error; err != nil {
 		pool = models.RevenuePool{
 			Period:       period,
-			TotalRevenue: amount,
-			PoolAmount:   amount * 0.15, // 15% goes to holder revenue
+			TotalRevenue: poolAmount,
+			PoolAmount:   poolAmount,
 		}
 		database.DB.Create(&pool)
 	} else {
-		pool.TotalRevenue += amount
-		pool.PoolAmount += amount * 0.15
+		pool.TotalRevenue += poolAmount
+		pool.PoolAmount += poolAmount
 		database.DB.Save(&pool)
 	}
 }

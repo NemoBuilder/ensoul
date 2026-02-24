@@ -61,8 +61,10 @@ func CreateSubscription(walletAddr, tier, paymentTxHash, paymentToken string, pa
 }
 
 // triggerSubscriptionFlywheel routes subscription payment into the economic flywheel.
-// For USDT payments: 40% → USDT→BNB→$Ensoul → mining pool, 15% → revenue pool.
-// For BNB payments: treated as mint revenue (70% buyback).
+// All subscription revenue follows the same split regardless of payment token:
+//   40% → buyback $Ensoul → mining pool, 10% → holder revenue pool, 50% → treasury.
+// For USDT: requires USDT→BNB conversion first.
+// For BNB: skips the USDT→BNB step, directly uses BNB for buyback.
 func triggerSubscriptionFlywheel(paymentToken string, paymentAmount float64) {
 	if paymentAmount <= 0 {
 		return
@@ -73,16 +75,16 @@ func triggerSubscriptionFlywheel(paymentToken string, paymentAmount float64) {
 
 	switch paymentToken {
 	case "USDT":
+		// USDT path: 40% USDT→BNB→$Ensoul + 10% revenue pool (handled inside Async)
 		ProcessSubscriptionRevenueAsync(amountWei)
 	case "BNB":
-		// BNB payment: treat like mint revenue (skip USDT→BNB step)
-		ProcessMintRevenueAsync(amountWei)
-		// Also feed revenue pool
-		AddToRevenuePool(paymentAmount)
+		// BNB path: same 40/10/50 split, but skip USDT→BNB step
+		ProcessBNBSubscriptionRevenueAsync(amountWei)
 	default:
-		// $ENSOUL or other tokens: just feed revenue pool
-		AddToRevenuePool(paymentAmount)
-		util.Log.Info("[subscription] %s payment — added %.4f to revenue pool (no buyback for this token)", paymentToken, paymentAmount)
+		// $ENSOUL or other tokens: only feed revenue pool (10% of amount)
+		poolAmount := paymentAmount * float64(SubscriptionRevenuePoolPct) / 100.0
+		AddToRevenuePool(poolAmount)
+		util.Log.Info("[subscription] %s payment — added %.4f to revenue pool (no buyback for this token)", paymentToken, poolAmount)
 	}
 }
 
