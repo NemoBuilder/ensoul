@@ -173,6 +173,14 @@ func swapAndDistribute(ctx context.Context, buybackKey *ecdsa.PrivateKey,
 		util.Log.Info("[buyback] Swap quote: %s BNB → ~%s $Ensoul", bnbAmountWei.String(), quote.String())
 	}
 
+	// Record $Ensoul balance BEFORE swap, so we can compute actual received amount
+	buybackAddr := chain.AddressFromKey(buybackKey).Hex()
+	balanceBefore, err := chain.GetTokenBalance(ctx, buybackAddr)
+	if err != nil {
+		util.Log.Warn("[buyback] Failed to get pre-swap balance, will fall back to minOut: %v", err)
+		balanceBefore = nil
+	}
+
 	// Execute BNB → $Ensoul swap. Output tokens land in Buyback wallet (fromAddr).
 	txHash, minOut, err := chain.SwapBNBForToken(ctx, buybackKey, bnbAmountWei, SwapSlippageBps)
 	if err != nil {
@@ -192,7 +200,20 @@ func swapAndDistribute(ctx context.Context, buybackKey *ecdsa.PrivateKey,
 		return fmt.Errorf("buyback swap tx failed: %s", txHash)
 	}
 
-	totalTokenWei := minOut // $Ensoul received (in wei), sitting in Buyback wallet
+	// Determine actual $Ensoul received: prefer (balanceAfter - balanceBefore) over minOut
+	totalTokenWei := minOut // fallback to slippage-adjusted minimum
+	if balanceBefore != nil {
+		balanceAfter, err := chain.GetTokenBalance(ctx, buybackAddr)
+		if err == nil && balanceAfter != nil {
+			actualReceived := new(big.Int).Sub(balanceAfter, balanceBefore)
+			if actualReceived.Sign() > 0 {
+				util.Log.Info("[buyback] Actual swap output: %s $Ensoul (minOut was %s, delta: +%s)",
+					actualReceived.String(), minOut.String(),
+					new(big.Int).Sub(actualReceived, minOut).String())
+				totalTokenWei = actualReceived
+			}
+		}
+	}
 
 	// Calculate split: mining share and revenue pool share
 	totalParts := int64(buybackPct + poolPct)
