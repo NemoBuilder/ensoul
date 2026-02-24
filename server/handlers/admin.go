@@ -266,10 +266,13 @@ func AdminTriggerMint(c *gin.Context) {
 
 // AdminTaxWalletStatus handles GET /api/admin/tax-wallet/status
 func AdminTaxWalletStatus(c *gin.Context) {
+	var balanceStr string
 	balance, err := services.GetTaxWalletBalance()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-		return
+		// Not configured or chain unavailable — return "0" with a warning instead of 500
+		balanceStr = "0"
+	} else {
+		balanceStr = balance.String()
 	}
 
 	// Count candidates by status
@@ -278,14 +281,19 @@ func AdminTaxWalletStatus(c *gin.Context) {
 	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusMinted).Count(&mintedCount)
 	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusFailed).Count(&failedCount)
 
-	c.JSON(http.StatusOK, gin.H{
-		"balance_wei": balance.String(),
+	resp := gin.H{
+		"balance_wei": balanceStr,
 		"candidates": gin.H{
 			"pending": pendingCount,
 			"minted":  mintedCount,
 			"failed":  failedCount,
 		},
-	})
+	}
+	if err != nil {
+		resp["warning"] = err.Error()
+	}
+
+	c.JSON(http.StatusOK, resp)
 }
 
 // AdminMintSingle handles POST /api/admin/tax-wallet/mint/:handle

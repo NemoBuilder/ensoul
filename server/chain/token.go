@@ -158,6 +158,46 @@ func ApproveToken(ctx context.Context, ownerKey *ecdsa.PrivateKey, spender strin
 	return signedTx.Hash().Hex(), nil
 }
 
+// TransferBNB sends native BNB from a wallet to a recipient.
+// Returns the transaction hash.
+func TransferBNB(ctx context.Context, fromKey *ecdsa.PrivateKey, to string, amount *big.Int) (string, error) {
+	if C == nil {
+		return "", fmt.Errorf("chain client not initialized")
+	}
+
+	fromAddr := crypto.PubkeyToAddress(fromKey.PublicKey)
+	toAddr := common.HexToAddress(to)
+
+	nonce, err := C.ethClient.PendingNonceAt(ctx, fromAddr)
+	if err != nil {
+		return "", fmt.Errorf("failed to get nonce: %w", err)
+	}
+
+	gasPrice, err := C.ethClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get gas price: %w", err)
+	}
+
+	// Native BNB transfer uses a fixed 21000 gas
+	gasLimit := uint64(21000)
+
+	tx := types.NewTransaction(nonce, toAddr, amount, gasLimit, gasPrice, nil)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(C.chainID), fromKey)
+	if err != nil {
+		return "", fmt.Errorf("failed to sign tx: %w", err)
+	}
+
+	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
+		return "", fmt.Errorf("failed to send tx: %w", err)
+	}
+
+	txHash := signedTx.Hash().Hex()
+	util.Log.Debug("[chain] Transfer %s BNB from %s to %s, tx=%s",
+		amount.String(), fromAddr.Hex(), to, txHash)
+
+	return txHash, nil
+}
+
 // WaitForTokenTx waits for a token transaction to be mined and returns success status.
 func WaitForTokenTx(ctx context.Context, txHash string) (bool, error) {
 	if C == nil {
