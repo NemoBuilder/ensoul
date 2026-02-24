@@ -52,7 +52,9 @@ function KPICard({ label, value, sub, color = "text-[#8b5cf6]" }: {
 
 // ─── SVG Flow Diagram ────────────────────────────────────────
 function FlywheelDiagram({ t, data }: { t: ReturnType<typeof useTranslations>; data: EconomyOverview }) {
-  const { split_config: split, wallets, last_buyback } = data;
+  const split = data.split_config || { mint_buyback_pct: 60, mint_treasury_pct: 10, mint_revenue_pool_pct: 30, sub_buyback_pct: 40, sub_treasury_pct: 10, sub_revenue_pool_pct: 50 };
+  const wallets = data.wallets || { buyback_bnb: 0, buyback_token: 0, buyback_addr: "", mining_pool_token: 0, mining_pool_addr: "", revenue_pool_token: 0, revenue_pool_addr: "", treasury_addr: "" };
+  const last_buyback = data.last_buyback;
 
   // Compute last buyback split amounts for arrow labels
   const lastToken = last_buyback?.token_amount ?? 0;
@@ -132,14 +134,14 @@ function FlywheelDiagram({ t, data }: { t: ReturnType<typeof useTranslations>; d
           <div className="absolute left-[80px] top-[10px] w-[180px]">
             <div className="cursor-pointer rounded-lg border border-[#8b5cf6]/40 bg-[#8b5cf6]/10 px-4 py-3 text-center transition hover:border-[#8b5cf6]/70">
               <p className="text-sm font-semibold text-[#c4b5fd]">🪙 {t("mintRevenue")}</p>
-              <p className="mt-1 font-mono text-xs text-[#8b5cf6]">{fmtBNB(data.buyback.mint_revenue_bnb)} BNB</p>
+              <p className="mt-1 font-mono text-xs text-[#8b5cf6]">{fmtBNB(data.buyback?.mint_revenue_bnb ?? 0)} BNB</p>
             </div>
           </div>
 
           <div className="absolute left-[460px] top-[10px] w-[180px]">
             <div className="cursor-pointer rounded-lg border border-[#06b6d4]/40 bg-[#06b6d4]/10 px-4 py-3 text-center transition hover:border-[#06b6d4]/70">
               <p className="text-sm font-semibold text-[#67e8f9]">📡 {t("subRevenue")}</p>
-              <p className="mt-1 font-mono text-xs text-[#06b6d4]">{fmtBNB(data.buyback.sub_revenue_bnb)} BNB</p>
+              <p className="mt-1 font-mono text-xs text-[#06b6d4]">{fmtBNB(data.buyback?.sub_revenue_bnb ?? 0)} BNB</p>
             </div>
           </div>
 
@@ -214,7 +216,7 @@ function FlywheelDiagram({ t, data }: { t: ReturnType<typeof useTranslations>; d
             <Link href="/mining" className="text-xs font-medium text-[#4ade80] underline decoration-dotted hover:text-[#86efac]">
               → {t("clawRewards")}
             </Link>
-            <p className="mt-0.5 text-[10px] text-[#64748b]">{t("dailyRelease")}: {fmt(data.mining_pool.daily_limit)}/d</p>
+            <p className="mt-0.5 text-[10px] text-[#64748b]">{t("dailyRelease")}: {fmt(data.mining_pool?.daily_limit ?? 0)}/d</p>
           </div>
           <div className="absolute left-[270px] top-[440px] w-[180px] text-center">
             <p className="text-xs font-medium text-[#60a5fa]">→ {t("coldStorage")}</p>
@@ -278,19 +280,19 @@ export default function EconomyPage() {
         />
         <KPICard
           label={t("tokenSupply")}
-          value={fmt(data.token_info.total_supply) + " $Ensoul"}
+          value={fmt(data.token_info?.total_supply ?? 0) + " $Ensoul"}
           sub={t("totalCirculating")}
           color="text-[#fbbf24]"
         />
         <KPICard
           label={t("totalBuyback")}
-          value={fmt(data.buyback.total_token_bought) + " $Ensoul"}
-          sub={fmtBNB(data.buyback.total_bnb_spent) + " BNB " + t("spent")}
+          value={fmt(data.buyback?.total_token_bought ?? 0) + " $Ensoul"}
+          sub={fmtBNB(data.buyback?.total_bnb_spent ?? 0) + " BNB " + t("spent")}
         />
         <KPICard
           label={t("miningPoolBalance")}
-          value={fmt(data.mining_pool.balance) + " $Ensoul"}
-          sub={t("dailyLimit") + ": " + fmt(data.mining_pool.daily_limit)}
+          value={fmt(data.mining_pool?.balance ?? 0) + " $Ensoul"}
+          sub={t("dailyLimit") + ": " + fmt(data.mining_pool?.daily_limit ?? 0)}
           color="text-[#4ade80]"
         />
         <KPICard
@@ -391,21 +393,21 @@ export default function EconomyPage() {
         <div className="mb-4 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-[#e2e8f0]">{t("miningPoolDetails")}</h2>
           <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-            data.mining_pool.paused
+            data.mining_pool?.paused
               ? "bg-red-500/10 text-red-400"
               : "bg-green-500/10 text-green-400"
           }`}>
-            {data.mining_pool.paused ? t("paused") : t("active")}
+            {data.mining_pool?.paused ? t("paused") : t("active")}
           </span>
         </div>
         <div className="grid grid-cols-2 gap-4 sm:grid-cols-3">
           {[
-            { label: t("poolBalance"), value: fmt(data.mining_pool.balance) },
-            { label: t("dailyLimit"), value: fmt(data.mining_pool.daily_limit) },
-            { label: t("dailyReleased"), value: fmt(data.mining_pool.daily_released) },
-            { label: t("dailyRemaining"), value: fmt(data.mining_pool.daily_remaining) },
-            { label: t("totalDeposited"), value: fmt(data.mining_pool.total_deposited) },
-            { label: t("totalReleased"), value: fmt(data.mining_pool.total_released) },
+            { label: t("poolBalance"), value: fmt(data.mining_pool?.balance ?? 0) },
+            { label: t("dailyLimit"), value: fmt(data.mining_pool?.daily_limit ?? 0) },
+            { label: t("dailyReleased"), value: fmt(data.mining_pool?.daily_released ?? 0) },
+            { label: t("dailyRemaining"), value: fmt(data.mining_pool?.daily_remaining ?? 0) },
+            { label: t("totalDeposited"), value: fmt(data.mining_pool?.total_deposited ?? 0) },
+            { label: t("totalReleased"), value: fmt(data.mining_pool?.total_released ?? 0) },
           ].map((item) => (
             <div key={item.label} className="rounded-md bg-[#0a0a0f] p-3">
               <p className="text-xs text-[#94a3b8]">{item.label}</p>
