@@ -44,8 +44,8 @@ func ProcessMintRevenue(bnbAmountWei *big.Int) error {
 }
 
 // ProcessSubscriptionRevenue handles USDT received from subscriptions.
-// 40% converted to BNB then swapped to $Ensoul and deposited to mining pool.
-// Note: In Phase 3, this will be called after subscription payment verification.
+// 40% converted: USDT → BNB via PancakeSwap, then BNB → $Ensoul, deposited to mining pool.
+// 60% split: 15% to Revenue Pool (holder revenue), 45% retained in Treasury.
 func ProcessSubscriptionRevenue(usdAmountWei *big.Int) error {
 	if usdAmountWei == nil || usdAmountWei.Sign() <= 0 {
 		return fmt.Errorf("invalid USD amount")
@@ -60,10 +60,35 @@ func ProcessSubscriptionRevenue(usdAmountWei *big.Int) error {
 		return nil
 	}
 
-	// TODO Phase 3: Convert USDT → BNB first, then BNB → $Ensoul
-	// For now, log and skip the USDT→BNB step
-	util.Log.Info("[buyback] Subscription buyback queued: %s USDT (40%%)", buybackAmount.String())
-	return nil
+	util.Log.Info("[buyback] Processing subscription revenue: %s USDT total, %s USDT (40%%) for buyback",
+		usdAmountWei.String(), buybackAmount.String())
+
+	// Step 1: Swap USDT → BNB
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	buybackKey, err := chain.ParsePrivateKey(config.Cfg.BuybackPrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse buyback wallet key: %w", err)
+	}
+
+	swapTxHash, bnbMinOut, err := chain.SwapUSDTForBNB(ctx, buybackKey, buybackAmount, SwapSlippageBps)
+	if err != nil {
+		return fmt.Errorf("USDT→BNB swap failed: %w", err)
+	}
+
+	// Wait for USDT→BNB confirmation
+	success, err := chain.WaitForTokenTx(ctx, swapTxHash)
+	if err != nil || !success {
+		util.Log.Error("[buyback] USDT→BNB swap tx failed: %s, err: %v", swapTxHash, err)
+		return fmt.Errorf("USDT→BNB swap tx failed: %s", swapTxHash)
+	}
+
+	util.Log.Info("[buyback] USDT→BNB swap confirmed: %s USDT → ~%s BNB (tx: %s)",
+		buybackAmount.String(), bnbMinOut.String(), swapTxHash)
+
+	// Step 2: Swap BNB → $Ensoul (reuse existing path)
+	return executeBuyback(bnbMinOut, "subscription_revenue")
 }
 
 // executeBuyback performs the actual BNB → $Ensoul swap and deposits to mining pool.
@@ -150,4 +175,48 @@ func GetBuybackHistory(limit int) ([]models.BuybackRecord, error) {
 		return nil, err
 	}
 	return records, nil
+}
+
+// ProcessMintRevenueAsync triggers mint revenue buyback in a background goroutine.
+// Called after a user or tax-wallet mint is confirmed on-chain.
+// Safe to call from request handlers — won't block the response.
+func ProcessMintRevenueAsync(bnbAmountWei *big.Int) {
+	if config.Cfg.BuybackPrivateKey == "" {
+		util.Log.Debug("[buyback] BUYBACK_PRIVATE_KEY not configured, skipping mint revenue buyback")
+		return
+	}
+	if bnbAmountWei == nil || bnbAmountWei.Sign() <= 0 {
+		return
+	}
+	// Copy to avoid race conditions on the big.Int pointer
+	amount := new(big.Int).Set(bnbAmountWei)
+	go func() {
+		if err := ProcessMintRevenue(amount); err != nil {
+			util.Log.Error("[buyback] Mint revenue buyback failed: %v", err)
+		}
+	}()
+}
+
+// ProcessSubscriptionRevenueAsync triggers subscription revenue buyback + revenue pool deposit
+// in a background goroutine. Called after a subscription payment is verified.
+func ProcessSubscriptionRevenueAsync(paymentAmountWei *big.Int) {
+	if config.Cfg.BuybackPrivateKey == "" {
+		util.Log.Debug("[buyback] BUYBACK_PRIVATE_KEY not configured, skipping subscription buyback")
+		return
+	}
+	if paymentAmountWei == nil || paymentAmountWei.Sign() <= 0 {
+		return
+	}
+	amount := new(big.Int).Set(paymentAmountWei)
+	go func() {
+		// 1. Feed 40% into buyback (USDT → BNB → $Ensoul → mining pool)
+		if err := ProcessSubscriptionRevenue(amount); err != nil {
+			util.Log.Error("[buyback] Subscription revenue buyback failed: %v", err)
+		}
+
+		// 2. Feed revenue into monthly holder pool (15% of total)
+		totalFloat := weiToFloat(amount)
+		AddToRevenuePool(totalFloat)
+		util.Log.Info("[buyback] Added %.4f to revenue pool from subscription", totalFloat)
+	}()
 }

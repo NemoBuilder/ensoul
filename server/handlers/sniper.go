@@ -1,8 +1,11 @@
 package handlers
 
 import (
+	"context"
 	"net/http"
+	"time"
 
+	"github.com/ensoul-labs/ensoul-server/chain"
 	"github.com/ensoul-labs/ensoul-server/middleware"
 	"github.com/ensoul-labs/ensoul-server/services"
 	"github.com/gin-gonic/gin"
@@ -33,8 +36,17 @@ func SniperSubscribe(c *gin.Context) {
 		req.PaymentToken = "USDT"
 	}
 
-	// TODO Phase 3: Verify payment on-chain before creating subscription
-	// For now, trust the tx_hash (will add verification in production)
+	// Verify payment on-chain: check that the tx exists, succeeded, and was sent by this wallet
+	if chain.C != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
+		defer cancel()
+
+		_, _, err := chain.VerifyPaymentTx(ctx, req.PaymentTxHash, walletAddr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Payment verification failed: " + err.Error()})
+			return
+		}
+	}
 
 	sub, err := services.CreateSubscription(walletAddr, req.Tier, req.PaymentTxHash, req.PaymentToken, req.PaymentAmount)
 	if err != nil {

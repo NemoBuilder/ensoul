@@ -171,3 +171,48 @@ func WaitForTokenTx(ctx context.Context, txHash string) (bool, error) {
 
 	return receipt.Status == types.ReceiptStatusSuccessful, nil
 }
+
+// VerifyPaymentTx checks that a transaction exists, was successful, and was sent by
+// the expected sender. Returns the value transferred (in wei) and the recipient.
+// This is used to verify subscription or mint payments on-chain.
+func VerifyPaymentTx(ctx context.Context, txHashHex, expectedSender string) (value *big.Int, to string, err error) {
+	if C == nil {
+		return nil, "", fmt.Errorf("chain client not initialized")
+	}
+
+	txHash := common.HexToHash(txHashHex)
+
+	// Get receipt to check status
+	receipt, err := C.ethClient.TransactionReceipt(ctx, txHash)
+	if err != nil {
+		return nil, "", fmt.Errorf("tx not found or not yet mined: %w", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		return nil, "", fmt.Errorf("tx %s failed (status=0)", txHashHex)
+	}
+
+	// Get the full transaction to check sender and value
+	tx, _, err := C.ethClient.TransactionByHash(ctx, txHash)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to get tx details: %w", err)
+	}
+
+	// Recover sender from the transaction
+	signer := types.LatestSignerForChainID(C.chainID)
+	sender, err := types.Sender(signer, tx)
+	if err != nil {
+		return nil, "", fmt.Errorf("failed to recover sender: %w", err)
+	}
+
+	// Verify sender matches
+	if !strings.EqualFold(sender.Hex(), expectedSender) {
+		return nil, "", fmt.Errorf("sender mismatch: tx from %s, expected %s", sender.Hex(), expectedSender)
+	}
+
+	toAddr := ""
+	if tx.To() != nil {
+		toAddr = tx.To().Hex()
+	}
+
+	return tx.Value(), toAddr, nil
+}

@@ -30,6 +30,10 @@ func CreateSubscription(walletAddr, tier, paymentTxHash, paymentToken string, pa
 		existing.PaymentAmount += paymentAmount
 		database.DB.Save(&existing)
 		util.Log.Info("[subscription] Extended %s subscription for %s until %s", tier, walletAddr, existing.ExpiresAt)
+
+		// Trigger economic flywheel: buyback + revenue pool
+		triggerSubscriptionFlywheel(paymentToken, paymentAmount)
+
 		return &existing, nil
 	}
 
@@ -49,7 +53,37 @@ func CreateSubscription(walletAddr, tier, paymentTxHash, paymentToken string, pa
 	}
 
 	util.Log.Info("[subscription] Created %s subscription for %s (expires: %s)", tier, walletAddr, sub.ExpiresAt)
+
+	// Trigger economic flywheel: buyback + revenue pool
+	triggerSubscriptionFlywheel(paymentToken, paymentAmount)
+
 	return sub, nil
+}
+
+// triggerSubscriptionFlywheel routes subscription payment into the economic flywheel.
+// For USDT payments: 40% → USDT→BNB→$Ensoul → mining pool, 15% → revenue pool.
+// For BNB payments: treated as mint revenue (70% buyback).
+func triggerSubscriptionFlywheel(paymentToken string, paymentAmount float64) {
+	if paymentAmount <= 0 {
+		return
+	}
+
+	// Convert float amount to wei (18 decimals)
+	amountWei := toWei(paymentAmount)
+
+	switch paymentToken {
+	case "USDT":
+		ProcessSubscriptionRevenueAsync(amountWei)
+	case "BNB":
+		// BNB payment: treat like mint revenue (skip USDT→BNB step)
+		ProcessMintRevenueAsync(amountWei)
+		// Also feed revenue pool
+		AddToRevenuePool(paymentAmount)
+	default:
+		// $ENSOUL or other tokens: just feed revenue pool
+		AddToRevenuePool(paymentAmount)
+		util.Log.Info("[subscription] %s payment — added %.4f to revenue pool (no buyback for this token)", paymentToken, paymentAmount)
+	}
 }
 
 // GetActiveSubscription returns the user's active subscription, if any.
@@ -93,15 +127,15 @@ func GetSubscriptionStatus(walletAddr string) (map[string]interface{}, error) {
 		Count(&replyCount)
 
 	return map[string]interface{}{
-		"active":          true,
-		"tier":            sub.Tier,
-		"llm_model":       sub.LLMModel,
-		"expires_at":      sub.ExpiresAt,
-		"kol_count":       kolCount,
-		"kol_limit":       tierCfg.MaxKOLs,
-		"daily_replies":   replyCount,
-		"daily_limit":     tierCfg.DailyReplies,
-		"payment_token":   sub.PaymentToken,
+		"active":        true,
+		"tier":          sub.Tier,
+		"llm_model":     sub.LLMModel,
+		"expires_at":    sub.ExpiresAt,
+		"kol_count":     kolCount,
+		"kol_limit":     tierCfg.MaxKOLs,
+		"daily_replies": replyCount,
+		"daily_limit":   tierCfg.DailyReplies,
+		"payment_token": sub.PaymentToken,
 	}, nil
 }
 

@@ -361,7 +361,9 @@ func MintShell(handle, ownerAddr string, preview *SeedPreview) (*models.Shell, e
 // ConfirmMint updates a shell record with on-chain data after the user mints.
 // Transitions the shell from pending → embryo.
 // Only the original minter wallet can confirm, and only pending shells can be confirmed.
-func ConfirmMint(handle, txHash string, agentID uint64, walletAddr string) error {
+// If mintPriceWei is provided (non-nil, > 0), it is used directly for the buyback trigger;
+// otherwise the price is fetched from the Twitter profile (costs one API call).
+func ConfirmMint(handle, txHash string, agentID uint64, walletAddr string, mintPriceWei ...*big.Int) error {
 	// Atomic update: only succeeds if stage is still pending AND wallet matches
 	result := database.DB.Model(&models.Shell{}).
 		Where("LOWER(handle) = ? AND stage = ? AND LOWER(owner_addr) = LOWER(?)", handle, models.StagePending, walletAddr).
@@ -385,6 +387,25 @@ func ConfirmMint(handle, txHash string, agentID uint64, walletAddr string) error
 		return fmt.Errorf("wallet mismatch: only the original minter can confirm")
 	}
 	util.Log.Info("[services] Shell @%s confirmed on-chain: agentId=%d, tx=%s", handle, agentID, txHash)
+
+	// Trigger buyback flywheel: route 70% of mint revenue to buyback
+	var priceWei *big.Int
+	if len(mintPriceWei) > 0 && mintPriceWei[0] != nil && mintPriceWei[0].Sign() > 0 {
+		priceWei = mintPriceWei[0]
+	}
+	go func() {
+		if priceWei == nil {
+			// Caller didn't provide price — look it up (user-mint path)
+			var err error
+			priceWei, _, _, err = GetMintPriceForHandle(handle)
+			if err != nil {
+				util.Log.Warn("[buyback] Failed to get mint price for @%s buyback: %v", handle, err)
+				return
+			}
+		}
+		ProcessMintRevenueAsync(priceWei)
+	}()
+
 	return nil
 }
 

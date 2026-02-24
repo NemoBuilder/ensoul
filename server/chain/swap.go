@@ -21,6 +21,7 @@ import (
 // PancakeSwap V2 Router partial ABI
 const pancakeRouterABI = `[
 	{"inputs":[{"name":"amountOutMin","type":"uint256"},{"name":"path","type":"address[]"},{"name":"to","type":"address"},{"name":"deadline","type":"uint256"}],"name":"swapExactETHForTokens","outputs":[{"name":"amounts","type":"uint256[]"}],"stateMutability":"payable","type":"function"},
+	{"inputs":[{"name":"amountIn","type":"uint256"},{"name":"amountOutMin","type":"uint256"},{"name":"path","type":"address[]"},{"name":"to","type":"address"},{"name":"deadline","type":"uint256"}],"name":"swapExactTokensForETH","outputs":[{"name":"amounts","type":"uint256[]"}],"stateMutability":"nonpayable","type":"function"},
 	{"inputs":[{"name":"amountIn","type":"uint256"},{"name":"path","type":"address[]"}],"name":"getAmountsOut","outputs":[{"name":"amounts","type":"uint256[]"}],"stateMutability":"view","type":"function"}
 ]`
 
@@ -143,4 +144,180 @@ func SwapBNBForToken(ctx context.Context, buybackKey *ecdsa.PrivateKey, bnbAmoun
 		bnbAmount.String(), amountOutMin.String(), txHash)
 
 	return txHash, amountOutMin, nil
+}
+
+// usdtAddr returns the BSC USDT contract address.
+func usdtAddr() common.Address {
+	return common.HexToAddress(config.Cfg.USDTAddr)
+}
+
+// GetUSDTToBNBQuote returns estimated BNB output for a given USDT input.
+func GetUSDTToBNBQuote(ctx context.Context, usdtAmount *big.Int) (*big.Int, error) {
+	if C == nil {
+		return nil, fmt.Errorf("chain client not initialized")
+	}
+
+	path := []common.Address{usdtAddr(), wbnbAddr}
+
+	data, err := parsedRouterABI.Pack("getAmountsOut", usdtAmount, path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack getAmountsOut: %w", err)
+	}
+
+	router := routerAddr()
+	result, err := C.ethClient.CallContract(ctx, ethereum.CallMsg{
+		To:   &router,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("getAmountsOut USDT→BNB call failed: %w", err)
+	}
+
+	outputs, err := parsedRouterABI.Unpack("getAmountsOut", result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack getAmountsOut: %w", err)
+	}
+
+	amounts := outputs[0].([]*big.Int)
+	if len(amounts) < 2 {
+		return nil, fmt.Errorf("unexpected getAmountsOut result length")
+	}
+
+	return amounts[1], nil
+}
+
+// SwapUSDTForBNB swaps USDT for BNB via PancakeSwap V2 Router.
+// Requires prior ERC-20 approval of USDT to the Router.
+// slippageBps: slippage tolerance in basis points (e.g., 500 = 5%).
+// Returns tx hash and the minimum expected BNB amount.
+func SwapUSDTForBNB(ctx context.Context, buybackKey *ecdsa.PrivateKey, usdtAmount *big.Int, slippageBps int64) (string, *big.Int, error) {
+	if C == nil {
+		return "", nil, fmt.Errorf("chain client not initialized")
+	}
+
+	fromAddr := crypto.PubkeyToAddress(buybackKey.PublicKey)
+
+	// Check & set USDT allowance for the Router
+	if err := ensureAllowance(ctx, buybackKey, usdtAddr(), routerAddr(), usdtAmount); err != nil {
+		return "", nil, fmt.Errorf("USDT approval failed: %w", err)
+	}
+
+	// Get quote
+	quote, err := GetUSDTToBNBQuote(ctx, usdtAmount)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get USDT→BNB quote: %w", err)
+	}
+
+	// Calculate minimum output with slippage
+	slippageMul := big.NewInt(10000 - slippageBps)
+	amountOutMin := new(big.Int).Mul(quote, slippageMul)
+	amountOutMin.Div(amountOutMin, big.NewInt(10000))
+
+	path := []common.Address{usdtAddr(), wbnbAddr}
+	deadline := big.NewInt(time.Now().Unix() + 300)
+
+	data, err := parsedRouterABI.Pack("swapExactTokensForETH",
+		usdtAmount, amountOutMin, path, fromAddr, deadline)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to pack swapExactTokensForETH: %w", err)
+	}
+
+	nonce, err := C.ethClient.PendingNonceAt(ctx, fromAddr)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get nonce: %w", err)
+	}
+
+	gasPrice, err := C.ethClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to get gas price: %w", err)
+	}
+
+	router := routerAddr()
+	gasLimit, err := C.ethClient.EstimateGas(ctx, ethereum.CallMsg{
+		From: fromAddr,
+		To:   &router,
+		Data: data,
+	})
+	if err != nil {
+		gasLimit = 350000 // fallback for token-to-ETH swap
+	}
+
+	tx := types.NewTransaction(nonce, router, big.NewInt(0), gasLimit, gasPrice, data)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(C.chainID), buybackKey)
+	if err != nil {
+		return "", nil, fmt.Errorf("failed to sign USDT swap tx: %w", err)
+	}
+
+	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
+		return "", nil, fmt.Errorf("failed to send USDT swap tx: %w", err)
+	}
+
+	txHash := signedTx.Hash().Hex()
+	util.Log.Info("[swap] USDT→BNB swap sent: %s USDT, minOut=%s BNB, tx=%s",
+		usdtAmount.String(), amountOutMin.String(), txHash)
+
+	return txHash, amountOutMin, nil
+}
+
+// ensureAllowance checks the ERC-20 allowance and approves if needed.
+func ensureAllowance(ctx context.Context, ownerKey *ecdsa.PrivateKey, token, spender common.Address, amount *big.Int) error {
+	ownerAddr := crypto.PubkeyToAddress(ownerKey.PublicKey)
+
+	// Check current allowance
+	data, err := parsedERC20ABI.Pack("allowance", ownerAddr, spender)
+	if err != nil {
+		return fmt.Errorf("failed to pack allowance: %w", err)
+	}
+	result, err := C.ethClient.CallContract(ctx, ethereum.CallMsg{
+		To:   &token,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return fmt.Errorf("allowance call failed: %w", err)
+	}
+	outputs, err := parsedERC20ABI.Unpack("allowance", result)
+	if err != nil {
+		return fmt.Errorf("failed to unpack allowance: %w", err)
+	}
+	currentAllowance := outputs[0].(*big.Int)
+
+	if currentAllowance.Cmp(amount) >= 0 {
+		return nil // already approved
+	}
+
+	// Approve max uint256 to avoid repeated approvals
+	maxUint256 := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 256), big.NewInt(1))
+	approveData, err := parsedERC20ABI.Pack("approve", spender, maxUint256)
+	if err != nil {
+		return fmt.Errorf("failed to pack approve: %w", err)
+	}
+
+	nonce, err := C.ethClient.PendingNonceAt(ctx, ownerAddr)
+	if err != nil {
+		return fmt.Errorf("failed to get nonce for approval: %w", err)
+	}
+
+	gasPrice, err := C.ethClient.SuggestGasPrice(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get gas price for approval: %w", err)
+	}
+
+	tx := types.NewTransaction(nonce, token, big.NewInt(0), 100000, gasPrice, approveData)
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(C.chainID), ownerKey)
+	if err != nil {
+		return fmt.Errorf("failed to sign approval tx: %w", err)
+	}
+
+	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
+		return fmt.Errorf("failed to send approval tx: %w", err)
+	}
+
+	// Wait for approval confirmation
+	success, err := WaitForTokenTx(ctx, signedTx.Hash().Hex())
+	if err != nil || !success {
+		return fmt.Errorf("approval tx failed: %s", signedTx.Hash().Hex())
+	}
+
+	util.Log.Info("[swap] Approved %s to spend token %s", spender.Hex(), token.Hex())
+	return nil
 }

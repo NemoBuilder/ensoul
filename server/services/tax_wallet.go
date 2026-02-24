@@ -141,8 +141,8 @@ func AutoMintPublicSouls() {
 			continue
 		}
 
-		// Confirm the mint
-		if err := ConfirmMint(cand.Handle, txHash, 0, taxAddr.Hex()); err != nil {
+		// Confirm the mint (pass price to trigger buyback without extra API call)
+		if err := ConfirmMint(cand.Handle, txHash, 0, taxAddr.Hex(), price); err != nil {
 			util.Log.Error("[tax_wallet] Failed to confirm mint for @%s: %v", cand.Handle, err)
 			markCandidateStatus(cand.Handle, models.CandidateStatusFailed, "confirm failed: "+err.Error())
 			continue
@@ -320,8 +320,8 @@ func MintSinglePublicSoul(handle string) {
 		return
 	}
 
-	// Confirm
-	if err := ConfirmMint(handle, txHash, 0, taxAddr.Hex()); err != nil {
+	// Confirm (pass price to trigger buyback without extra API call)
+	if err := ConfirmMint(handle, txHash, 0, taxAddr.Hex(), price); err != nil {
 		util.Log.Error("[tax_wallet] Failed to confirm mint for @%s: %v", handle, err)
 		markCandidateStatus(handle, models.CandidateStatusFailed, "confirm: "+err.Error())
 		return
