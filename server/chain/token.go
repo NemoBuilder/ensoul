@@ -17,12 +17,13 @@ import (
 	"github.com/ensoul-labs/ensoul-server/util"
 )
 
-// Minimal ERC-20 ABI for transfer and balanceOf
+// Minimal ERC-20 ABI for transfer, balanceOf and totalSupply
 const erc20ABI = `[
 	{"constant":true,"inputs":[{"name":"account","type":"address"}],"name":"balanceOf","outputs":[{"name":"","type":"uint256"}],"type":"function"},
 	{"constant":false,"inputs":[{"name":"to","type":"address"},{"name":"amount","type":"uint256"}],"name":"transfer","outputs":[{"name":"","type":"bool"}],"type":"function"},
 	{"constant":false,"inputs":[{"name":"spender","type":"address"},{"name":"amount","type":"uint256"}],"name":"approve","outputs":[{"name":"","type":"bool"}],"type":"function"},
-	{"constant":true,"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"}
+	{"constant":true,"inputs":[{"name":"owner","type":"address"},{"name":"spender","type":"address"}],"name":"allowance","outputs":[{"name":"","type":"uint256"}],"type":"function"},
+	{"constant":true,"inputs":[],"name":"totalSupply","outputs":[{"name":"","type":"uint256"}],"type":"function"}
 ]`
 
 var parsedERC20ABI abi.ABI
@@ -63,6 +64,34 @@ func GetTokenBalance(ctx context.Context, addr string) (*big.Int, error) {
 	outputs, err := parsedERC20ABI.Unpack("balanceOf", result)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unpack balanceOf: %w", err)
+	}
+
+	return outputs[0].(*big.Int), nil
+}
+
+// GetTokenTotalSupply returns the total supply of the $Ensoul token.
+func GetTokenTotalSupply(ctx context.Context) (*big.Int, error) {
+	if C == nil {
+		return nil, fmt.Errorf("chain client not initialized")
+	}
+
+	data, err := parsedERC20ABI.Pack("totalSupply")
+	if err != nil {
+		return nil, fmt.Errorf("failed to pack totalSupply: %w", err)
+	}
+
+	token := tokenAddr()
+	result, err := C.ethClient.CallContract(ctx, ethereum.CallMsg{
+		To:   &token,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return nil, fmt.Errorf("totalSupply call failed: %w", err)
+	}
+
+	outputs, err := parsedERC20ABI.Unpack("totalSupply", result)
+	if err != nil {
+		return nil, fmt.Errorf("failed to unpack totalSupply: %w", err)
 	}
 
 	return outputs[0].(*big.Int), nil

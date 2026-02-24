@@ -840,11 +840,31 @@ export interface EconomyOverview {
   total_fragments: number;
   total_subscribers: number;
   total_mining_payout: number;
+  token_info: {
+    total_supply: number;
+    token_address: string;
+  };
   mining_pool: EconomyMiningPool;
   buyback: EconomyBuybackSummary;
   revenue_pools: EconomyRevenuePool[];
   buyback_history: EconomyBuybackRecord[];
   split_config: EconomySplitConfig;
+  last_buyback: {
+    source: string;
+    bnb_amount: number;
+    token_amount: number;
+    created_at: string;
+  } | null;
+  wallets: {
+    buyback_bnb: number;
+    buyback_token: number;
+    buyback_addr: string;
+    mining_pool_token: number;
+    mining_pool_addr: string;
+    revenue_pool_token: number;
+    revenue_pool_addr: string;
+    treasury_addr: string;
+  };
 }
 
 export const economyApi = {

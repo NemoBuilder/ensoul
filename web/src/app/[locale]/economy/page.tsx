@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
+import { Link } from "@/i18n/navigation";
 import {
   economyApi,
   type EconomyOverview,
@@ -19,6 +20,11 @@ function fmtBNB(n: number): string {
   return n.toFixed(4);
 }
 
+function shortAddr(addr: string): string {
+  if (!addr || addr.length < 10) return addr || "";
+  return addr.slice(0, 6) + "..." + addr.slice(-4);
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const mins = Math.floor(diff / 60000);
@@ -29,88 +35,197 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
+const BSCSCAN = "https://bscscan.com/address/";
+
 // ─── KPI Card ────────────────────────────────────────────────
-function KPICard({ label, value, sub }: { label: string; value: string; sub?: string }) {
+function KPICard({ label, value, sub, color = "text-[#8b5cf6]" }: {
+  label: string; value: string; sub?: string; color?: string;
+}) {
   return (
     <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-5">
       <p className="text-xs font-medium uppercase tracking-wider text-[#94a3b8]">{label}</p>
-      <p className="mt-2 font-mono text-2xl font-bold text-[#8b5cf6]">{value}</p>
+      <p className={`mt-2 font-mono text-2xl font-bold ${color}`}>{value}</p>
       {sub && <p className="mt-1 text-xs text-[#64748b]">{sub}</p>}
     </div>
   );
 }
 
-// ─── Flow Diagram ────────────────────────────────────────────
-function FlywheelDiagram({ t, split }: { t: ReturnType<typeof useTranslations>; split: EconomyOverview["split_config"] }) {
+// ─── SVG Flow Diagram ────────────────────────────────────────
+function FlywheelDiagram({ t, data }: { t: ReturnType<typeof useTranslations>; data: EconomyOverview }) {
+  const { split_config: split, wallets, last_buyback } = data;
+
+  // Compute last buyback split amounts for arrow labels
+  const lastToken = last_buyback?.token_amount ?? 0;
+  const isMintSource = last_buyback?.source === "mint_revenue";
+  const buybackPct = isMintSource ? split.mint_buyback_pct : split.sub_buyback_pct;
+  const treasuryPct = isMintSource ? split.mint_treasury_pct : split.sub_treasury_pct;
+  const revPoolPct = isMintSource ? split.mint_revenue_pool_pct : split.sub_revenue_pool_pct;
+  const lastMiningAmt = lastToken * buybackPct / (buybackPct + revPoolPct);
+  const lastRevenueAmt = lastToken - lastMiningAmt;
+  const lastTreasuryBNB = last_buyback ? last_buyback.bnb_amount * treasuryPct / 100 : 0;
+
   return (
     <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
-      <h2 className="mb-6 text-lg font-semibold text-[#e2e8f0]">{t("flywheelTitle")}</h2>
+      <h2 className="mb-2 text-lg font-semibold text-[#e2e8f0]">{t("flywheelTitle")}</h2>
+      {last_buyback && (
+        <p className="mb-4 text-xs text-[#64748b]">
+          {t("lastOperation")}: {timeAgo(last_buyback.created_at)} · {fmtBNB(last_buyback.bnb_amount)} BNB → {fmt(last_buyback.token_amount)} $Ensoul
+        </p>
+      )}
 
-      <div className="flex flex-col items-center gap-4">
-        {/* Revenue Sources */}
-        <div className="flex w-full justify-center gap-6">
-          <div className="rounded-md border border-[#8b5cf6]/30 bg-[#8b5cf6]/10 px-4 py-2 text-center text-sm font-medium text-[#c4b5fd]">
-            🪙 {t("mintRevenue")}
+      <div className="relative mx-auto" style={{ maxWidth: 720, minHeight: 520 }}>
+        <svg className="absolute inset-0 h-full w-full" viewBox="0 0 720 520" fill="none" xmlns="http://www.w3.org/2000/svg">
+          {/* Mint → Buyback */}
+          <path d="M 210 55 L 360 110" stroke="#8b5cf6" strokeWidth="2" strokeDasharray="6 3" markerEnd="url(#arrowPurple)" />
+          {/* Sub → Buyback */}
+          <path d="M 510 55 L 360 110" stroke="#06b6d4" strokeWidth="2" strokeDasharray="6 3" markerEnd="url(#arrowCyan)" />
+
+          {/* Buyback → Mining Pool */}
+          <path d="M 290 175 L 140 260" stroke="#22c55e" strokeWidth="2" markerEnd="url(#arrowGreen)" />
+          <text x="175" y="215" fill="#86efac" fontSize="10" textAnchor="middle">
+            {buybackPct}% · {fmt(lastMiningAmt)}
+          </text>
+
+          {/* Buyback → Treasury (BNB) */}
+          <path d="M 360 175 L 360 260" stroke="#3b82f6" strokeWidth="2" markerEnd="url(#arrowBlue)" />
+          <text x="400" y="225" fill="#93c5fd" fontSize="10" textAnchor="start">
+            {treasuryPct}% · {fmtBNB(lastTreasuryBNB)} BNB
+          </text>
+
+          {/* Buyback → Revenue Pool */}
+          <path d="M 430 175 L 580 260" stroke="#a855f7" strokeWidth="2" markerEnd="url(#arrowViolet)" />
+          <text x="545" y="215" fill="#d8b4fe" fontSize="10" textAnchor="middle">
+            {revPoolPct}% · {fmt(lastRevenueAmt)}
+          </text>
+
+          {/* Mining → Claw Rewards */}
+          <path d="M 140 370 L 140 430" stroke="#22c55e" strokeWidth="1.5" strokeDasharray="4 2" markerEnd="url(#arrowGreen)" />
+          {/* Treasury → Cold Storage */}
+          <path d="M 360 370 L 360 430" stroke="#3b82f6" strokeWidth="1.5" strokeDasharray="4 2" markerEnd="url(#arrowBlue)" />
+          {/* Revenue → Holder Claims */}
+          <path d="M 580 370 L 580 430" stroke="#a855f7" strokeWidth="1.5" strokeDasharray="4 2" markerEnd="url(#arrowViolet)" />
+
+          {/* Arrow markers */}
+          <defs>
+            <marker id="arrowPurple" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#8b5cf6" />
+            </marker>
+            <marker id="arrowCyan" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#06b6d4" />
+            </marker>
+            <marker id="arrowGreen" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#22c55e" />
+            </marker>
+            <marker id="arrowBlue" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#3b82f6" />
+            </marker>
+            <marker id="arrowViolet" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+              <path d="M 0 0 L 10 5 L 0 10 z" fill="#a855f7" />
+            </marker>
+          </defs>
+        </svg>
+
+        {/* ── HTML Nodes (positioned absolutely over SVG) ── */}
+        <div className="relative h-full" style={{ minHeight: 520 }}>
+
+          {/* Row 1: Revenue Sources */}
+          <div className="absolute left-[80px] top-[10px] w-[180px]">
+            <div className="cursor-pointer rounded-lg border border-[#8b5cf6]/40 bg-[#8b5cf6]/10 px-4 py-3 text-center transition hover:border-[#8b5cf6]/70">
+              <p className="text-sm font-semibold text-[#c4b5fd]">🪙 {t("mintRevenue")}</p>
+              <p className="mt-1 font-mono text-xs text-[#8b5cf6]">{fmtBNB(data.buyback.mint_revenue_bnb)} BNB</p>
+            </div>
           </div>
-          <div className="rounded-md border border-[#06b6d4]/30 bg-[#06b6d4]/10 px-4 py-2 text-center text-sm font-medium text-[#67e8f9]">
-            📡 {t("subRevenue")}
+
+          <div className="absolute left-[460px] top-[10px] w-[180px]">
+            <div className="cursor-pointer rounded-lg border border-[#06b6d4]/40 bg-[#06b6d4]/10 px-4 py-3 text-center transition hover:border-[#06b6d4]/70">
+              <p className="text-sm font-semibold text-[#67e8f9]">📡 {t("subRevenue")}</p>
+              <p className="mt-1 font-mono text-xs text-[#06b6d4]">{fmtBNB(data.buyback.sub_revenue_bnb)} BNB</p>
+            </div>
           </div>
-        </div>
 
-        {/* Arrow down */}
-        <div className="text-[#64748b]">▼</div>
+          {/* Row 2: Buyback Wallet */}
+          <div className="absolute left-[220px] top-[100px] w-[280px]">
+            <a href={wallets.buyback_addr ? BSCSCAN + wallets.buyback_addr : "#"} target="_blank" rel="noopener noreferrer"
+              className="block rounded-lg border border-[#f59e0b]/40 bg-[#f59e0b]/10 px-4 py-3 text-center transition hover:border-[#f59e0b]/70">
+              <p className="text-sm font-semibold text-[#fbbf24]">💰 {t("buybackWallet")}</p>
+              <p className="mt-1 font-mono text-xs text-[#d97706]">
+                {fmtBNB(wallets.buyback_bnb)} BNB · {fmt(wallets.buyback_token)} $Ensoul
+              </p>
+              {wallets.buyback_addr && (
+                <p className="mt-0.5 text-[10px] text-[#92400e]">{shortAddr(wallets.buyback_addr)}</p>
+              )}
+            </a>
+          </div>
 
-        {/* Buyback Wallet */}
-        <div className="rounded-lg border border-[#f59e0b]/30 bg-[#f59e0b]/10 px-6 py-3 text-center">
-          <p className="text-sm font-semibold text-[#fbbf24]">💰 {t("buybackWallet")}</p>
-          <p className="mt-1 text-xs text-[#d97706]">BNB → $Ensoul Swap</p>
-        </div>
-
-        {/* Arrow down */}
-        <div className="text-[#64748b]">▼</div>
-
-        {/* 3-way split */}
-        <div className="grid w-full max-w-2xl grid-cols-3 gap-3">
+          {/* Row 3: Three-way Split */}
           {/* Mining Pool */}
-          <div className="rounded-lg border border-[#22c55e]/30 bg-[#22c55e]/10 p-3 text-center">
-            <p className="text-xs text-[#86efac]">⛏️ {t("miningPool")}</p>
-            <p className="mt-1 text-lg font-bold text-[#4ade80]">{split.mint_buyback_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("mintLabel")}</p>
-            <p className="text-xs font-medium text-[#4ade80]">{split.sub_buyback_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("subLabel")}</p>
+          <div className="absolute left-[20px] top-[260px] w-[220px]">
+            <a href={wallets.mining_pool_addr ? BSCSCAN + wallets.mining_pool_addr : "#"} target="_blank" rel="noopener noreferrer"
+              className="block rounded-lg border border-[#22c55e]/40 bg-[#22c55e]/10 p-3 text-center transition hover:border-[#22c55e]/70">
+              <p className="text-xs font-medium text-[#86efac]">⛏️ {t("miningPool")}</p>
+              <p className="mt-1 font-mono text-lg font-bold text-[#4ade80]">{fmt(wallets.mining_pool_token)}</p>
+              <p className="text-[10px] text-[#64748b]">$Ensoul {t("onChain")}</p>
+              <div className="mt-1 flex justify-center gap-3 text-[10px]">
+                <span className="text-[#86efac]">{split.mint_buyback_pct}% {t("mintLabel")}</span>
+                <span className="text-[#86efac]">{split.sub_buyback_pct}% {t("subLabel")}</span>
+              </div>
+              {wallets.mining_pool_addr && (
+                <p className="mt-0.5 text-[10px] text-[#4d7c0f]">{shortAddr(wallets.mining_pool_addr)}</p>
+              )}
+            </a>
           </div>
 
           {/* Treasury */}
-          <div className="rounded-lg border border-[#3b82f6]/30 bg-[#3b82f6]/10 p-3 text-center">
-            <p className="text-xs text-[#93c5fd]">🏦 {t("treasury")}</p>
-            <p className="mt-1 text-lg font-bold text-[#60a5fa]">{split.mint_treasury_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("mintLabel")}</p>
-            <p className="text-xs font-medium text-[#60a5fa]">{split.sub_treasury_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("subLabel")}</p>
+          <div className="absolute left-[250px] top-[260px] w-[220px]">
+            <a href={wallets.treasury_addr ? BSCSCAN + wallets.treasury_addr : "#"} target="_blank" rel="noopener noreferrer"
+              className="block rounded-lg border border-[#3b82f6]/40 bg-[#3b82f6]/10 p-3 text-center transition hover:border-[#3b82f6]/70">
+              <p className="text-xs font-medium text-[#93c5fd]">🏦 {t("treasury")}</p>
+              <p className="mt-1 font-mono text-lg font-bold text-[#60a5fa]">BNB</p>
+              <p className="text-[10px] text-[#64748b]">{t("coldStorage")}</p>
+              <div className="mt-1 flex justify-center gap-3 text-[10px]">
+                <span className="text-[#93c5fd]">{split.mint_treasury_pct}% {t("mintLabel")}</span>
+                <span className="text-[#93c5fd]">{split.sub_treasury_pct}% {t("subLabel")}</span>
+              </div>
+              {wallets.treasury_addr && (
+                <p className="mt-0.5 text-[10px] text-[#1e40af]">{shortAddr(wallets.treasury_addr)}</p>
+              )}
+            </a>
           </div>
 
           {/* Revenue Pool */}
-          <div className="rounded-lg border border-[#a855f7]/30 bg-[#a855f7]/10 p-3 text-center">
-            <p className="text-xs text-[#d8b4fe]">💎 {t("revenuePool")}</p>
-            <p className="mt-1 text-lg font-bold text-[#c084fc]">{split.mint_revenue_pool_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("mintLabel")}</p>
-            <p className="text-xs font-medium text-[#c084fc]">{split.sub_revenue_pool_pct}%</p>
-            <p className="text-[10px] text-[#64748b]">{t("subLabel")}</p>
+          <div className="absolute left-[480px] top-[260px] w-[220px]">
+            <a href={wallets.revenue_pool_addr ? BSCSCAN + wallets.revenue_pool_addr : "#"} target="_blank" rel="noopener noreferrer"
+              className="block rounded-lg border border-[#a855f7]/40 bg-[#a855f7]/10 p-3 text-center transition hover:border-[#a855f7]/70">
+              <p className="text-xs font-medium text-[#d8b4fe]">💎 {t("revenuePool")}</p>
+              <p className="mt-1 font-mono text-lg font-bold text-[#c084fc]">{fmt(wallets.revenue_pool_token)}</p>
+              <p className="text-[10px] text-[#64748b]">$Ensoul {t("onChain")}</p>
+              <div className="mt-1 flex justify-center gap-3 text-[10px]">
+                <span className="text-[#d8b4fe]">{split.mint_revenue_pool_pct}% {t("mintLabel")}</span>
+                <span className="text-[#d8b4fe]">{split.sub_revenue_pool_pct}% {t("subLabel")}</span>
+              </div>
+              {wallets.revenue_pool_addr && (
+                <p className="mt-0.5 text-[10px] text-[#6b21a8]">{shortAddr(wallets.revenue_pool_addr)}</p>
+              )}
+            </a>
           </div>
-        </div>
 
-        {/* Arrow down */}
-        <div className="flex w-full max-w-2xl justify-around text-[#64748b]">
-          <span>▼</span>
-          <span>▼</span>
-          <span>▼</span>
-        </div>
-
-        {/* Outputs */}
-        <div className="grid w-full max-w-2xl grid-cols-3 gap-3 text-center">
-          <p className="text-xs text-[#94a3b8]">→ {t("clawRewards")}</p>
-          <p className="text-xs text-[#94a3b8]">→ {t("coldStorage")}</p>
-          <p className="text-xs text-[#94a3b8]">→ {t("holderClaims")}</p>
+          {/* Row 4: Outputs */}
+          <div className="absolute left-[40px] top-[440px] w-[180px] text-center">
+            <Link href="/mining" className="text-xs font-medium text-[#4ade80] underline decoration-dotted hover:text-[#86efac]">
+              → {t("clawRewards")}
+            </Link>
+            <p className="mt-0.5 text-[10px] text-[#64748b]">{t("dailyRelease")}: {fmt(data.mining_pool.daily_limit)}/d</p>
+          </div>
+          <div className="absolute left-[270px] top-[440px] w-[180px] text-center">
+            <p className="text-xs font-medium text-[#60a5fa]">→ {t("coldStorage")}</p>
+            <p className="mt-0.5 text-[10px] text-[#64748b]">{t("teamReserve")}</p>
+          </div>
+          <div className="absolute left-[500px] top-[440px] w-[180px] text-center">
+            <Link href="/holder" className="text-xs font-medium text-[#c084fc] underline decoration-dotted hover:text-[#d8b4fe]">
+              → {t("holderClaims")}
+            </Link>
+            <p className="mt-0.5 text-[10px] text-[#64748b]">{t("monthlyClaim")}</p>
+          </div>
         </div>
       </div>
     </div>
@@ -155,11 +270,17 @@ export default function EconomyPage() {
       <p className="mb-8 text-[#94a3b8]">{t("subtitle")}</p>
 
       {/* ── KPI Cards ── */}
-      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-4">
+      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
         <KPICard
           label={t("totalSouls")}
           value={data.total_souls.toLocaleString()}
           sub={t("mintedNFTs")}
+        />
+        <KPICard
+          label={t("tokenSupply")}
+          value={fmt(data.token_info.total_supply) + " $Ensoul"}
+          sub={t("totalCirculating")}
+          color="text-[#fbbf24]"
         />
         <KPICard
           label={t("totalBuyback")}
@@ -170,6 +291,7 @@ export default function EconomyPage() {
           label={t("miningPoolBalance")}
           value={fmt(data.mining_pool.balance) + " $Ensoul"}
           sub={t("dailyLimit") + ": " + fmt(data.mining_pool.daily_limit)}
+          color="text-[#4ade80]"
         />
         <KPICard
           label={t("activeSubscribers")}
@@ -180,7 +302,7 @@ export default function EconomyPage() {
 
       {/* ── Flywheel Diagram ── */}
       <div className="mb-8">
-        <FlywheelDiagram t={t} split={data.split_config} />
+        <FlywheelDiagram t={t} data={data} />
       </div>
 
       {/* ── Two-column: Buyback History + Revenue Pools ── */}

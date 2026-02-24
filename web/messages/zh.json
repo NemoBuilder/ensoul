@@ -426,6 +426,13 @@
     "dailyReleased": "今日已释放",
     "dailyRemaining": "今日剩余",
     "totalDeposited": "总存入",
-    "totalReleased": "总释放"
+    "totalReleased": "总释放",
+    "tokenSupply": "代币总量",
+    "totalCirculating": "$Ensoul 已铸造总量",
+    "onChain": "链上余额",
+    "lastOperation": "最近操作",
+    "dailyRelease": "每日释放",
+    "teamReserve": "团队储备",
+    "monthlyClaim": "持有者月度提取"
   }
 }

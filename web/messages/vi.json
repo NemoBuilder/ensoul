@@ -426,6 +426,13 @@
     "dailyReleased": "Daily Released",
     "dailyRemaining": "Daily Remaining",
     "totalDeposited": "Total Deposited",
-    "totalReleased": "Total Released"
+    "totalReleased": "Total Released",
+    "tokenSupply": "Token Supply",
+    "totalCirculating": "Total $Ensoul minted",
+    "onChain": "on-chain",
+    "lastOperation": "Last operation",
+    "dailyRelease": "Daily release",
+    "teamReserve": "Team reserve",
+    "monthlyClaim": "Monthly holder claim"
   }
 }
