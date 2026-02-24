@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"math/big"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -62,7 +63,9 @@ func CreateSubscription(walletAddr, tier, paymentTxHash, paymentToken string, pa
 
 // triggerSubscriptionFlywheel routes subscription payment into the economic flywheel.
 // All subscription revenue follows the same split regardless of payment token:
-//   40% → buyback $Ensoul → mining pool, 10% → holder revenue pool, 50% → treasury.
+//
+//	40% → buyback $Ensoul → mining pool, 10% → holder revenue pool, 50% → treasury.
+//
 // For USDT: requires USDT→BNB conversion first.
 // For BNB: skips the USDT→BNB step, directly uses BNB for buyback.
 func triggerSubscriptionFlywheel(paymentToken string, paymentAmount float64) {
@@ -86,6 +89,32 @@ func triggerSubscriptionFlywheel(paymentToken string, paymentAmount float64) {
 		AddToRevenuePool(poolAmount)
 		util.Log.Info("[subscription] %s payment — added %.4f to revenue pool (no buyback for this token)", paymentToken, poolAmount)
 	}
+}
+
+// CheckAndMarkPaymentTx atomically checks that a payment tx_hash has not been used before,
+// and records it. Returns error if the tx_hash was already used (replay attack).
+func CheckAndMarkPaymentTx(txHash, walletAddr, purpose string) error {
+	record := &models.UsedPaymentTx{
+		TxHash:     txHash,
+		WalletAddr: walletAddr,
+		Purpose:    purpose,
+	}
+	if err := database.DB.Create(record).Error; err != nil {
+		return fmt.Errorf("this payment transaction has already been used")
+	}
+	return nil
+}
+
+// UnmarkPaymentTx removes a previously marked tx_hash.
+// Called when subsequent verification (e.g. on-chain check) fails.
+func UnmarkPaymentTx(txHash string) {
+	database.DB.Where("tx_hash = ?", txHash).Delete(&models.UsedPaymentTx{})
+}
+
+// WeiToFloat converts a *big.Int wei value to float64 token amount (18 decimals).
+// Exported wrapper for use in handlers.
+func WeiToFloat(wei *big.Int) float64 {
+	return weiToFloat(wei)
 }
 
 // GetActiveSubscription returns the user's active subscription, if any.

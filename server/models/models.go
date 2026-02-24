@@ -500,3 +500,13 @@ type SoulUsage struct {
 	UsageCount int       `gorm:"default:0" json:"usage_count"`
 	UpdatedAt  time.Time `json:"updated_at"`
 }
+
+// UsedPaymentTx prevents replay attacks by recording each payment tx_hash.
+// The uniqueIndex on TxHash ensures the same transaction cannot be used twice.
+type UsedPaymentTx struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TxHash    string    `gorm:"type:varchar(66);not null;uniqueIndex" json:"tx_hash"`
+	WalletAddr string   `gorm:"type:varchar(42);not null" json:"wallet_addr"`
+	Purpose   string    `gorm:"type:varchar(30);not null" json:"purpose"` // "subscription", "mint", etc.
+	CreatedAt time.Time `json:"created_at"`
+}

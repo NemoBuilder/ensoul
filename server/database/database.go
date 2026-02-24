@@ -67,6 +67,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.RevenuePool{},
 		&models.KOLClaim{},
 		&models.SoulUsage{},
+		&models.UsedPaymentTx{},
 		// Admin authentication models
 		&models.AdminUser{},
 		&models.AdminSession{},

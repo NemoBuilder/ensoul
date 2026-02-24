@@ -85,7 +85,7 @@ func GenerateReplies(walletAddr, handle, tweetID, tweetText string) (*models.Sni
 	}
 
 	// Record usage for holder revenue calculation
-	RecordUsage(shell.ID)
+	RecordUsage(shell.ID, walletAddr)
 
 	util.Log.Info("[sniper] Generated %d replies for @%s tweet %s (user: %s)",
 		len(replies), handle, tweetID, walletAddr)

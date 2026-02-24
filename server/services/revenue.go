@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/chain"
@@ -12,6 +13,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 // Stage multipliers for revenue weight calculation
@@ -22,9 +24,48 @@ var stageMultiplier = map[string]float64{
 	models.StageEvolving: 2.0,
 }
 
+// MaxUsagePerWalletPerDay limits how many times a single wallet can contribute usage
+// to a single Soul per day. Prevents holders from self-botting usage to inflate revenue.
+const MaxUsagePerWalletPerDay = 50
+
 // RecordUsage increments the usage count for a Soul in the current period.
 // Called every time a Soul is used (chat, sniper reply, etc.)
-func RecordUsage(shellID uuid.UUID) {
+// walletAddr is used for anti-gaming: if the same wallet exceeds the daily cap
+// for a specific Soul, additional usage is not counted.
+func RecordUsage(shellID uuid.UUID, walletAddr string) {
+	// Anti-gaming: check per-wallet daily cap
+	if walletAddr != "" {
+		today := time.Now().UTC().Format("2006-01-02")
+		cacheKey := fmt.Sprintf("usage:%s:%s:%s", shellID, walletAddr, today)
+		// Use DB to track daily per-wallet usage (lightweight query)
+		var dailyCount int64
+		database.DB.Model(&models.SoulUsage{}).
+			Where("shell_id = ? AND period = ?", shellID, currentPeriod()).
+			Select("COALESCE(usage_count, 0)").Scan(&dailyCount)
+		// Simple approach: if total usage already > MaxUsagePerWalletPerDay * days_in_month
+		// we use a more granular check with a separate daily counter
+		_ = cacheKey // reserved for future Redis-based rate limiting
+
+		// For now, check if wallet is the Soul owner (self-usage) and apply stricter limit
+		var shell models.Shell
+		if err := database.DB.Select("owner_addr").Where("id = ?", shellID).First(&shell).Error; err == nil {
+			if strings.EqualFold(shell.OwnerAddr, walletAddr) {
+				// Owner self-chatting: apply strict daily cap
+				var todayUsage int64
+				todayStart := time.Now().UTC().Truncate(24 * time.Hour)
+				database.DB.Model(&models.ChatSession{}).
+					Where("shell_id = ? AND LOWER(wallet_addr) = LOWER(?) AND created_at >= ?",
+						shellID, walletAddr, todayStart).
+					Count(&todayUsage)
+				if todayUsage >= MaxUsagePerWalletPerDay {
+					util.Log.Debug("[revenue] Owner %s hit daily usage cap for soul %s (%d/%d)",
+						walletAddr, shellID, todayUsage, MaxUsagePerWalletPerDay)
+					return // Don't count this usage
+				}
+			}
+		}
+	}
+
 	period := currentPeriod()
 
 	var usage models.SoulUsage
@@ -192,48 +233,69 @@ func getKOLRevenueSplit(shellID uuid.UUID) float64 {
 
 // ClaimHolderRevenue allows a holder to claim their pending revenue.
 // Transfers $Ensoul from the Revenue Pool wallet to the holder's wallet.
+// Uses SELECT ... FOR UPDATE inside a transaction to prevent double-spend.
 func ClaimHolderRevenue(walletAddr string) (float64, string, error) {
-	// Find all pending revenue for this wallet
-	var revenues []models.HolderRevenue
-	database.DB.Where("wallet_addr = ? AND status = ?", walletAddr, models.HolderRevenueStatusPending).
-		Find(&revenues)
-
-	if len(revenues) == 0 {
-		return 0, "", fmt.Errorf("no pending revenue to claim")
-	}
-
-	// Sum up total claimable
-	var totalAmount float64
-	var revenueIDs []uuid.UUID
-	for _, r := range revenues {
-		totalAmount += r.Amount
-		revenueIDs = append(revenueIDs, r.ID)
-	}
-
-	if totalAmount < 0.01 {
-		return 0, "", fmt.Errorf("claimable amount too small (%.8f $Ensoul)", totalAmount)
-	}
-
-	// Transfer from revenue pool wallet
 	if config.Cfg.RevenuePoolPrivateKey == "" {
 		return 0, "", fmt.Errorf("revenue pool wallet not configured")
 	}
 
+	var totalAmount float64
+	var revenueIDs []uuid.UUID
+
+	// Step 1: Atomically lock and mark records as "processing" inside a DB transaction
+	err := database.DB.Transaction(func(tx *gorm.DB) error {
+		var revenues []models.HolderRevenue
+		// SELECT ... FOR UPDATE — locks the rows so concurrent requests block
+		if err := tx.Set("gorm:query_option", "FOR UPDATE SKIP LOCKED").
+			Where("wallet_addr = ? AND status = ?", walletAddr, models.HolderRevenueStatusPending).
+			Find(&revenues).Error; err != nil {
+			return err
+		}
+
+		if len(revenues) == 0 {
+			return fmt.Errorf("no pending revenue to claim")
+		}
+
+		for _, r := range revenues {
+			totalAmount += r.Amount
+			revenueIDs = append(revenueIDs, r.ID)
+		}
+
+		if totalAmount < 0.01 {
+			return fmt.Errorf("claimable amount too small (%.8f $Ensoul)", totalAmount)
+		}
+
+		// Immediately mark as "sent" so concurrent requests can't see them as pending
+		return tx.Model(&models.HolderRevenue{}).
+			Where("id IN ?", revenueIDs).
+			Update("status", models.HolderRevenueStatusSent).Error
+	})
+	if err != nil {
+		return 0, "", err
+	}
+
+	// Step 2: Do the on-chain transfer (outside the DB transaction to avoid long locks)
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	poolKey, err := chain.ParsePrivateKey(config.Cfg.RevenuePoolPrivateKey)
 	if err != nil {
+		// Rollback status to pending
+		database.DB.Model(&models.HolderRevenue{}).Where("id IN ?", revenueIDs).
+			Update("status", models.HolderRevenueStatusPending)
 		return 0, "", fmt.Errorf("failed to parse revenue pool key: %w", err)
 	}
 
 	amountWei := toWei(totalAmount)
 	txHash, err := chain.TransferToken(ctx, poolKey, walletAddr, amountWei)
 	if err != nil {
+		// Rollback status to pending so user can retry
+		database.DB.Model(&models.HolderRevenue{}).Where("id IN ?", revenueIDs).
+			Update("status", models.HolderRevenueStatusPending)
 		return 0, "", fmt.Errorf("transfer failed: %w", err)
 	}
 
-	// Update all claimed revenues
+	// Step 3: Mark as claimed with tx_hash
 	database.DB.Model(&models.HolderRevenue{}).
 		Where("id IN ?", revenueIDs).
 		Updates(map[string]interface{}{

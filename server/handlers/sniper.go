@@ -36,19 +36,32 @@ func SniperSubscribe(c *gin.Context) {
 		req.PaymentToken = "USDT"
 	}
 
-	// Verify payment on-chain: check that the tx exists, succeeded, and was sent by this wallet
+	// Fix #1: Check tx_hash hasn't been used before (prevent replay attacks)
+	if err := services.CheckAndMarkPaymentTx(req.PaymentTxHash, walletAddr, "subscription"); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
+		return
+	}
+
+	// Fix #2: Verify payment on-chain and use chain-verified amount (not client-provided)
+	verifiedAmount := req.PaymentAmount
 	if chain.C != nil {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		_, _, err := chain.VerifyPaymentTx(ctx, req.PaymentTxHash, walletAddr)
+		value, _, err := chain.VerifyPaymentTx(ctx, req.PaymentTxHash, walletAddr)
 		if err != nil {
+			// Rollback the tx_hash mark on verification failure
+			services.UnmarkPaymentTx(req.PaymentTxHash)
 			c.JSON(http.StatusBadRequest, gin.H{"error": "Payment verification failed: " + err.Error()})
 			return
 		}
+		// Use chain-verified value instead of client-provided amount
+		if value != nil && value.Sign() > 0 {
+			verifiedAmount = services.WeiToFloat(value)
+		}
 	}
 
-	sub, err := services.CreateSubscription(walletAddr, req.Tier, req.PaymentTxHash, req.PaymentToken, req.PaymentAmount)
+	sub, err := services.CreateSubscription(walletAddr, req.Tier, req.PaymentTxHash, req.PaymentToken, verifiedAmount)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

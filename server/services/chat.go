@@ -145,7 +145,7 @@ func ChatWithSoul(c *gin.Context, sessionID uuid.UUID, message string) error {
 	database.DB.Model(&shell).UpdateColumn("total_chats", shell.TotalChats+1)
 
 	// Record usage for holder revenue calculation
-	RecordUsage(shell.ID)
+	RecordUsage(shell.ID, session.WalletAddr)
 
 	// If LLM is not configured, return a mock response
 	if config.Cfg.LLMAPIKey == "" {

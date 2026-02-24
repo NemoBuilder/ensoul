@@ -12,6 +12,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 const (
@@ -118,39 +119,60 @@ func ResetDailyRelease() error {
 	return nil
 }
 
-// ReleaseFromPool deducts an amount from the pool for a reward.
-// Returns error if insufficient daily allowance.
+// ReleaseFromPool atomically deducts an amount from the pool for a reward.
+// Uses a DB transaction to prevent concurrent over-release.
 func ReleaseFromPool(amount float64) error {
+	return database.DB.Transaction(func(tx *gorm.DB) error {
+		var pool models.MiningPool
+		// Lock the row to prevent concurrent reads
+		if err := tx.Set("gorm:query_option", "FOR UPDATE").First(&pool).Error; err != nil {
+			return fmt.Errorf("failed to lock mining pool: %w", err)
+		}
+
+		dailyLimit := pool.Balance * DailyReleaseRate
+		if pool.DailyReleased+amount > dailyLimit {
+			return fmt.Errorf("daily release limit exceeded (limit: %.4f, used: %.4f, requested: %.4f)",
+				dailyLimit, pool.DailyReleased, amount)
+		}
+
+		if amount > pool.Balance {
+			return fmt.Errorf("insufficient pool balance (balance: %.4f, requested: %.4f)",
+				pool.Balance, amount)
+		}
+
+		pool.Balance -= amount
+		pool.DailyReleased += amount
+		pool.TotalReleased += amount
+
+		return tx.Save(&pool).Error
+	})
+}
+
+// RefundToPool returns tokens to the pool when a chain transfer fails.
+func RefundToPool(amount float64) {
 	pool, err := GetOrCreateMiningPool()
 	if err != nil {
-		return err
+		util.Log.Error("[mining] Failed to refund %.4f to pool: %v", amount, err)
+		return
 	}
-
-	dailyLimit := pool.Balance * DailyReleaseRate
-	if pool.DailyReleased+amount > dailyLimit {
-		return fmt.Errorf("daily release limit exceeded (limit: %.4f, used: %.4f, requested: %.4f)",
-			dailyLimit, pool.DailyReleased, amount)
+	pool.Balance += amount
+	pool.DailyReleased -= amount
+	pool.TotalReleased -= amount
+	if pool.DailyReleased < 0 {
+		pool.DailyReleased = 0
 	}
-
-	if amount > pool.Balance {
-		return fmt.Errorf("insufficient pool balance (balance: %.4f, requested: %.4f)",
-			pool.Balance, amount)
+	if pool.TotalReleased < 0 {
+		pool.TotalReleased = 0
 	}
-
-	pool.Balance -= amount
-	pool.DailyReleased += amount
-	pool.TotalReleased += amount
-
 	if err := database.DB.Save(pool).Error; err != nil {
-		return fmt.Errorf("failed to update mining pool: %w", err)
+		util.Log.Error("[mining] Failed to save pool refund: %v", err)
 	}
-
-	return nil
+	util.Log.Info("[mining] Refunded %.4f $Ensoul to pool", amount)
 }
 
 // DistributeReward sends $Ensoul from the mining pool to a Claw's wallet.
 func DistributeReward(clawID, fragmentID uuid.UUID, demandID *uuid.UUID, amount float64) error {
-	// Release from pool first
+	// Release from pool first (atomic)
 	if err := ReleaseFromPool(amount); err != nil {
 		return fmt.Errorf("pool release failed: %w", err)
 	}
@@ -164,10 +186,11 @@ func DistributeReward(clawID, fragmentID uuid.UUID, demandID *uuid.UUID, amount 
 		Status:     models.RewardStatusPending,
 	}
 	if err := database.DB.Create(reward).Error; err != nil {
+		RefundToPool(amount)
 		return fmt.Errorf("failed to create reward record: %w", err)
 	}
 
-	// Send tokens on-chain (async)
+	// Send tokens on-chain (async — will refund to pool on failure)
 	go sendRewardOnChain(reward)
 
 	return nil
@@ -189,6 +212,7 @@ func sendRewardOnChain(reward *models.MiningReward) {
 	if claw.WalletAddr == "" {
 		util.Log.Error("[mining] Claw %s has no wallet address", claw.Name)
 		database.DB.Model(reward).Update("status", models.RewardStatusFailed)
+		RefundToPool(reward.Amount)
 		return
 	}
 
@@ -197,6 +221,7 @@ func sendRewardOnChain(reward *models.MiningReward) {
 	if err != nil {
 		util.Log.Error("[mining] Failed to parse mining pool key: %v", err)
 		database.DB.Model(reward).Update("status", models.RewardStatusFailed)
+		RefundToPool(reward.Amount)
 		return
 	}
 
@@ -207,6 +232,7 @@ func sendRewardOnChain(reward *models.MiningReward) {
 	if err != nil {
 		util.Log.Error("[mining] Token transfer failed for claw %s: %v", claw.Name, err)
 		database.DB.Model(reward).Update("status", models.RewardStatusFailed)
+		RefundToPool(reward.Amount)
 		return
 	}
 
@@ -220,6 +246,7 @@ func sendRewardOnChain(reward *models.MiningReward) {
 	if err != nil || !success {
 		util.Log.Error("[mining] Reward tx failed: %s, err: %v", txHash, err)
 		database.DB.Model(reward).Update("status", models.RewardStatusFailed)
+		RefundToPool(reward.Amount)
 		return
 	}
 
