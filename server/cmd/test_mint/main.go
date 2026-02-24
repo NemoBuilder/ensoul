@@ -19,11 +19,11 @@ import (
 
 const (
 	rpcURL         = "https://bsc-dataseed.binance.org/"
-	minterV2Addr   = "0x76D5361D768Cf9AA9b3088ce9C2760d6Cd76466B"
+	minterV2Addr   = "0xc5aE375Dfd8042e9345F1bB8e3b039b6d4690023"
 	registryAddr   = "0x8004A169FB4a3325136EB29fA0ceB6D2e539c432"
 	platformKeyHex = "c6335b98269a0574746ed6b613fe3d0a99da7c47a0e4cb9be8c120e5d3ae0173"
 	callerKeyHex   = "f754c00ba5010057c952e1c673c2ff743872320b16c24c7e88130aa33ea4a74c"
-	handle         = "framer_x" // lowercase
+	handle         = "web3leaf" // lowercase
 )
 
 func main() {
@@ -92,16 +92,7 @@ func main() {
 	fmt.Println("\nHandle:", handle)
 	fmt.Println("HandleHash:", handleHash.Hex())
 
-	isHandleMintedABI, _ := abi.JSON(strings.NewReader(`[{"type":"function","name":"isHandleMinted","inputs":[{"name":"handleHash","type":"bytes32"}],"outputs":[{"name":"","type":"bool"}]}]`))
-	callData, _ := isHandleMintedABI.Pack("isHandleMinted", handleHash)
-	result, err := client.CallContract(ctx, ethereum.CallMsg{To: &minter, Data: callData}, nil)
-	if err == nil && len(result) >= 32 && result[31] == 1 {
-		fmt.Println("❌ Handle already minted!")
-		os.Exit(1)
-	}
-	fmt.Println("✅ Handle not yet minted")
-
-	// ── 4. Build permit ────────────────────────────────────────
+	// ── 4. Build permit ────────────────────────────────────────────────
 	fmt.Println("\n--- Building Permit ---")
 
 	priceWei := big.NewInt(10000000000000000) // 0.01 BNB (tier: < 1K followers)
@@ -114,13 +105,13 @@ func main() {
 
 	// abi.encodePacked(handleHash, price, msg.sender, deadline, nonce, chainid, minterAddr)
 	packed := []byte{}
-	packed = append(packed, handleHash.Bytes()...)                                           // bytes32: 32
-	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                    // uint256: 32
-	packed = append(packed, callerAddr.Bytes()...)                                           // address: 20
-	packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)         // uint256: 32
+	packed = append(packed, handleHash.Bytes()...)                                             // bytes32: 32
+	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                      // uint256: 32
+	packed = append(packed, callerAddr.Bytes()...)                                             // address: 20
+	packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)          // uint256: 32
 	packed = append(packed, common.LeftPadBytes(new(big.Int).SetUint64(nonce).Bytes(), 32)...) // uint256: 32
-	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                     // uint256: 32
-	packed = append(packed, minter.Bytes()...)                                               // address: 20
+	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                       // uint256: 32
+	packed = append(packed, minter.Bytes()...)                                                 // address: 20
 
 	fmt.Printf("Packed length: %d bytes (expect 200)\n", len(packed))
 	if len(packed) != 200 {
@@ -182,7 +173,7 @@ func main() {
 	// ── 6. eth_call simulation ─────────────────────────────────
 	fmt.Println("\n--- Simulating mint() via eth_call ---")
 
-	result, err = client.CallContract(ctx, ethereum.CallMsg{
+	result, err := client.CallContract(ctx, ethereum.CallMsg{
 		From:  callerAddr,
 		To:    &minter,
 		Value: priceWei,
@@ -198,8 +189,6 @@ func main() {
 			fmt.Println("   Error: InvalidSignature() — signature doesn't match trustedSigner")
 		} else if strings.Contains(errStr, "1fb09b80") {
 			fmt.Println("   Error: NonceAlreadyUsed()")
-		} else if strings.Contains(errStr, "ec9a8ba4") {
-			fmt.Println("   Error: HandleAlreadyMinted()")
 		} else if strings.Contains(errStr, "eb560756") {
 			fmt.Println("   Error: MintingPaused()")
 		} else if strings.Contains(errStr, "a458261b") {
@@ -252,7 +241,7 @@ func main() {
 	txHash := signedTx.Hash().Hex()
 	fmt.Println("✅ Transaction sent!")
 	fmt.Println("   TX Hash:", txHash)
-	fmt.Println("   BSCScan: https://bscscan.com/tx/"+txHash)
+	fmt.Println("   BSCScan: https://bscscan.com/tx/" + txHash)
 
 	// ── 8. Wait for receipt ────────────────────────────────────
 	fmt.Println("\n--- Waiting for confirmation ---")

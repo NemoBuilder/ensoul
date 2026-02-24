@@ -266,9 +266,6 @@ contract EnsoulMinterV2 is Ownable, IERC721Receiver, ReentrancyGuard {
     // Nonce tracking to prevent replay attacks
     mapping(address => mapping(uint256 => bool)) public usedNonces;
 
-    // Handle dedup: keccak256(lowercase handle) => true if already minted
-    mapping(bytes32 => bool) public mintedHandles;
-
     // ── Events ─────────────────────────────────────────────────────────
     event Minted(address indexed user, uint256 indexed agentId, bytes32 indexed handleHash, uint256 fee);
     event TrustedSignerUpdated(address oldSigner, address newSigner);
@@ -283,7 +280,6 @@ contract EnsoulMinterV2 is Ownable, IERC721Receiver, ReentrancyGuard {
     error InvalidSignature();
     error ExpiredPermit();
     error NonceAlreadyUsed();
-    error HandleAlreadyMinted();
 
     // ── Constructor ────────────────────────────────────────────────────
     constructor(
@@ -321,7 +317,6 @@ contract EnsoulMinterV2 is Ownable, IERC721Receiver, ReentrancyGuard {
         if (paused) revert MintingPaused();
         if (block.timestamp > deadline) revert ExpiredPermit();
         if (usedNonces[msg.sender][nonce]) revert NonceAlreadyUsed();
-        if (mintedHandles[handleHash]) revert HandleAlreadyMinted();
         if (msg.value < price) revert InsufficientFee(price, msg.value);
 
         // Verify backend signature
@@ -332,9 +327,8 @@ contract EnsoulMinterV2 is Ownable, IERC721Receiver, ReentrancyGuard {
         address recovered = ethSignedHash.recover(signature);
         if (recovered != trustedSigner) revert InvalidSignature();
 
-        // Mark nonce and handle as used
+        // Mark nonce as used
         usedNonces[msg.sender][nonce] = true;
-        mintedHandles[handleHash] = true;
 
         // 1. Register — NFT is minted to this contract
         agentId = registry.register(agentURI);
@@ -372,14 +366,6 @@ contract EnsoulMinterV2 is Ownable, IERC721Receiver, ReentrancyGuard {
     function setPaused(bool paused_) external onlyOwner {
         paused = paused_;
         emit Paused(paused_);
-    }
-
-    /**
-     * @notice Check if a handle has already been minted.
-     * @param handleHash keccak256(abi.encodePacked(lowercaseHandle))
-     */
-    function isHandleMinted(bytes32 handleHash) external view returns (bool) {
-        return mintedHandles[handleHash];
     }
 
     // ── Emergency ──────────────────────────────────────────────────────

@@ -31,34 +31,6 @@ func HandleHash(handle string) common.Hash {
 	return crypto.Keccak256Hash([]byte(handle))
 }
 
-// IsHandleMinted checks on-chain whether a handle has already been minted via EnsoulMinterV2.
-func IsHandleMinted(handle string) (bool, error) {
-	if C == nil {
-		return false, fmt.Errorf("chain client not initialized")
-	}
-	minterAddr := common.HexToAddress(config.Cfg.EnsoulMinterV2Addr)
-	if minterAddr == (common.Address{}) {
-		return false, fmt.Errorf("ENSOUL_MINTER_V2_ADDR not configured")
-	}
-
-	hh := HandleHash(handle)
-	// isHandleMinted(bytes32) selector = keccak256("isHandleMinted(bytes32)")[:4]
-	selector := crypto.Keccak256([]byte("isHandleMinted(bytes32)"))[:4]
-	callData := append(selector, common.LeftPadBytes(hh.Bytes(), 32)...)
-
-	result, err := C.ethClient.CallContract(context.Background(), ethereum.CallMsg{
-		To:   &minterAddr,
-		Data: callData,
-	}, nil)
-	if err != nil {
-		return false, fmt.Errorf("isHandleMinted call failed: %w", err)
-	}
-	if len(result) >= 32 && result[31] == 1 {
-		return true, nil
-	}
-	return false, nil
-}
-
 // SignMintPermit creates a signed mint permit for the EnsoulMinterV2 contract.
 // The signature covers: handleHash, price, userAddr, deadline, nonce, chainId, minterAddr
 func SignMintPermit(
@@ -86,13 +58,13 @@ func SignMintPermit(
 	// keccak256(abi.encodePacked(handleHash, price, msg.sender, deadline, nonce, block.chainid, address(this)))
 	// NOTE: abi.encodePacked uses 20 bytes for address, 32 bytes for uint256/bytes32
 	messageHash := crypto.Keccak256Hash(
-		handleH.Bytes(),                                                // bytes32: 32 bytes
-		common.LeftPadBytes(priceWei.Bytes(), 32),                      // uint256: 32 bytes
-		userAddr.Bytes(),                                               // address: 20 bytes
+		handleH.Bytes(), // bytes32: 32 bytes
+		common.LeftPadBytes(priceWei.Bytes(), 32), // uint256: 32 bytes
+		userAddr.Bytes(), // address: 20 bytes
 		common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32),          // uint256: 32 bytes
 		common.LeftPadBytes(new(big.Int).SetUint64(nonce).Bytes(), 32), // uint256: 32 bytes
 		common.LeftPadBytes(C.chainID.Bytes(), 32),                     // uint256: 32 bytes
-		minterAddr.Bytes(),                                             // address: 20 bytes
+		minterAddr.Bytes(), // address: 20 bytes
 	)
 
 	// EIP-191 personal sign prefix
@@ -187,7 +159,8 @@ func GetBNBBalance(ctx context.Context, addr string) (*big.Int, error) {
 
 // CallMintWithPermit calls EnsoulMinterV2.mint() from a given wallet with a signed permit.
 // The caller sends BNB (priceWei) to the minter contract along with the permit data.
-func CallMintWithPermit(ctx context.Context, callerKey *ecdsa.PrivateKey, handle string, priceWei *big.Int, permit *MintPermit) (string, error) {
+// agentURI should be the full EIP-8004 registration file (data:application/json;base64,...)
+func CallMintWithPermit(ctx context.Context, callerKey *ecdsa.PrivateKey, handle string, priceWei *big.Int, permit *MintPermit, agentURI string) (string, error) {
 	if C == nil {
 		return "", fmt.Errorf("chain client not initialized")
 	}
@@ -201,13 +174,12 @@ func CallMintWithPermit(ctx context.Context, callerKey *ecdsa.PrivateKey, handle
 
 	// Build the mint function call data
 	// mint(string agentURI, bytes32 handleHash, uint256 price, uint256 deadline, uint256 nonce, bytes signature)
-	agentURI := "ensoul://soul/" + strings.ToLower(handle)
 	handleHash := HandleHash(handle)
 
 	// Function selector: keccak256("mint(string,bytes32,uint256,uint256,uint256,bytes)")[:4]
 	mintSig := crypto.Keccak256([]byte("mint(string,bytes32,uint256,uint256,uint256,bytes)"))[:4]
 
-	sigBytes := common.Hex2Bytes(permit.Signature)
+	sigBytes := common.Hex2Bytes(strings.TrimPrefix(permit.Signature, "0x"))
 
 	permitNonce, _ := new(big.Int).SetString(permit.Nonce, 10)
 	data := encodeMintCall(mintSig, agentURI, handleHash, priceWei, big.NewInt(permit.Deadline), permitNonce, sigBytes)
@@ -275,12 +247,12 @@ func encodeMintCall(selector []byte, agentURI string, handleHash common.Hash, pr
 	// Build the full calldata
 	result := make([]byte, 0, 4+headSize+len(stringData)+len(bytesData))
 	result = append(result, selector...)
-	result = append(result, common.LeftPadBytes(stringOffset.Bytes(), 32)...)   // param0: string offset (dynamic)
-	result = append(result, handleHash.Bytes()...)                              // param1: bytes32 handleHash (static)
-	result = append(result, common.LeftPadBytes(price.Bytes(), 32)...)          // param2: uint256 price
-	result = append(result, common.LeftPadBytes(deadline.Bytes(), 32)...)       // param3: uint256 deadline
-	result = append(result, common.LeftPadBytes(nonce.Bytes(), 32)...)          // param4: uint256 nonce
-	result = append(result, common.LeftPadBytes(bytesOffset.Bytes(), 32)...)    // param5: bytes offset (dynamic)
+	result = append(result, common.LeftPadBytes(stringOffset.Bytes(), 32)...) // param0: string offset (dynamic)
+	result = append(result, handleHash.Bytes()...)                            // param1: bytes32 handleHash (static)
+	result = append(result, common.LeftPadBytes(price.Bytes(), 32)...)        // param2: uint256 price
+	result = append(result, common.LeftPadBytes(deadline.Bytes(), 32)...)     // param3: uint256 deadline
+	result = append(result, common.LeftPadBytes(nonce.Bytes(), 32)...)        // param4: uint256 nonce
+	result = append(result, common.LeftPadBytes(bytesOffset.Bytes(), 32)...)  // param5: bytes offset (dynamic)
 	result = append(result, stringData...)
 	result = append(result, bytesData...)
 

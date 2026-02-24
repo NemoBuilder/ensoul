@@ -152,7 +152,6 @@ func Setup() *gin.Engine {
 			mining.GET("/pool", handlers.MiningPoolStatus)
 			mining.GET("/demands", handlers.MiningDemands)
 			mining.GET("/rewards/:claw_id", handlers.MiningRewards)
-			mining.POST("/deposit", middleware.AuthSession(), handlers.MiningDeposit) // admin
 		}
 
 		// Soul Sniper endpoints (Phase 3)
@@ -183,6 +182,37 @@ func Setup() *gin.Engine {
 			claim.POST("/initiate", middleware.AuthSession(), handlers.ClaimInitiate)
 			claim.POST("/verify", middleware.AuthSession(), handlers.ClaimVerify)
 			claim.GET("/:handle", handlers.ClaimStatus)
+		}
+
+		// Admin authentication (login/logout are public, no admin auth required)
+		adminAuth := api.Group("/admin/auth")
+		{
+			adminAuth.POST("/login", middleware.RateLimit(middleware.GeneralLimiter), handlers.AdminLogin)
+			adminAuth.POST("/logout", handlers.AdminLogout)
+		}
+
+		// Admin endpoints (protected by ADMIN_API_KEY or admin session cookie)
+		admin := api.Group("/admin", middleware.AuthAdmin())
+		{
+			// Admin session info & password change
+			admin.GET("/auth/me", handlers.AdminMe)
+			admin.POST("/auth/password", handlers.AdminChangePassword)
+
+			// Mint candidate management
+			admin.GET("/candidates", handlers.AdminListCandidates)
+			admin.POST("/candidates", handlers.AdminAddCandidate)
+			admin.POST("/candidates/batch", handlers.AdminAddCandidatesBatch)
+			admin.DELETE("/candidates/:handle", handlers.AdminRemoveCandidate)
+			admin.POST("/candidates/refresh-all", handlers.AdminRefreshAllCandidates)
+			admin.POST("/candidates/:handle/refresh", handlers.AdminRefreshCandidate)
+
+			// Tax wallet operations
+			admin.GET("/tax-wallet/status", handlers.AdminTaxWalletStatus)
+			admin.POST("/tax-wallet/mint", handlers.AdminTriggerMint)
+			admin.POST("/tax-wallet/mint/:handle", handlers.AdminMintSingle)
+
+			// Mining pool deposit (moved here from mining group)
+			admin.POST("/mining/deposit", handlers.MiningDeposit)
 		}
 	}
 

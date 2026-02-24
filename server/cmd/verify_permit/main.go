@@ -17,7 +17,7 @@ func main() {
 	sigHex := "5b2edbee1ef6f4f8f5148fa60d2eab7a0d5008c49785d3ec03dcacfa818655173e5067443c97fccadc39123cd374eb9730fc4fcee7fc6eb695b8f47f14a17e1a1c"
 
 	// ── Known addresses ─────────────────────────────────────────
-	minterAddr := common.HexToAddress("0x76D5361D768Cf9AA9b3088ce9C2760d6Cd76466B")
+	minterAddr := common.HexToAddress("0xc5aE375Dfd8042e9345F1bB8e3b039b6d4690023")
 	platformAddr := common.HexToAddress("0xAEF83196022a4301a261C03FD3335a533e0Ad18d")
 	chainID := big.NewInt(56)
 
@@ -63,13 +63,13 @@ func main() {
 		fmt.Printf("\n--- Trying userAddr: %s ---\n", userAddr.Hex())
 
 		packed := []byte{}
-		packed = append(packed, handleHash.Bytes()...)                                           // bytes32: 32
-		packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                    // uint256: 32
-		packed = append(packed, userAddr.Bytes()...)                                             // address: 20
-		packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)         // uint256: 32
+		packed = append(packed, handleHash.Bytes()...)                                             // bytes32: 32
+		packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                      // uint256: 32
+		packed = append(packed, userAddr.Bytes()...)                                               // address: 20
+		packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)          // uint256: 32
 		packed = append(packed, common.LeftPadBytes(new(big.Int).SetUint64(nonce).Bytes(), 32)...) // uint256: 32
-		packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                     // uint256: 32
-		packed = append(packed, minterAddr.Bytes()...)                                           // address: 20
+		packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                       // uint256: 32
+		packed = append(packed, minterAddr.Bytes()...)                                             // address: 20
 		fmt.Println("Packed length:", len(packed), "(expect 200)")
 
 		messageHash := crypto.Keccak256Hash(packed)
@@ -110,13 +110,13 @@ func main() {
 		fmt.Printf("\n--- 32-byte padded userAddr: %s ---\n", userAddr.Hex())
 
 		packed := []byte{}
-		packed = append(packed, handleHash.Bytes()...)                                           // bytes32: 32
-		packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                    // uint256: 32
-		packed = append(packed, common.LeftPadBytes(userAddr.Bytes(), 32)...)                    // address: 32 (OLD BUG)
-		packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)         // uint256: 32
+		packed = append(packed, handleHash.Bytes()...)                                             // bytes32: 32
+		packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                      // uint256: 32
+		packed = append(packed, common.LeftPadBytes(userAddr.Bytes(), 32)...)                      // address: 32 (OLD BUG)
+		packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)          // uint256: 32
 		packed = append(packed, common.LeftPadBytes(new(big.Int).SetUint64(nonce).Bytes(), 32)...) // uint256: 32
-		packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                     // uint256: 32
-		packed = append(packed, common.LeftPadBytes(minterAddr.Bytes(), 32)...)                  // address: 32 (OLD BUG)
+		packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                       // uint256: 32
+		packed = append(packed, common.LeftPadBytes(minterAddr.Bytes(), 32)...)                    // address: 32 (OLD BUG)
 		fmt.Println("Packed length:", len(packed), "(would be 224 with old bug)")
 
 		messageHash := crypto.Keccak256Hash(packed)

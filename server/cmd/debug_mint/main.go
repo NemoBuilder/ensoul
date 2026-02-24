@@ -15,11 +15,11 @@ import (
 )
 
 const (
-	rpcURL          = "https://bsc-dataseed.bnbchain.org"
-	minterV2Addr    = "0x76D5361D768Cf9AA9b3088ce9C2760d6Cd76466B"
-	registryAddr    = "0x8004A169FB4a3325136EB29fA0ceB6D2e539c432"
-	platformKeyHex  = "c6335b98269a0574746ed6b613fe3d0a99da7c47a0e4cb9be8c120e5d3ae0173"
-	testUserAddr    = "0xe51F749283c3fb21eF602b7AAAeb2cF73df210F2" // deployer as test user
+	rpcURL         = "https://bsc-dataseed.bnbchain.org"
+	minterV2Addr   = "0xc5aE375Dfd8042e9345F1bB8e3b039b6d4690023"
+	registryAddr   = "0x8004A169FB4a3325136EB29fA0ceB6D2e539c432"
+	platformKeyHex = "c6335b98269a0574746ed6b613fe3d0a99da7c47a0e4cb9be8c120e5d3ae0173"
+	testUserAddr   = "0xe51F749283c3fb21eF602b7AAAeb2cF73df210F2" // deployer as test user
 )
 
 func main() {
@@ -132,7 +132,7 @@ func main() {
 
 	// Simulate calling register from the MinterV2 address
 	result, err = client.CallContract(ctx, ethereum.CallMsg{
-		From: minter,    // simulate call from MinterV2
+		From: minter, // simulate call from MinterV2
 		To:   &registry,
 		Data: registerData,
 	}, nil)

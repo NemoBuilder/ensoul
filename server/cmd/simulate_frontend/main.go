@@ -18,7 +18,7 @@ import (
 
 const (
 	rpcURL       = "https://bsc-dataseed.binance.org/"
-	minterV2Addr = "0x76D5361D768Cf9AA9b3088ce9C2760d6Cd76466B"
+	minterV2Addr = "0xc5aE375Dfd8042e9345F1bB8e3b039b6d4690023"
 )
 
 func main() {
@@ -70,13 +70,13 @@ func main() {
 
 	// Verify: recover signer from the permit signature
 	packed := []byte{}
-	packed = append(packed, handleHash.Bytes()...)                                 // bytes32: 32
-	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)          // uint256: 32
-	packed = append(packed, callerAddr.Bytes()...)                                 // address: 20
+	packed = append(packed, handleHash.Bytes()...)                                    // bytes32: 32
+	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)             // uint256: 32
+	packed = append(packed, callerAddr.Bytes()...)                                    // address: 20
 	packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...) // uint256: 32
-	packed = append(packed, common.LeftPadBytes(nonce.Bytes(), 32)...)             // uint256: 32
-	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)           // uint256: 32
-	packed = append(packed, minter.Bytes()...)                                     // address: 20
+	packed = append(packed, common.LeftPadBytes(nonce.Bytes(), 32)...)                // uint256: 32
+	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)              // uint256: 32
+	packed = append(packed, minter.Bytes()...)                                        // address: 20
 	fmt.Println("Packed length:", len(packed), "(expect 200)")
 
 	messageHash := crypto.Keccak256Hash(packed)

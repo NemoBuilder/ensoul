@@ -334,10 +334,11 @@ func ShellMintPrice(c *gin.Context) {
 		return
 	}
 
-	// Check if handle is already minted on-chain
+	// Check if handle is already minted (database check — Shell table)
 	alreadyMinted := false
-	if minted, err := chain.IsHandleMinted(cleanHandle); err == nil {
-		alreadyMinted = minted
+	var existingShell models.Shell
+	if err := database.DB.Where("LOWER(handle) = ? AND stage = 'active'", cleanHandle).First(&existingShell).Error; err == nil {
+		alreadyMinted = true
 	}
 
 	// Convert wei to BNB string for display

@@ -6,6 +6,7 @@ export default createMiddleware(routing);
 export const config = {
   // Match all pathnames except:
   // - /api, /trpc, /_next, /_vercel
+  // - /admin (independent admin panel, no i18n)
   // - files with dots (e.g. favicon.ico, logo.png)
-  matcher: "/((?!api|trpc|_next|_vercel|.*\\..*).*)",
+  matcher: "/((?!api|trpc|_next|_vercel|admin|.*\\..*).*)",
 };

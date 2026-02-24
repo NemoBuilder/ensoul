@@ -195,7 +195,6 @@ type ChatShare struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-
 // ═══════════════════════════════════════════════════════════════════════
 // Economic System Models (Ensoul-Next)
 // ═══════════════════════════════════════════════════════════════════════
@@ -218,10 +217,10 @@ const (
 // MiningPool tracks the global mining pool state (single row).
 type MiningPool struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Balance        float64   `gorm:"type:decimal(28,8);default:0" json:"balance"`          // Current $Ensoul in pool
-	TotalDeposited float64   `gorm:"type:decimal(28,8);default:0" json:"total_deposited"`  // Cumulative deposits
-	TotalReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"total_released"`   // Cumulative releases
-	DailyReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"daily_released"`   // Released today
+	Balance        float64   `gorm:"type:decimal(28,8);default:0" json:"balance"`         // Current $Ensoul in pool
+	TotalDeposited float64   `gorm:"type:decimal(28,8);default:0" json:"total_deposited"` // Cumulative deposits
+	TotalReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"total_released"`  // Cumulative releases
+	DailyReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"daily_released"`  // Released today
 	LastResetAt    time.Time `json:"last_reset_at"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
@@ -343,9 +342,9 @@ type UserPersona struct {
 
 // SubscriptionTierConfig holds the limits for each subscription tier.
 type SubscriptionTierConfig struct {
-	MaxKOLs       int
-	DailyReplies  int // -1 = unlimited
-	DefaultModel  string
+	MaxKOLs          int
+	DailyReplies     int // -1 = unlimited
+	DefaultModel     string
 	MonthlyPriceUSDT float64
 }
 
@@ -360,8 +359,8 @@ var SubscriptionTiers = map[string]SubscriptionTierConfig{
 type PublicSoul struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	ShellID   uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
-	MintCost  float64        `gorm:"type:decimal(18,8)" json:"mint_cost"`  // BNB spent
-	SalePrice float64        `gorm:"type:decimal(18,8)" json:"sale_price"` // Listed price (with premium)
+	MintCost  float64        `gorm:"type:decimal(18,8)" json:"mint_cost"`             // BNB spent
+	SalePrice float64        `gorm:"type:decimal(18,8)" json:"sale_price"`            // Listed price (with premium)
 	Status    string         `gorm:"type:varchar(20);default:'minted'" json:"status"` // minted/listed/sold
 	BuyerAddr string         `gorm:"type:varchar(42)" json:"buyer_addr,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
@@ -369,6 +368,66 @@ type PublicSoul struct {
 
 	// Relations
 	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+}
+
+// MintCandidate represents a Twitter handle queued for public Soul minting by the Tax Wallet.
+// Managed by admin via API. The 30-second scheduler picks "pending" candidates.
+type MintCandidate struct {
+	ID        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Handle    string         `gorm:"type:varchar(30);uniqueIndex;not null" json:"handle"`
+	Followers int            `gorm:"default:0" json:"followers"`                       // fetched when added
+	PriceWei  string         `gorm:"type:varchar(78);default:'0'" json:"price_wei"`    // mint price in wei (stored as string)
+	Tier      string         `gorm:"type:varchar(20)" json:"tier"`                     // micro/small/medium/large/top/super
+	Priority  int            `gorm:"default:0" json:"priority"`                        // higher = mint first
+	Reason    string         `gorm:"type:varchar(200)" json:"reason"`                  // why this handle was added
+	Status    string         `gorm:"type:varchar(20);default:'pending'" json:"status"` // pending/minted/skipped/failed
+	ErrorMsg  string         `gorm:"type:text" json:"error_msg,omitempty"`
+	AddedBy   string         `gorm:"type:varchar(42)" json:"added_by"` // admin identifier
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// MintCandidate status constants
+const (
+	CandidateStatusPending = "pending"
+	CandidateStatusMinted  = "minted"
+	CandidateStatusSkipped = "skipped"
+	CandidateStatusFailed  = "failed"
+)
+
+// ═══════════════════════════════════════════════════════════════════════
+// Admin Authentication Models
+// ═══════════════════════════════════════════════════════════════════════
+
+// AdminRole constants
+const (
+	AdminRoleSuperAdmin = "super_admin"
+	AdminRoleOperator   = "operator"
+)
+
+// AdminUser represents an admin account with username/password login.
+type AdminUser struct {
+	ID           uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Username     string         `gorm:"type:varchar(50);uniqueIndex;not null" json:"username"`
+	PasswordHash string         `gorm:"type:varchar(100);not null" json:"-"` // bcrypt hash
+	Role         string         `gorm:"type:varchar(20);default:'operator'" json:"role"`
+	LastLoginAt  *time.Time     `json:"last_login_at,omitempty"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	DeletedAt    gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// AdminSession represents an authenticated admin session (HttpOnly cookie).
+type AdminSession struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TokenHash   string    `gorm:"column:token_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
+	AdminUserID uuid.UUID `gorm:"type:uuid;not null;index" json:"admin_user_id"`
+	ExpiresAt   time.Time `gorm:"not null" json:"expires_at"`
+	CreatedAt   time.Time `json:"created_at"`
+
+	// Relations
+	AdminUser AdminUser `gorm:"foreignKey:AdminUserID" json:"admin_user,omitempty"`
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -411,7 +470,7 @@ type HolderRevenue struct {
 type RevenuePool struct {
 	ID           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Period       string    `gorm:"type:varchar(7);uniqueIndex;not null" json:"period"` // "2026-02"
-	TotalRevenue float64  `gorm:"type:decimal(28,8);default:0" json:"total_revenue"`
+	TotalRevenue float64   `gorm:"type:decimal(28,8);default:0" json:"total_revenue"`
 	PoolAmount   float64   `gorm:"type:decimal(28,8);default:0" json:"pool_amount"` // 15% of total
 	Distributed  bool      `gorm:"default:false" json:"distributed"`
 	CreatedAt    time.Time `json:"created_at"`

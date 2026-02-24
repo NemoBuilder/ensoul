@@ -21,7 +21,7 @@ func main() {
 	deadline := int64(1740000000)
 	nonce := uint64(1234567890)
 	chainID := big.NewInt(56)
-	minterAddr := common.HexToAddress("0x76D5361D768Cf9AA9b3088ce9C2760d6Cd76466B")
+	minterAddr := common.HexToAddress("0xc5aE375Dfd8042e9345F1bB8e3b039b6d4690023")
 
 	fmt.Println("\n=== Step 1: abi.encodePacked ===")
 
@@ -29,13 +29,13 @@ func main() {
 	// bytes32 = 32, uint256 = 32, address = 20, uint256 = 32, uint256 = 32, uint256 = 32, address = 20
 	// total = 200 bytes
 	packed := []byte{}
-	packed = append(packed, handleHash.Bytes()...)                                  // bytes32: 32
-	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)           // uint256: 32
-	packed = append(packed, userAddr.Bytes()...)                                    // address: 20
-	packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...) // uint256: 32
+	packed = append(packed, handleHash.Bytes()...)                                             // bytes32: 32
+	packed = append(packed, common.LeftPadBytes(priceWei.Bytes(), 32)...)                      // uint256: 32
+	packed = append(packed, userAddr.Bytes()...)                                               // address: 20
+	packed = append(packed, common.LeftPadBytes(big.NewInt(deadline).Bytes(), 32)...)          // uint256: 32
 	packed = append(packed, common.LeftPadBytes(new(big.Int).SetUint64(nonce).Bytes(), 32)...) // uint256: 32
-	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)            // uint256: 32
-	packed = append(packed, minterAddr.Bytes()...)                                 // address: 20
+	packed = append(packed, common.LeftPadBytes(chainID.Bytes(), 32)...)                       // uint256: 32
+	packed = append(packed, minterAddr.Bytes()...)                                             // address: 20
 	fmt.Printf("packed length: %d bytes (expect 200)\n", len(packed))
 	fmt.Printf("packed hex: 0x%s\n", hex.EncodeToString(packed))
 
@@ -97,7 +97,7 @@ func main() {
 	solCorrect := make([]byte, 0, 60)
 	solCorrect = append(solCorrect, []byte("\x19Ethereum Signed Message:\n32")...) // 26
 	solCorrect = append(solCorrect, 0, 0)                                          // 2 padding
-	solCorrect = append(solCorrect, messageHash.Bytes()...)                         // 32
+	solCorrect = append(solCorrect, messageHash.Bytes()...)                        // 32
 	solCorrectHash := crypto.Keccak256Hash(solCorrect)
 	fmt.Println("\nMethod C (26+2+32=60):", solCorrectHash.Hex())
 	fmt.Println("Match Solidity:", solCorrectHash.Hex() == solHash.Hex())

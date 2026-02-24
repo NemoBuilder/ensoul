@@ -7,6 +7,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -55,6 +56,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.MiningReward{},
 		&models.BuybackRecord{},
 		&models.PublicSoul{},
+		&models.MintCandidate{},
 		// Soul Sniper models
 		&models.Subscription{},
 		&models.SniperKOL{},
@@ -65,6 +67,9 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.RevenuePool{},
 		&models.KOLClaim{},
 		&models.SoulUsage{},
+		// Admin authentication models
+		&models.AdminUser{},
+		&models.AdminSession{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}
@@ -83,6 +88,10 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// before the content protection feature. Idempotent: skips fragments
 	// that already have a hash.
 	backfillContentHashes()
+
+	// Step 4: Seed the initial admin user from environment variables.
+	// Idempotent: only creates if no admin user exists yet.
+	seedAdminUser(cfg)
 
 	return DB
 }
@@ -175,4 +184,43 @@ func backfillContentHashes() {
 	}
 
 	util.Log.Info("Content hash backfill completed: %d fragments updated", updated)
+}
+
+// seedAdminUser creates the initial admin account from ADMIN_USERNAME / ADMIN_PASSWORD
+// environment variables. This only runs if no AdminUser records exist yet.
+// The password is stored as a bcrypt hash. After first run, the env vars can be removed.
+func seedAdminUser(cfg *config.Config) {
+	if cfg.AdminPassword == "" {
+		return // No password configured, skip seeding
+	}
+
+	// Check if any admin user exists
+	var count int64
+	DB.Model(&models.AdminUser{}).Count(&count)
+	if count > 0 {
+		return // Admin users already exist, skip
+	}
+
+	username := cfg.AdminUsername
+	if username == "" {
+		username = "admin"
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(cfg.AdminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		util.Log.Error("Failed to hash admin password: %v", err)
+		return
+	}
+
+	admin := &models.AdminUser{
+		Username:     username,
+		PasswordHash: string(hash),
+		Role:         models.AdminRoleSuperAdmin,
+	}
+	if err := DB.Create(admin).Error; err != nil {
+		util.Log.Error("Failed to seed admin user: %v", err)
+		return
+	}
+
+	util.Log.Info("Seeded initial admin user: %s (role=%s)", username, models.AdminRoleSuperAdmin)
 }
