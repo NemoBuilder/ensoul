@@ -783,3 +783,70 @@ export const kolClaimApi = {
 
   status: (handle: string) => apiFetch<ClaimStatusData>(`/api/claim/${handle}`),
 };
+
+// ═══════════════════════════════════════════════════════════════
+// Economy Dashboard API
+// ═══════════════════════════════════════════════════════════════
+
+export interface EconomyMiningPool {
+  balance: number;
+  total_deposited: number;
+  total_released: number;
+  daily_limit: number;
+  daily_released: number;
+  daily_remaining: number;
+  paused: boolean;
+}
+
+export interface EconomyBuybackSummary {
+  total_bnb_spent: number;
+  total_token_bought: number;
+  total_operations: number;
+  mint_revenue_bnb: number;
+  mint_revenue_token: number;
+  sub_revenue_bnb: number;
+  sub_revenue_token: number;
+}
+
+export interface EconomySplitConfig {
+  mint_buyback_pct: number;
+  mint_treasury_pct: number;
+  mint_revenue_pool_pct: number;
+  sub_buyback_pct: number;
+  sub_treasury_pct: number;
+  sub_revenue_pool_pct: number;
+}
+
+export interface EconomyRevenuePool {
+  id: string;
+  period: string;
+  total_revenue: number;
+  pool_amount: number;
+  distributed: boolean;
+  created_at: string;
+}
+
+export interface EconomyBuybackRecord {
+  id: string;
+  source: string;
+  bnb_amount: number;
+  token_amount: number;
+  swap_tx_hash: string;
+  created_at: string;
+}
+
+export interface EconomyOverview {
+  total_souls: number;
+  total_fragments: number;
+  total_subscribers: number;
+  total_mining_payout: number;
+  mining_pool: EconomyMiningPool;
+  buyback: EconomyBuybackSummary;
+  revenue_pools: EconomyRevenuePool[];
+  buyback_history: EconomyBuybackRecord[];
+  split_config: EconomySplitConfig;
+}
+
+export const economyApi = {
+  overview: () => apiFetch<EconomyOverview>("/api/economy/overview"),
+};

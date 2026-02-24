@@ -46,6 +46,7 @@ export default function Navbar() {
               { href: "/mint" as const, label: t("mint") },
               { href: "/claw" as const, label: t("claws") },
               { href: "/mining" as const, label: t("mining") },
+              { href: "/economy" as const, label: t("economy") },
               { href: "/sniper" as const, label: t("sniper") },
               { href: "/leaderboard" as const, label: t("leaderboard") },
             ].map((item) => (

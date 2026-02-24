@@ -146,6 +146,9 @@ func Setup() *gin.Engine {
 		// Task board — public
 		api.GET("/tasks", handlers.GetTasks)
 
+		// Economy dashboard — public
+		api.GET("/economy/overview", handlers.EconomyOverview)
+
 		// Mining endpoints (economic system)
 		mining := api.Group("/mining")
 		{
