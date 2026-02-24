@@ -389,14 +389,25 @@ func AddToRevenuePool(poolAmount float64) {
 	}
 }
 
-// RunMonthlySettlement performs the monthly revenue settlement.
+// RunMonthlySettlement performs the monthly revenue settlement for a specific period.
 // Called on the 1st of each month for the previous month.
 func RunMonthlySettlement() {
 	period := previousPeriod()
+	runSettlementForPeriod(period)
+}
+
+// runSettlementForPeriod attempts settlement for a given period.
+// Safe to call multiple times — CalculateMonthlyRevenue checks the Distributed flag.
+func runSettlementForPeriod(period string) {
 	util.Log.Info("[revenue] Starting monthly settlement for period %s", period)
 
 	if err := CalculateMonthlyRevenue(period); err != nil {
-		util.Log.Error("[revenue] Monthly settlement failed: %v", err)
+		// "already distributed" is expected when called redundantly — log at debug level
+		if strings.Contains(err.Error(), "already distributed") {
+			util.Log.Debug("[revenue] Period %s already settled, skipping", period)
+			return
+		}
+		util.Log.Error("[revenue] Monthly settlement failed for %s: %v", period, err)
 		return
 	}
 
@@ -405,16 +416,43 @@ func RunMonthlySettlement() {
 
 // StartMonthlySettlement starts the monthly settlement scheduler.
 // Runs on the 1st of each month at 00:00 UTC.
+// On startup, it checks if any recent unsettled periods exist and compensates.
+// This ensures restarts/deployments on or after the 1st never cause missed settlements.
 func StartMonthlySettlement() {
 	go func() {
+		// Small delay to let DB connection settle after startup
+		time.Sleep(5 * time.Second)
+
+		// Compensatory check: settle any unsettled periods from the last 3 months.
+		// This covers: (a) restart on the 1st that missed the scheduler,
+		// (b) prolonged downtime spanning multiple months.
+		now := time.Now().UTC()
+		for i := 1; i <= 3; i++ {
+			check := now.AddDate(0, -i, 0)
+			period := check.Format("2006-01")
+
+			// Only attempt settlement for periods that have a revenue pool
+			var pool models.RevenuePool
+			if err := database.DB.Where("period = ?", period).First(&pool).Error; err != nil {
+				continue // No pool for this period — nothing to settle
+			}
+			if pool.Distributed {
+				continue // Already settled
+			}
+
+			util.Log.Info("[revenue] Compensatory settlement: period %s has unsettled revenue pool (%.4f)",
+				period, pool.PoolAmount)
+			runSettlementForPeriod(period)
+		}
+
+		// Then loop: sleep until next 1st of month and settle
 		for {
 			now := time.Now().UTC()
-			// Find next 1st of month at 00:00 UTC
 			next := time.Date(now.Year(), now.Month()+1, 1, 0, 0, 0, 0, time.UTC)
 			time.Sleep(time.Until(next))
 
 			RunMonthlySettlement()
 		}
 	}()
-	util.Log.Info("[revenue] Monthly settlement scheduler started (runs 1st of each month)")
+	util.Log.Info("[revenue] Monthly settlement scheduler started (with startup compensation)")
 }

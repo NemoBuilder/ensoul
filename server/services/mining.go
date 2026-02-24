@@ -269,8 +269,31 @@ func toWei(amount float64) *big.Int {
 }
 
 // StartMiningDailyReset starts a background goroutine that resets daily release at 00:00 UTC.
+// On startup, it checks LastResetAt — if the last reset was not today, it immediately
+// performs a compensatory reset. This ensures restarts/deployments never cause a missed day.
 func StartMiningDailyReset() {
+	// Compensatory check: if last reset was before today, reset now.
 	go func() {
+		// Small delay to let DB connection settle after startup
+		time.Sleep(5 * time.Second)
+
+		pool, err := GetOrCreateMiningPool()
+		if err != nil {
+			util.Log.Error("[mining] Failed to check pool for compensatory reset: %v", err)
+		} else {
+			todayStart := time.Now().UTC().Truncate(24 * time.Hour)
+			if pool.LastResetAt.Before(todayStart) {
+				util.Log.Info("[mining] Compensatory reset: LastResetAt=%s is before today %s",
+					pool.LastResetAt.Format(time.RFC3339), todayStart.Format(time.RFC3339))
+				if err := ResetDailyRelease(); err != nil {
+					util.Log.Error("[mining] Compensatory daily reset failed: %v", err)
+				}
+			} else {
+				util.Log.Debug("[mining] Daily reset already done today, no compensation needed")
+			}
+		}
+
+		// Then loop: sleep until next 00:00 UTC and reset
 		for {
 			now := time.Now().UTC()
 			next := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
@@ -281,5 +304,5 @@ func StartMiningDailyReset() {
 			}
 		}
 	}()
-	util.Log.Info("[mining] Daily release reset scheduler started")
+	util.Log.Info("[mining] Daily release reset scheduler started (with startup compensation)")
 }
