@@ -55,6 +55,8 @@ type Config struct {
 	AdminUsername string // Initial admin username (for seeding only)
 	AdminPassword string // Initial admin password (for seeding only)
 
+	SwapRPCURL string // Private RPC for swap txns (anti-sandwich), e.g. https://rpc-bsc.48.club
+
 	TreasuryAddr          string // Treasury address (cold wallet, no private key on server)
 	TaxWalletPrivateKey   string // Tax Wallet — receives 3% token tax, mints public Souls
 	BuybackPrivateKey     string // Buyback Wallet — executes PancakeSwap swaps
@@ -103,6 +105,9 @@ func Load() *Config {
 		EnsoulMinterV2Addr: getEnv("ENSOUL_MINTER_V2_ADDR", ""),
 		PancakeRouterAddr:  getEnv("PANCAKE_ROUTER_ADDR", "0x10ED43C718714eb63d5aA57B78B54704E256024E"),
 		USDTAddr:           getEnv("USDT_ADDR", "0x55d398326f99059fF775485246999027B3197955"),
+
+		// Anti-MEV: private RPC for swap transactions
+		SwapRPCURL: getEnv("SWAP_RPC_URL", ""),
 
 		// Economic System — Wallet Keys
 		TreasuryAddr:          getEnv("TREASURY_ADDR", ""),

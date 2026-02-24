@@ -19,6 +19,7 @@ import (
 // Client wraps the Ethereum client and contract instances for ERC-8004 interaction.
 type Client struct {
 	ethClient          *ethclient.Client
+	swapClient         *ethclient.Client // Private RPC for swap txns (anti-sandwich); nil = use ethClient
 	identityRegistry   *contracts.IdentityRegistry
 	reputationRegistry *contracts.ReputationRegistry
 	platformKey        *ecdsa.PrivateKey
@@ -99,8 +100,20 @@ func Init() error {
 		log.Debug("Reputation Registry version: %s", repVersion)
 	}
 
+	// Connect swap-specific private RPC for MEV protection
+	var swapClient *ethclient.Client
+	if cfg.SwapRPCURL != "" {
+		swapClient, err = ethclient.Dial(cfg.SwapRPCURL)
+		if err != nil {
+			log.Warn("Failed to connect swap RPC (%s), swap txns will use public RPC: %v", cfg.SwapRPCURL, err)
+		} else {
+			log.Info("Swap RPC connected (anti-sandwich): %s", cfg.SwapRPCURL)
+		}
+	}
+
 	C = &Client{
 		ethClient:          client,
+		swapClient:         swapClient,
 		identityRegistry:   identityRegistry,
 		reputationRegistry: reputationRegistry,
 		platformKey:        platformKey,
@@ -113,6 +126,15 @@ func Init() error {
 
 // EthClient returns the underlying ethclient for direct use.
 func (c *Client) EthClient() *ethclient.Client {
+	return c.ethClient
+}
+
+// SwapEthClient returns the private RPC client for swap transactions.
+// Falls back to the default ethClient if no private RPC is configured.
+func (c *Client) SwapEthClient() *ethclient.Client {
+	if c.swapClient != nil {
+		return c.swapClient
+	}
 	return c.ethClient
 }
 

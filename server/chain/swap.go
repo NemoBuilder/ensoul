@@ -135,12 +135,13 @@ func SwapBNBForToken(ctx context.Context, buybackKey *ecdsa.PrivateKey, bnbAmoun
 		return "", nil, fmt.Errorf("failed to sign swap tx: %w", err)
 	}
 
-	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
+	// Send via private RPC to prevent sandwich attacks
+	if err := C.SwapEthClient().SendTransaction(ctx, signedTx); err != nil {
 		return "", nil, fmt.Errorf("failed to send swap tx: %w", err)
 	}
 
 	txHash := signedTx.Hash().Hex()
-	util.Log.Info("[swap] BNB→$Ensoul swap sent: %s BNB, minOut=%s, tx=%s",
+	util.Log.Info("[swap] BNB→$Ensoul swap sent (private RPC): %s BNB, minOut=%s, tx=%s",
 		bnbAmount.String(), amountOutMin.String(), txHash)
 
 	return txHash, amountOutMin, nil
@@ -248,12 +249,13 @@ func SwapUSDTForBNB(ctx context.Context, buybackKey *ecdsa.PrivateKey, usdtAmoun
 		return "", nil, fmt.Errorf("failed to sign USDT swap tx: %w", err)
 	}
 
-	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
+	// Send via private RPC to prevent sandwich attacks
+	if err := C.SwapEthClient().SendTransaction(ctx, signedTx); err != nil {
 		return "", nil, fmt.Errorf("failed to send USDT swap tx: %w", err)
 	}
 
 	txHash := signedTx.Hash().Hex()
-	util.Log.Info("[swap] USDT→BNB swap sent: %s USDT, minOut=%s BNB, tx=%s",
+	util.Log.Info("[swap] USDT→BNB swap sent (private RPC): %s USDT, minOut=%s BNB, tx=%s",
 		usdtAmount.String(), amountOutMin.String(), txHash)
 
 	return txHash, amountOutMin, nil
