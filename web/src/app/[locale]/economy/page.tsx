@@ -272,18 +272,7 @@ export default function EconomyPage() {
       <p className="mb-8 text-[#94a3b8]">{t("subtitle")}</p>
 
       {/* ── KPI Cards ── */}
-      <div className="mb-8 grid grid-cols-2 gap-4 sm:grid-cols-5">
-        <KPICard
-          label={t("totalSouls")}
-          value={data.total_souls.toLocaleString()}
-          sub={t("mintedNFTs")}
-        />
-        <KPICard
-          label={t("tokenSupply")}
-          value={fmt(data.token_info?.total_supply ?? 0) + " $Ensoul"}
-          sub={t("totalCirculating")}
-          color="text-[#fbbf24]"
-        />
+      <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
         <KPICard
           label={t("totalBuyback")}
           value={fmt(data.buyback?.total_token_bought ?? 0) + " $Ensoul"}
@@ -296,9 +285,10 @@ export default function EconomyPage() {
           color="text-[#4ade80]"
         />
         <KPICard
-          label={t("activeSubscribers")}
-          value={data.total_subscribers.toLocaleString()}
-          sub={t("sniperUsers")}
+          label={t("revenuePoolBalance")}
+          value={fmt(data.wallets?.revenue_pool_token ?? 0) + " $Ensoul"}
+          sub={t("monthlyClaim")}
+          color="text-[#c084fc]"
         />
       </div>
 

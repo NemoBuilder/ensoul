@@ -394,6 +394,7 @@
     "totalBuyback": "总回购量",
     "spent": "已花费",
     "miningPoolBalance": "矿池余额",
+    "revenuePoolBalance": "收益池余额",
     "activeSubscribers": "订阅用户",
     "sniperUsers": "活跃狙击用户",
     "dailyLimit": "每日限额",
