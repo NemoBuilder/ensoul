@@ -572,8 +572,14 @@ export interface MiningReward {
 
 export const miningApi = {
   pool: () => apiFetch<MiningPoolStatus>("/api/mining/pool"),
-  demands: () => apiFetch<FragmentDemand[]>("/api/mining/demands"),
-  rewards: (clawId: string) => apiFetch<MiningReward[]>(`/api/mining/rewards/${clawId}`),
+  demands: () =>
+    apiFetch<{ demands: FragmentDemand[]; total: number }>("/api/mining/demands").then(
+      (r) => r.demands ?? []
+    ),
+  rewards: (clawId: string) =>
+    apiFetch<{ rewards: MiningReward[]; total_earned: number; total_pending: number }>(
+      `/api/mining/rewards/${clawId}`
+    ).then((r) => r.rewards ?? []),
 };
 
 // ═══════════════════════════════════════════════════════════════

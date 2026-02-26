@@ -48,26 +48,39 @@ func MiningDemands(c *gin.Context) {
 		return
 	}
 
-	// Build response with shell handle info
+	// Build response matching frontend FragmentDemand interface
 	type demandResponse struct {
 		ID          string  `json:"id"`
-		Handle      string  `json:"handle"`
+		ShellID     string  `json:"shell_id"`
 		Dimension   string  `json:"dimension"`
 		Description string  `json:"description"`
 		Bounty      float64 `json:"bounty"`
+		Status      string  `json:"status"`
+		CreatedAt   string  `json:"created_at"`
 		ExpiresAt   string  `json:"expires_at"`
+		Shell       *struct {
+			Handle string `json:"handle"`
+		} `json:"shell,omitempty"`
 	}
 
 	var resp []demandResponse
 	for _, d := range demands {
-		resp = append(resp, demandResponse{
+		dr := demandResponse{
 			ID:          d.ID.String(),
-			Handle:      d.Shell.Handle,
+			ShellID:     d.ShellID.String(),
 			Dimension:   d.Dimension,
 			Description: d.Description,
 			Bounty:      d.Bounty,
+			Status:      d.Status,
+			CreatedAt:   d.CreatedAt.Format("2006-01-02T15:04:05Z"),
 			ExpiresAt:   d.ExpiresAt.Format("2006-01-02T15:04:05Z"),
-		})
+		}
+		if d.Shell.Handle != "" {
+			dr.Shell = &struct {
+				Handle string `json:"handle"`
+			}{Handle: d.Shell.Handle}
+		}
+		resp = append(resp, dr)
 	}
 
 	c.JSON(http.StatusOK, gin.H{

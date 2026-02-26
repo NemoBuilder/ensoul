@@ -15,7 +15,7 @@ export default function MiningPage() {
     Promise.all([miningApi.pool(), miningApi.demands()])
       .then(([p, d]) => {
         setPool(p);
-        setDemands(Array.isArray(d) ? d : []);
+        setDemands(d);
       })
       .catch(console.error)
       .finally(() => setLoading(false));

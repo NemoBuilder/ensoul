@@ -28,8 +28,8 @@ type DimensionGap struct {
 // with scores below 80 that need more fragments.
 func ScanDimensionGaps() ([]DimensionGap, error) {
 	var shells []models.Shell
-	database.DB.Where("stage NOT IN ? AND mint_tx_hash != ''",
-		[]string{"pending", models.StagePending}).Find(&shells)
+	database.DB.Where("stage != ? AND mint_tx_hash != ''",
+		models.StagePending).Find(&shells)
 
 	var gaps []DimensionGap
 	dimensions := []string{"personality", "knowledge", "stance", "style", "relationship", "timeline"}
