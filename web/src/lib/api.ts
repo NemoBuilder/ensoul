@@ -499,6 +499,7 @@ export interface ClawBindingInfo {
   id: string;
   claw_id: string;
   claw_name: string;
+  wallet_addr: string;
 }
 
 export const clawKeyApi = {
@@ -528,8 +529,64 @@ export const clawKeyApi = {
         accept_rate: string;
         earnings: number;
       };
+      claw_id: string;
+      wallet_addr: string;
       recent_contributions: Fragment[];
+      mining_rewards: MiningReward[];
+      total_earned: number;
+      total_pending: number;
     }>(`/api/claw/keys/${bindingId}/dashboard`),
+};
+
+// ═══════════════════════════════════════════════════════════════
+// Withdraw API
+// ═══════════════════════════════════════════════════════════════
+
+export interface WithdrawStatus {
+  claw_wallet: string;
+  user_wallet: string;
+  token_balance: number;
+  bnb_balance: number;
+  withdrawable: number;
+  has_gas: boolean;
+  min_gas: number;
+  min_amount: number;
+  can_withdraw: boolean;
+  reason?: string;
+}
+
+export interface WithdrawRecord {
+  id: string;
+  claw_id: string;
+  from_addr: string;
+  to_addr: string;
+  amount: number;
+  tx_hash?: string;
+  status: string;
+  last_error?: string;
+  created_at: string;
+}
+
+export const withdrawApi = {
+  // Pre-flight check: gas, balance, cooldown
+  check: (clawId: string) =>
+    apiFetch<WithdrawStatus>(`/api/claw/withdraw/check?claw_id=${clawId}`),
+
+  // Execute withdrawal
+  withdraw: (clawId: string, amount: number) =>
+    apiFetch<{ message: string; withdraw_id: string; amount: number; status: string }>(
+      "/api/claw/withdraw",
+      {
+        method: "POST",
+        body: JSON.stringify({ claw_id: clawId, amount }),
+      }
+    ),
+
+  // Get withdrawal history
+  history: (clawId: string) =>
+    apiFetch<{ withdrawals: WithdrawRecord[] }>(
+      `/api/claw/withdraw/history?claw_id=${clawId}`
+    ),
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -543,6 +600,7 @@ export interface MiningPoolStatus {
   daily_limit: number;
   daily_released: number;
   daily_remaining: number;
+  daily_start_balance: number;
   paused: boolean;
   last_reset_at: string;
 }
@@ -579,7 +637,7 @@ export const miningApi = {
   rewards: (clawId: string) =>
     apiFetch<{ rewards: MiningReward[]; total_earned: number; total_pending: number }>(
       `/api/mining/rewards/${clawId}`
-    ).then((r) => r.rewards ?? []),
+    ),
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -801,6 +859,7 @@ export interface EconomyMiningPool {
   daily_limit: number;
   daily_released: number;
   daily_remaining: number;
+  daily_start_balance: number;
   paused: boolean;
 }
 

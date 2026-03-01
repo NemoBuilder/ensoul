@@ -6,8 +6,12 @@ import { useAccount, useSignMessage } from "wagmi";
 import {
   sessionApi,
   clawKeyApi,
+  withdrawApi,
   ClawBindingInfo,
   Fragment,
+  MiningReward,
+  WithdrawStatus,
+  WithdrawRecord,
 } from "@/lib/api";
 import { dimensionLabels, timeAgo } from "@/lib/utils";
 
@@ -29,9 +33,22 @@ export default function DashboardPage() {
     accept_rate: string;
     earnings: number;
   } | null>(null);
+  const [clawWalletAddr, setClawWalletAddr] = useState("");
+  const [miningRewards, setMiningRewards] = useState<MiningReward[]>([]);
+  const [totalEarned, setTotalEarned] = useState(0);
+  const [totalPending, setTotalPending] = useState(0);
   const [contributions, setContributions] = useState<Fragment[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [activeTab, setActiveTab] = useState<"contributions" | "rewards" | "withdraw">("contributions");
+
+  // Withdraw state
+  const [withdrawStatus, setWithdrawStatus] = useState<WithdrawStatus | null>(null);
+  const [withdrawHistory, setWithdrawHistory] = useState<WithdrawRecord[]>([]);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawMsg, setWithdrawMsg] = useState("");
+  const [checkingGas, setCheckingGas] = useState(false);
 
   // Check session on mount / when wallet changes
   useEffect(() => {
@@ -90,10 +107,17 @@ export default function DashboardPage() {
       const data = await clawKeyApi.dashboard(bindingId);
       setOverview(data.overview);
       setContributions(data.recent_contributions || []);
+      setClawWalletAddr(data.wallet_addr || "");
+      setMiningRewards(data.mining_rewards || []);
+      setTotalEarned(data.total_earned || 0);
+      setTotalPending(data.total_pending || 0);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Failed to load dashboard");
       setOverview(null);
       setContributions([]);
+      setMiningRewards([]);
+      setTotalEarned(0);
+      setTotalPending(0);
     } finally {
       setLoading(false);
     }
@@ -102,7 +126,29 @@ export default function DashboardPage() {
   function switchClaw(idx: number) {
     setActiveIdx(idx);
     setError("");
+    // Reset withdraw state when switching claws
+    setWithdrawStatus(null);
+    setWithdrawHistory([]);
+    setWithdrawAmount("");
+    setWithdrawMsg("");
     fetchDashboard(claws[idx].id);
+    // If currently on withdraw tab, fetch new claw's withdraw data
+    if (activeTab === "withdraw") {
+      const cid = claws[idx]?.claw_id;
+      if (cid) {
+        setCheckingGas(true);
+        Promise.all([
+          withdrawApi.check(cid),
+          withdrawApi.history(cid),
+        ])
+          .then(([st, hist]) => {
+            setWithdrawStatus(st);
+            setWithdrawHistory(hist.withdrawals || []);
+          })
+          .catch(() => {})
+          .finally(() => setCheckingGas(false));
+      }
+    }
   }
 
   async function handleLogin() {
@@ -348,19 +394,45 @@ export default function DashboardPage() {
 
       {claws.length > 0 && !loading && overview && (
         <>
+          {/* Claw Wallet Address */}
+          {clawWalletAddr && (
+            <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[#94a3b8]">Claw Wallet</span>
+                  <span className="font-mono text-sm text-[#e2e8f0]">{clawWalletAddr}</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <a
+                    href={`https://bscscan.com/address/${clawWalletAddr}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#8b5cf6] hover:underline"
+                  >
+                    View on BscScan →
+                  </a>
+                </div>
+              </div>
+              <p className="mt-1 text-xs text-[#94a3b8]/70">
+                Mining rewards are sent here. Use the Withdraw tab to transfer to your wallet.
+              </p>
+            </div>
+          )}
+
           {/* Overview cards */}
-          <div className="mb-8 grid gap-4 sm:grid-cols-4">
+          <div className="mb-8 grid gap-4 sm:grid-cols-2 md:grid-cols-5">
             {[
-              { label: "Submitted", value: overview.total_submitted },
-              { label: "Accepted", value: overview.total_accepted },
-              { label: "Accept Rate", value: overview.accept_rate },
-              { label: "Earnings", value: `${overview.earnings} BNB` },
+              { label: "Submitted", value: overview.total_submitted, color: "text-[#e2e8f0]" },
+              { label: "Accepted", value: overview.total_accepted, color: "text-[#e2e8f0]" },
+              { label: "Accept Rate", value: overview.accept_rate, color: "text-[#e2e8f0]" },
+              { label: "Total Earned", value: `${totalEarned.toFixed(2)} $Ensoul`, color: "text-[#22c55e]" },
+              { label: "Pending", value: `${totalPending.toFixed(2)} $Ensoul`, color: "text-[#f59e0b]" },
             ].map((item) => (
               <div
                 key={item.label}
                 className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-4 text-center"
               >
-                <div className="font-mono text-2xl font-bold text-[#e2e8f0]">
+                <div className={`font-mono text-xl font-bold ${item.color}`}>
                   {item.value}
                 </div>
                 <div className="mt-1 text-xs text-[#94a3b8]">{item.label}</div>
@@ -376,13 +448,70 @@ export default function DashboardPage() {
             >
               Browse Souls →
             </Link>
+            <Link
+              href="/mining"
+              className="rounded-lg border border-[#1e1e2e] bg-[#14141f] px-4 py-2 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#e2e8f0]"
+            >
+              Mining Pool →
+            </Link>
           </div>
 
-          {/* Recent contributions */}
-          <div>
-            <h3 className="mb-4 text-lg font-medium text-[#e2e8f0]">
+          {/* Tab selector */}
+          <div className="mb-4 flex gap-1 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-1">
+            <button
+              onClick={() => setActiveTab("contributions")}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "contributions"
+                  ? "bg-[#8b5cf6] text-white"
+                  : "text-[#94a3b8] hover:text-[#e2e8f0]"
+              }`}
+            >
               Recent Contributions
-            </h3>
+            </button>
+            <button
+              onClick={() => setActiveTab("rewards")}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "rewards"
+                  ? "bg-[#8b5cf6] text-white"
+                  : "text-[#94a3b8] hover:text-[#e2e8f0]"
+              }`}
+            >
+              Mining Rewards ({miningRewards.length})
+            </button>
+            <button
+              onClick={() => {
+                setActiveTab("withdraw");
+                const claw = claws[activeIdx];
+                if (claw) {
+                  setCheckingGas(true);
+                  setWithdrawStatus(null);
+                  setWithdrawHistory([]);
+                  const cid = claw.claw_id;
+                  Promise.all([
+                    withdrawApi.check(cid),
+                    withdrawApi.history(cid),
+                  ])
+                    .then(([st, hist]) => {
+                      setWithdrawStatus(st);
+                      setWithdrawHistory(hist.withdrawals || []);
+                    })
+                    .catch(() => {})
+                    .finally(() => setCheckingGas(false));
+                }
+              }}
+              className={`flex-1 rounded-md px-4 py-2 text-sm font-medium transition-colors ${
+                activeTab === "withdraw"
+                  ? "bg-[#8b5cf6] text-white"
+                  : "text-[#94a3b8] hover:text-[#e2e8f0]"
+              }`}
+            >
+              Withdraw
+            </button>
+          </div>
+
+          {/* Tab content: Recent contributions */}
+          {activeTab === "contributions" && (
+          <div>
             {contributions.length === 0 ? (
               <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-8 text-center text-[#94a3b8]">
                 <p className="mb-2">No contributions yet</p>
@@ -440,6 +569,280 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+          )}
+
+          {/* Tab content: Mining rewards */}
+          {activeTab === "rewards" && (
+          <div>
+            {miningRewards.length === 0 ? (
+              <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-8 text-center text-[#94a3b8]">
+                <p className="mb-2">No mining rewards yet</p>
+                <p className="text-sm">
+                  Submit accepted fragments to earn $Ensoul tokens from the mining pool.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {miningRewards.map((r) => {
+                  const statusMap: Record<string, { color: string; label: string }> = {
+                    confirmed: { color: "text-green-400 bg-green-500/10", label: "✓ Confirmed" },
+                    sent: { color: "text-blue-400 bg-blue-500/10", label: "⟳ Sent" },
+                    pending: { color: "text-yellow-400 bg-yellow-500/10", label: "⏳ Pending" },
+                    failed: { color: "text-red-400 bg-red-500/10", label: "✕ Failed" },
+                  };
+                  const st = statusMap[r.status] || { color: "text-[#94a3b8] bg-[#1e1e2e]", label: r.status };
+                  return (
+                    <div
+                      key={r.id}
+                      className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-4"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.color}`}>
+                            {st.label}
+                          </span>
+                          <span className="font-mono text-sm font-bold text-[#8b5cf6]">
+                            +{r.amount.toFixed(4)} $Ensoul
+                          </span>
+                        </div>
+                        <span className="text-xs text-[#94a3b8]">
+                          {timeAgo(r.created_at)}
+                        </span>
+                      </div>
+                      {r.tx_hash && (
+                        <div className="mt-2">
+                          <a
+                            href={`https://bscscan.com/tx/${r.tx_hash}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="font-mono text-xs text-[#8b5cf6] hover:underline"
+                          >
+                            Tx: {r.tx_hash.slice(0, 10)}…{r.tx_hash.slice(-8)}
+                          </a>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* Tab content: Withdraw */}
+          {activeTab === "withdraw" && (
+          <div className="space-y-4">
+            {checkingGas ? (
+              <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-8 text-center text-[#94a3b8]">
+                Checking wallet status...
+              </div>
+            ) : withdrawStatus ? (
+              <>
+                {/* Withdraw status card */}
+                <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-5">
+                  <h3 className="mb-4 text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">
+                    Wallet Status
+                  </h3>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-md bg-[#0a0a0f] p-3">
+                      <p className="text-xs text-[#94a3b8]">Withdrawable</p>
+                      <p className="mt-1 font-mono text-lg font-bold text-[#22c55e]">
+                        {withdrawStatus.withdrawable.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-[#4a4a5a]">$Ensoul</p>
+                    </div>
+                    <div className="rounded-md bg-[#0a0a0f] p-3">
+                      <p className="text-xs text-[#94a3b8]">On-chain Balance</p>
+                      <p className="mt-1 font-mono text-lg font-bold text-[#8b5cf6]">
+                        {withdrawStatus.token_balance.toFixed(2)}
+                      </p>
+                      <p className="text-xs text-[#4a4a5a]">$Ensoul</p>
+                    </div>
+                    <div className="rounded-md bg-[#0a0a0f] p-3">
+                      <p className="text-xs text-[#94a3b8]">Gas (BNB)</p>
+                      <p className={`mt-1 font-mono text-lg font-bold ${
+                        withdrawStatus.has_gas ? "text-[#22c55e]" : "text-red-400"
+                      }`}>
+                        {withdrawStatus.bnb_balance.toFixed(6)}
+                      </p>
+                      <p className="text-xs text-[#4a4a5a]">
+                        {withdrawStatus.has_gas ? "✅ Sufficient" : `⚠️ Need ≥ ${withdrawStatus.min_gas} BNB`}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Gas warning + deposit instructions */}
+                  {!withdrawStatus.has_gas && (
+                    <div className="mt-4 rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-4">
+                      <p className="mb-2 text-sm font-medium text-yellow-400">⛽ Gas Required</p>
+                      <p className="mb-3 text-xs text-[#94a3b8]">
+                        Your Claw wallet needs a small amount of BNB to pay for the transaction fee.
+                        Send at least <strong className="text-[#e2e8f0]">{withdrawStatus.min_gas} BNB</strong> (~$0.15) to:
+                      </p>
+                      <div className="flex items-center gap-2 rounded-md bg-[#0a0a0f] p-3">
+                        <span className="font-mono text-sm text-[#e2e8f0] break-all">
+                          {withdrawStatus.claw_wallet}
+                        </span>
+                        <button
+                          onClick={() => {
+                            navigator.clipboard.writeText(withdrawStatus.claw_wallet);
+                            setWithdrawMsg("Address copied!");
+                            setTimeout(() => setWithdrawMsg(""), 2000);
+                          }}
+                          className="shrink-0 rounded bg-[#1e1e2e] px-2 py-1 text-xs text-[#94a3b8] hover:text-[#e2e8f0]"
+                        >
+                          Copy
+                        </button>
+                      </div>
+                      <p className="mt-2 text-xs text-[#4a4a5a]">
+                        After sending BNB, click Refresh to update the status.
+                      </p>
+                      <button
+                        onClick={() => {
+                          setCheckingGas(true);
+                          const cid = claws[activeIdx]?.claw_id;
+                          if (cid) {
+                            withdrawApi.check(cid)
+                              .then(setWithdrawStatus)
+                              .catch(() => {})
+                              .finally(() => setCheckingGas(false));
+                          }
+                        }}
+                        className="mt-3 rounded-lg border border-[#1e1e2e] px-4 py-2 text-xs text-[#94a3b8] hover:border-[#8b5cf6] hover:text-[#e2e8f0]"
+                      >
+                        ↻ Refresh Status
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Withdraw form */}
+                  {withdrawStatus.has_gas && (
+                    <div className="mt-4">
+                      {withdrawStatus.can_withdraw ? (
+                        <div className="flex gap-3">
+                          <input
+                            type="number"
+                            placeholder={`Amount (min ${withdrawStatus.min_amount})`}
+                            value={withdrawAmount}
+                            onChange={(e) => setWithdrawAmount(e.target.value)}
+                            min={withdrawStatus.min_amount}
+                            max={withdrawStatus.withdrawable}
+                            step="any"
+                            className="flex-1 rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-2 text-sm text-[#e2e8f0] outline-none focus:border-[#8b5cf6] max-w-xs"
+                          />
+                          <button
+                            onClick={() => setWithdrawAmount(Math.floor(withdrawStatus.withdrawable * 10000 / 10000).toString())}
+                            className="rounded-lg border border-[#1e1e2e] px-3 py-2 text-xs text-[#94a3b8] hover:border-[#8b5cf6] hover:text-[#e2e8f0]"
+                          >
+                            Max
+                          </button>
+                          <button
+                            onClick={async () => {
+                              const amt = Number(withdrawAmount);
+                              if (!amt || amt < withdrawStatus.min_amount) {
+                                setError(`Minimum is ${withdrawStatus.min_amount} $Ensoul`);
+                                return;
+                              }
+                              setWithdrawing(true);
+                              setError("");
+                              try {
+                                const cid = claws[activeIdx]?.claw_id;
+                                const res = await withdrawApi.withdraw(cid, amt);
+                                setWithdrawMsg(res.message || "Withdrawal initiated!");
+                                setWithdrawAmount("");
+                                // Refresh status and history
+                                setTimeout(async () => {
+                                  const [st, hist] = await Promise.all([
+                                    withdrawApi.check(cid),
+                                    withdrawApi.history(cid),
+                                  ]);
+                                  setWithdrawStatus(st);
+                                  setWithdrawHistory(hist.withdrawals || []);
+                                  setWithdrawMsg("");
+                                }, 3000);
+                              } catch (err: unknown) {
+                                setError(err instanceof Error ? err.message : "Withdrawal failed");
+                              } finally {
+                                setWithdrawing(false);
+                              }
+                            }}
+                            disabled={withdrawing}
+                            className="rounded-lg bg-[#22c55e] px-5 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#16a34a] disabled:opacity-50"
+                          >
+                            {withdrawing ? "Sending..." : "Withdraw"}
+                          </button>
+                        </div>
+                      ) : (
+                        <p className="text-sm text-[#f59e0b]">
+                          ⚠️ {withdrawStatus.reason}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Success / info message */}
+                {withdrawMsg && (
+                  <div className="rounded-lg border border-green-500/30 bg-green-500/5 p-3 text-sm text-green-400">
+                    {withdrawMsg}
+                  </div>
+                )}
+
+                {/* Withdrawal history */}
+                <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-5">
+                  <h3 className="mb-3 text-sm font-semibold text-[#94a3b8] uppercase tracking-wider">
+                    Withdrawal History
+                  </h3>
+                  {withdrawHistory.length === 0 ? (
+                    <p className="text-sm text-[#4a4a5a]">No withdrawals yet.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {withdrawHistory.map((w) => {
+                        const stMap: Record<string, { color: string; label: string }> = {
+                          confirmed: { color: "text-green-400 bg-green-500/10", label: "✓ Confirmed" },
+                          sent: { color: "text-blue-400 bg-blue-500/10", label: "⟳ Sent" },
+                          pending: { color: "text-yellow-400 bg-yellow-500/10", label: "⏳ Pending" },
+                          failed: { color: "text-red-400 bg-red-500/10", label: "✕ Failed" },
+                        };
+                        const st = stMap[w.status] || { color: "text-[#94a3b8] bg-[#1e1e2e]", label: w.status };
+                        return (
+                          <div
+                            key={w.id}
+                            className="flex items-center justify-between rounded-md border border-[#1e1e2e] bg-[#0a0a0f] px-4 py-3"
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${st.color}`}>
+                                {st.label}
+                              </span>
+                              <span className="font-mono text-sm font-bold text-[#e2e8f0]">
+                                {w.amount.toFixed(4)} $Ensoul
+                              </span>
+                              {w.tx_hash && (
+                                <a
+                                  href={`https://bscscan.com/tx/${w.tx_hash}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="font-mono text-xs text-[#8b5cf6] hover:underline"
+                                >
+                                  {w.tx_hash.slice(0, 10)}…
+                                </a>
+                              )}
+                            </div>
+                            <span className="text-xs text-[#94a3b8]">{timeAgo(w.created_at)}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-8 text-center text-[#94a3b8]">
+                Unable to load withdraw status.
+              </div>
+            )}
+          </div>
+          )}
         </>
       )}
     </div>

@@ -64,8 +64,23 @@ export interface MiningPoolStatus {
   daily_limit: number;
   daily_released: number;
   daily_remaining: number;
+  daily_start_balance: number;
   paused: boolean;
   last_reset_at: string;
+}
+
+export interface FailedMiningReward {
+  id: string;
+  claw_id: string;
+  fragment_id: string;
+  amount: number;
+  tx_hash: string;
+  status: string;
+  retry_count: number;
+  last_error: string;
+  last_attempt_at: string | null;
+  created_at: string;
+  claw?: { id: string; name: string; wallet_addr: string };
 }
 
 // ── Auth API ───────────────────────────────────────────────────
@@ -169,4 +184,21 @@ export const adminMiningApi = {
       method: "POST",
       body: JSON.stringify({ amount }),
     }),
+
+  failedRewards: () =>
+    adminFetch<{ rewards: FailedMiningReward[]; total: number; max_retries: number }>(
+      "/api/admin/mining/rewards/failed"
+    ),
+
+  retryReward: (rewardId: string) =>
+    adminFetch<{ message: string; reward_id: string }>(
+      `/api/admin/mining/rewards/${rewardId}/retry`,
+      { method: "POST" }
+    ),
+
+  retryAll: () =>
+    adminFetch<{ message: string; retried: number }>(
+      "/api/admin/mining/rewards/retry-all",
+      { method: "POST" }
+    ),
 };

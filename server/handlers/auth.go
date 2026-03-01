@@ -187,16 +187,31 @@ func ClawListKeys(c *gin.Context) {
 
 	// Return binding info (without API keys!)
 	type bindingInfo struct {
-		ID       string `json:"id"`
-		ClawID   string `json:"claw_id"`
-		ClawName string `json:"claw_name"`
+		ID         string `json:"id"`
+		ClawID     string `json:"claw_id"`
+		ClawName   string `json:"claw_name"`
+		WalletAddr string `json:"wallet_addr"`
 	}
+
+	// Load claw wallet addresses
+	clawIDs := make([]string, len(bindings))
+	for i, b := range bindings {
+		clawIDs[i] = b.ClawID.String()
+	}
+	var claws []models.Claw
+	database.DB.Where("id IN ?", clawIDs).Find(&claws)
+	clawWallets := make(map[string]string)
+	for _, c := range claws {
+		clawWallets[c.ID.String()] = c.WalletAddr
+	}
+
 	result := make([]bindingInfo, len(bindings))
 	for i, b := range bindings {
 		result[i] = bindingInfo{
-			ID:       b.ID.String(),
-			ClawID:   b.ClawID.String(),
-			ClawName: b.ClawName,
+			ID:         b.ID.String(),
+			ClawID:     b.ClawID.String(),
+			ClawName:   b.ClawName,
+			WalletAddr: clawWallets[b.ClawID.String()],
 		}
 	}
 

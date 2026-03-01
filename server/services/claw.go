@@ -142,6 +142,22 @@ func GetClawDashboard(claw *models.Claw) (map[string]interface{}, error) {
 		Limit(10).
 		Find(&recentFragments)
 
+	// Get mining rewards
+	var rewards []models.MiningReward
+	database.DB.Where("claw_id = ?", claw.ID).
+		Order("created_at DESC").
+		Limit(20).
+		Find(&rewards)
+
+	var totalEarned, totalPending float64
+	for _, r := range rewards {
+		if r.Status == models.RewardStatusConfirmed {
+			totalEarned += r.Amount
+		} else if r.Status == models.RewardStatusPending || r.Status == models.RewardStatusSent {
+			totalPending += r.Amount
+		}
+	}
+
 	return map[string]interface{}{
 		"overview": map[string]interface{}{
 			"total_submitted": claw.TotalSubmitted,
@@ -149,7 +165,12 @@ func GetClawDashboard(claw *models.Claw) (map[string]interface{}, error) {
 			"accept_rate":     fmt.Sprintf("%.1f%%", acceptRate),
 			"earnings":        claw.Earnings,
 		},
+		"claw_id":              claw.ID.String(),
+		"wallet_addr":          claw.WalletAddr,
 		"recent_contributions": recentFragments,
+		"mining_rewards":       rewards,
+		"total_earned":         totalEarned,
+		"total_pending":        totalPending,
 	}, nil
 }
 

@@ -113,8 +113,8 @@ func PublishDemands() error {
 		return nil
 	}
 
-	// Calculate daily releasable
-	dailyReleasable := pool.Balance * DailyReleaseRate
+	// Calculate daily releasable (based on start-of-day snapshot, not live balance)
+	dailyReleasable := pool.DailyStartBalance * DailyReleaseRate
 	remaining := dailyReleasable - pool.DailyReleased
 	if remaining <= 0 {
 		util.Log.Info("[crab] Daily release limit reached, skipping demand publishing")

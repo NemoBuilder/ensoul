@@ -68,6 +68,8 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.KOLClaim{},
 		&models.SoulUsage{},
 		&models.UsedPaymentTx{},
+		// Withdraw records
+		&models.WithdrawRecord{},
 		// Admin authentication models
 		&models.AdminUser{},
 		&models.AdminSession{},

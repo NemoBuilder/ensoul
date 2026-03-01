@@ -40,6 +40,9 @@ func main() {
 	// Start mining pool daily release reset (resets at 00:00 UTC)
 	services.StartMiningDailyReset()
 
+	// Start failed reward auto-retry (every 10 minutes, max 5 retries)
+	services.StartRewardRetryScheduler()
+
 	// Start Crab demand publisher (every 6 hours)
 	services.StartCrabScheduler(6 * time.Hour)
 

@@ -102,6 +102,7 @@ type Claw struct {
 	TotalSubmitted   int            `gorm:"default:0" json:"total_submitted"`
 	TotalAccepted    int            `gorm:"default:0" json:"total_accepted"`
 	Earnings         float64        `gorm:"type:decimal(18,8);default:0" json:"earnings"`
+	Withdrawn        float64        `gorm:"type:decimal(18,8);default:0" json:"withdrawn"`
 	CreatedAt        time.Time      `json:"created_at"`
 	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
 }
@@ -216,13 +217,14 @@ const (
 
 // MiningPool tracks the global mining pool state (single row).
 type MiningPool struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Balance        float64   `gorm:"type:decimal(28,8);default:0" json:"balance"`         // Current $Ensoul in pool
-	TotalDeposited float64   `gorm:"type:decimal(28,8);default:0" json:"total_deposited"` // Cumulative deposits
-	TotalReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"total_released"`  // Cumulative releases
-	DailyReleased  float64   `gorm:"type:decimal(28,8);default:0" json:"daily_released"`  // Released today
-	LastResetAt    time.Time `json:"last_reset_at"`
-	UpdatedAt      time.Time `json:"updated_at"`
+	ID                uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Balance           float64   `gorm:"type:decimal(28,8);default:0" json:"balance"`             // Current $Ensoul in pool
+	TotalDeposited    float64   `gorm:"type:decimal(28,8);default:0" json:"total_deposited"`     // Cumulative deposits
+	TotalReleased     float64   `gorm:"type:decimal(28,8);default:0" json:"total_released"`      // Cumulative releases
+	DailyReleased     float64   `gorm:"type:decimal(28,8);default:0" json:"daily_released"`      // Released today
+	DailyStartBalance float64   `gorm:"type:decimal(28,8);default:0" json:"daily_start_balance"` // Balance snapshot at daily reset
+	LastResetAt       time.Time `json:"last_reset_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 // FragmentDemand represents a Crab-published fragment demand with bounty.
@@ -243,14 +245,17 @@ type FragmentDemand struct {
 
 // MiningReward records a reward paid to a Claw for a fragment contribution.
 type MiningReward struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	ClawID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"claw_id"`
-	FragmentID uuid.UUID  `gorm:"type:uuid;not null;index" json:"fragment_id"`
-	DemandID   *uuid.UUID `gorm:"type:uuid;index" json:"demand_id,omitempty"`
-	Amount     float64    `gorm:"type:decimal(18,8);not null" json:"amount"` // $Ensoul amount
-	TxHash     string     `gorm:"type:varchar(66)" json:"tx_hash,omitempty"`
-	Status     string     `gorm:"type:varchar(20);default:'pending'" json:"status"`
-	CreatedAt  time.Time  `json:"created_at"`
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ClawID        uuid.UUID  `gorm:"type:uuid;not null;index" json:"claw_id"`
+	FragmentID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"fragment_id"`
+	DemandID      *uuid.UUID `gorm:"type:uuid;index" json:"demand_id,omitempty"`
+	Amount        float64    `gorm:"type:decimal(18,8);not null" json:"amount"` // $Ensoul amount
+	TxHash        string     `gorm:"type:varchar(66)" json:"tx_hash,omitempty"`
+	Status        string     `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	RetryCount    int        `gorm:"default:0" json:"retry_count"`
+	LastError     string     `gorm:"type:text" json:"last_error,omitempty"`
+	LastAttemptAt *time.Time `json:"last_attempt_at,omitempty"`
+	CreatedAt     time.Time  `json:"created_at"`
 
 	// Relations
 	Claw     Claw     `gorm:"foreignKey:ClawID" json:"claw,omitempty"`
@@ -509,4 +514,28 @@ type UsedPaymentTx struct {
 	WalletAddr string    `gorm:"type:varchar(42);not null" json:"wallet_addr"`
 	Purpose    string    `gorm:"type:varchar(30);not null" json:"purpose"` // "subscription", "mint", etc.
 	CreatedAt  time.Time `json:"created_at"`
+}
+
+// Withdraw status constants
+const (
+	WithdrawStatusPending   = "pending"
+	WithdrawStatusSent      = "sent"
+	WithdrawStatusConfirmed = "confirmed"
+	WithdrawStatusFailed    = "failed"
+)
+
+// WithdrawRecord tracks a withdrawal from a Claw wallet to a user wallet.
+type WithdrawRecord struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ClawID    uuid.UUID `gorm:"type:uuid;not null;index" json:"claw_id"`
+	FromAddr  string    `gorm:"type:varchar(42);not null" json:"from_addr"` // Claw wallet
+	ToAddr    string    `gorm:"type:varchar(42);not null" json:"to_addr"`   // User wallet
+	Amount    float64   `gorm:"type:decimal(18,8);not null" json:"amount"`  // $Ensoul
+	TxHash    string    `gorm:"type:varchar(66)" json:"tx_hash,omitempty"`
+	Status    string    `gorm:"type:varchar(20);default:'pending'" json:"status"`
+	LastError string    `gorm:"type:text" json:"last_error,omitempty"`
+	CreatedAt time.Time `json:"created_at"`
+
+	// Relations
+	Claw Claw `gorm:"foreignKey:ClawID" json:"claw,omitempty"`
 }

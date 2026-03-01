@@ -3,9 +3,12 @@ package handlers
 import (
 	"net/http"
 
+	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/middleware"
+	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // ClawRegister handles POST /api/claw/register
@@ -201,4 +204,114 @@ func ShellContributors(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"contributors": result})
+}
+
+// ClawWithdrawCheck handles GET /api/claw/withdraw/check?claw_id=xxx
+// Pre-flight check: gas balance, token balance, cooldown, etc.
+func ClawWithdrawCheck(c *gin.Context) {
+	addr := middleware.GetSessionWallet(c)
+	if addr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not logged in"})
+		return
+	}
+
+	clawIDStr := c.Query("claw_id")
+	clawID, err := uuid.Parse(clawIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid claw_id"})
+		return
+	}
+
+	// Verify this claw is bound to the user's wallet
+	var binding models.ClawBinding
+	if err := database.DB.Where("wallet_addr = ? AND claw_id = ?", addr, clawID).First(&binding).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Claw not bound to your wallet"})
+		return
+	}
+
+	status, err := services.CheckWithdraw(clawID, addr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, status)
+}
+
+// ClawWithdraw handles POST /api/claw/withdraw
+// Initiates a $Ensoul withdrawal from Claw wallet to user wallet.
+func ClawWithdraw(c *gin.Context) {
+	addr := middleware.GetSessionWallet(c)
+	if addr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not logged in"})
+		return
+	}
+
+	var req struct {
+		ClawID string  `json:"claw_id" binding:"required"`
+		Amount float64 `json:"amount" binding:"required,gt=0"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "claw_id and amount are required"})
+		return
+	}
+
+	clawID, err := uuid.Parse(req.ClawID)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid claw_id"})
+		return
+	}
+
+	// Verify this claw is bound to the user's wallet
+	var binding models.ClawBinding
+	if err := database.DB.Where("wallet_addr = ? AND claw_id = ?", addr, clawID).First(&binding).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Claw not bound to your wallet"})
+		return
+	}
+
+	record, err := services.ExecuteWithdraw(clawID, addr, req.Amount)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Withdrawal initiated",
+		"withdraw_id": record.ID,
+		"amount":      record.Amount,
+		"from":        record.FromAddr,
+		"to":          record.ToAddr,
+		"status":      record.Status,
+	})
+}
+
+// ClawWithdrawHistory handles GET /api/claw/withdraw/history?claw_id=xxx
+func ClawWithdrawHistory(c *gin.Context) {
+	addr := middleware.GetSessionWallet(c)
+	if addr == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Not logged in"})
+		return
+	}
+
+	clawIDStr := c.Query("claw_id")
+	clawID, err := uuid.Parse(clawIDStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid claw_id"})
+		return
+	}
+
+	// Verify binding
+	var binding models.ClawBinding
+	if err := database.DB.Where("wallet_addr = ? AND claw_id = ?", addr, clawID).First(&binding).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Claw not bound to your wallet"})
+		return
+	}
+
+	records, err := services.GetWithdrawHistory(clawID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get history"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"withdrawals": records})
 }

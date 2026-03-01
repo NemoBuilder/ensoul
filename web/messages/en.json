@@ -292,7 +292,20 @@
     "expires": "Expires",
     "expired": "Expired",
     "open": "Open",
-    "filled": "Filled"
+    "filled": "Filled",
+    "myRewards": "My Mining Rewards",
+    "loginToSee": "Connect Wallet to See Rewards",
+    "loginToSeeDesc": "Sign in with your wallet to view your mining earnings.",
+    "goToDashboard": "Go to Dashboard",
+    "noClaws": "No Claw Bound",
+    "noClawsDesc": "Register and bind a Claw to start mining.",
+    "registerClaw": "Register Claw",
+    "earned": "Total Earned",
+    "pending": "Pending",
+    "totalRewards": "Total Rewards",
+    "clawWallet": "Claw Wallet",
+    "noRewardsYet": "No rewards yet. Submit quality fragments to earn $Ensoul.",
+    "viewAll": "View All"
   },
   "Sniper": {
     "title": "Soul Sniper",

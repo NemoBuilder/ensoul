@@ -111,6 +111,10 @@ func Setup() *gin.Engine {
 			claw.GET("/keys", middleware.AuthSession(), handlers.ClawListKeys)
 			claw.DELETE("/keys/:id", middleware.AuthSession(), handlers.ClawUnbindKey)
 			claw.GET("/keys/:id/dashboard", middleware.AuthSession(), handlers.ClawBoundDashboard)
+			// Withdraw endpoints (session-based)
+			claw.GET("/withdraw/check", middleware.AuthSession(), handlers.ClawWithdrawCheck)
+			claw.POST("/withdraw", middleware.AuthSession(), handlers.ClawWithdraw)
+			claw.GET("/withdraw/history", middleware.AuthSession(), handlers.ClawWithdrawHistory)
 		}
 
 		// Auth endpoints (wallet signature login)
@@ -216,6 +220,11 @@ func Setup() *gin.Engine {
 
 			// Mining pool deposit (moved here from mining group)
 			admin.POST("/mining/deposit", handlers.MiningDeposit)
+
+			// Mining reward retry (admin only)
+			admin.GET("/mining/rewards/failed", handlers.MiningFailedRewards)
+			admin.POST("/mining/rewards/:id/retry", handlers.MiningRetryReward)
+			admin.POST("/mining/rewards/retry-all", handlers.MiningRetryAll)
 		}
 	}
 

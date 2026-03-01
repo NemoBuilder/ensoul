@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -144,5 +145,57 @@ func MiningDeposit(c *gin.Context) {
 		"message": "Deposited successfully",
 		"amount":  req.Amount,
 		"source":  req.Source,
+	})
+}
+
+// MiningFailedRewards handles GET /api/admin/mining/rewards/failed
+// Returns all failed mining rewards for admin inspection.
+func MiningFailedRewards(c *gin.Context) {
+	rewards, err := services.GetFailedRewards()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get failed rewards: " + err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"rewards":     rewards,
+		"total":       len(rewards),
+		"max_retries": services.MaxRewardRetries,
+	})
+}
+
+// MiningRetryReward handles POST /api/admin/mining/rewards/:id/retry
+// Retries a single failed mining reward.
+func MiningRetryReward(c *gin.Context) {
+	idStr := c.Param("id")
+	rewardID, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid reward ID"})
+		return
+	}
+
+	if err := services.RetryFailedReward(rewardID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Reward queued for retry",
+		"reward_id": rewardID,
+	})
+}
+
+// MiningRetryAll handles POST /api/admin/mining/rewards/retry-all
+// Retries all eligible failed rewards.
+func MiningRetryAll(c *gin.Context) {
+	retried, err := services.RetryAllFailedRewards()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message": fmt.Sprintf("Queued %d rewards for retry", retried),
+		"retried": retried,
 	})
 }

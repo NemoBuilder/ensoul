@@ -292,7 +292,20 @@
     "expires": "截止",
     "expired": "已过期",
     "open": "开放",
-    "filled": "已完成"
+    "filled": "已完成",
+    "myRewards": "我的挖矿收益",
+    "loginToSee": "连接钱包查看收益",
+    "loginToSeeDesc": "使用钱包登录以查看你的挖矿收益。",
+    "goToDashboard": "前往控制台",
+    "noClaws": "未绑定爪子",
+    "noClawsDesc": "注册并绑定一个爪子以开始挖矿。",
+    "registerClaw": "注册爪子",
+    "earned": "累计收益",
+    "pending": "待确认",
+    "totalRewards": "奖励次数",
+    "clawWallet": "爪子钱包",
+    "noRewardsYet": "暂无收益。提交高质量碎片来赚取 $Ensoul。",
+    "viewAll": "查看全部"
   },
   "Sniper": {
     "title": "灵魂狙击",
