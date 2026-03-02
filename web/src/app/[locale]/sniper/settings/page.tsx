@@ -11,6 +11,7 @@ import {
   type SubscriptionStatus,
 } from "@/lib/api";
 import TagCloudFilter from "@/components/sniper/TagCloudFilter";
+import SubscribeModal from "@/components/sniper/SubscribeModal";
 
 export default function SniperSettingsPage() {
   const t = useTranslations("Sniper");
@@ -33,6 +34,7 @@ export default function SniperSettingsPage() {
 
   // Subscription
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
   const fetchData = useCallback(async () => {
@@ -199,7 +201,7 @@ export default function SniperSettingsPage() {
           <div className="rounded-xl border border-[#1e1e2e] bg-[#14141f] p-6 text-center">
             <p className="text-sm text-[#64748b] mb-3">{t("upgradeToSnipe")}</p>
             <button
-              onClick={() => {}}
+              onClick={() => setShowSubscribeModal(true)}
               className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white hover:bg-[#a78bfa] transition-colors"
             >
               {t("upgradePro")} — {t("proPrice")}{t("perMonth")}
@@ -317,13 +319,27 @@ export default function SniperSettingsPage() {
           ) : (
             <div className="text-center">
               <p className="text-sm text-[#64748b] mb-3">{t("notSubscribed")}</p>
-              <button className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white hover:bg-[#a78bfa] transition-colors">
+              <button
+                onClick={() => setShowSubscribeModal(true)}
+                className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white hover:bg-[#a78bfa] transition-colors"
+              >
                 {t("subscribeCTA")}
               </button>
             </div>
           )}
         </div>
       </section>
+
+      {/* Subscribe modal */}
+      <SubscribeModal
+        open={showSubscribeModal}
+        onClose={() => setShowSubscribeModal(false)}
+        onSuccess={() => {
+          setShowSubscribeModal(false);
+          // Refresh subscription status
+          sniperApi.getSubscription().then((s) => setSubscription(s)).catch(() => {});
+        }}
+      />
     </div>
   );
 }
