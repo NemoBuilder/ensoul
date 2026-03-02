@@ -319,7 +319,7 @@
     "personaSaved": "Persona saved!",
     "notSubscribed": "You don't have an active subscription.",
     "subscribeCTA": "Subscribe Now ",
-    "paymentNote": "Payment via USDT on BSC",
+    "paymentNote": "BSC上のUSDTまたはBNBで支払い",
     "ecosystem": "Ecosystem",
     "track": "Track",
     "custom": "Custom",
@@ -386,7 +386,10 @@
     "tweetBy": "Tweet by @{handle}",
     "snipedAt": "Sniped {time}",
     "viewOnTwitter": "View on Twitter",
-    "backToFeed": "← Back to Feed"
+    "backToFeed": "← Back to Feed",
+    "paymentMethod": "支払い方法",
+    "payNow": "今すぐ支払う",
+    "bnbPriceNote": "価格は60秒ごとに更新されます"
   },
   "Holder": {
     "title": "ホルダー収益",

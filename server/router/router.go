@@ -181,6 +181,7 @@ func Setup() *gin.Engine {
 			sniper.POST("/snipe", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperSnipe)
 
 			// Subscription management (kept from v1)
+			sniper.GET("/subscribe-price", handlers.SniperSubscribePrice)
 			sniper.POST("/subscribe", middleware.AuthSession(), handlers.SniperSubscribe)
 			sniper.GET("/subscription", middleware.AuthSession(), handlers.SniperGetSubscription)
 

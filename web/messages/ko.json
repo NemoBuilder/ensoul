@@ -319,7 +319,7 @@
     "personaSaved": "Persona saved!",
     "notSubscribed": "You don't have an active subscription.",
     "subscribeCTA": "Subscribe Now ",
-    "paymentNote": "Payment via USDT on BSC",
+    "paymentNote": "BSC에서 USDT 또는 BNB로 결제",
     "ecosystem": "Ecosystem",
     "track": "Track",
     "custom": "Custom",
@@ -386,7 +386,10 @@
     "tweetBy": "Tweet by @{handle}",
     "snipedAt": "Sniped {time}",
     "viewOnTwitter": "View on Twitter",
-    "backToFeed": "← Back to Feed"
+    "backToFeed": "← Back to Feed",
+    "paymentMethod": "결제 수단",
+    "payNow": "지금 결제",
+    "bnbPriceNote": "가격은 60초마다 업데이트됩니다"
   },
   "Holder": {
     "title": "보유자 수익",

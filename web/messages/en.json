@@ -332,7 +332,7 @@
     "personaSaved": "Persona saved!",
     "notSubscribed": "You don't have an active subscription.",
     "subscribeCTA": "Subscribe Now →",
-    "paymentNote": "Payment via USDT on BSC",
+    "paymentNote": "Payment via USDT or BNB on BSC",
     "ecosystem": "Ecosystem",
     "track": "Track",
     "custom": "Custom",
@@ -399,7 +399,10 @@
     "tweetBy": "Tweet by @{handle}",
     "snipedAt": "Sniped {time}",
     "viewOnTwitter": "View on Twitter",
-    "backToFeed": "← Back to Feed"
+    "backToFeed": "← Back to Feed",
+    "paymentMethod": "Payment Method",
+    "payNow": "Pay Now",
+    "bnbPriceNote": "Price updates every 60s"
   },
   "Holder": {
     "title": "Holder Revenue",

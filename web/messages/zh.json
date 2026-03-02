@@ -332,7 +332,7 @@
     "personaSaved": "人设已保存！",
     "notSubscribed": "你还没有活跃的订阅。",
     "subscribeCTA": "立即订阅 →",
-    "paymentNote": "通过 BSC 上的 USDT 支付",
+    "paymentNote": "通过 BSC 链上 USDT 或 BNB 支付",
     "ecosystem": "生态",
     "track": "赛道",
     "custom": "自定义",
@@ -399,7 +399,10 @@
     "tweetBy": "@{handle} 的推文",
     "snipedAt": "{time} 狙击",
     "viewOnTwitter": "在 Twitter 查看",
-    "backToFeed": "← 返回信息流"
+    "backToFeed": "← 返回信息流",
+    "paymentMethod": "支付方式",
+    "payNow": "立即支付",
+    "bnbPriceNote": "价格每 60 秒更新"
   },
   "Holder": {
     "title": "持有者收益",

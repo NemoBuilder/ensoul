@@ -711,6 +711,14 @@ export interface SubscriptionStatus {
   payment_token?: string;
 }
 
+export interface SubscribePrice {
+  tier: string;
+  price_usdt: number;
+  treasury: string;
+  bnb_price?: number;
+  price_bnb?: string;
+}
+
 export interface SniperKOL {
   id: string;
   subscription_id: string;
@@ -847,6 +855,9 @@ export const sniperApi = {
     }),
 
   // Subscription (kept)
+  getSubscribePrice: (tier = "pro") =>
+    apiFetch<SubscribePrice>(`/api/sniper/subscribe-price?tier=${tier}`),
+
   subscribe: (tier: string, paymentTxHash: string, paymentToken = "USDT", paymentAmount = 0) =>
     apiFetch<Subscription>("/api/sniper/subscribe", {
       method: "POST",

@@ -261,6 +261,51 @@ func SwapUSDTForBNB(ctx context.Context, buybackKey *ecdsa.PrivateKey, usdtAmoun
 	return txHash, amountOutMin, nil
 }
 
+// GetBNBPriceInUSDT returns the current BNB price in USDT using PancakeSwap V2.
+// It queries getAmountsOut for 1 WBNB → USDT.
+func GetBNBPriceInUSDT(ctx context.Context) (float64, error) {
+	if C == nil {
+		return 0, fmt.Errorf("chain client not initialized")
+	}
+
+	// 1 BNB = 1e18 wei
+	oneBNB := new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)
+	path := []common.Address{wbnbAddr, usdtAddr()}
+
+	data, err := parsedRouterABI.Pack("getAmountsOut", oneBNB, path)
+	if err != nil {
+		return 0, fmt.Errorf("failed to pack getAmountsOut: %w", err)
+	}
+
+	router := routerAddr()
+	result, err := C.ethClient.CallContract(ctx, ethereum.CallMsg{
+		To:   &router,
+		Data: data,
+	}, nil)
+	if err != nil {
+		return 0, fmt.Errorf("getAmountsOut WBNB→USDT call failed: %w", err)
+	}
+
+	outputs, err := parsedRouterABI.Unpack("getAmountsOut", result)
+	if err != nil {
+		return 0, fmt.Errorf("failed to unpack getAmountsOut: %w", err)
+	}
+
+	amounts := outputs[0].([]*big.Int)
+	if len(amounts) < 2 {
+		return 0, fmt.Errorf("unexpected getAmountsOut result length")
+	}
+
+	// USDT has 18 decimals on BSC
+	usdtWei := amounts[1]
+	// Convert to float: divide by 1e18
+	f := new(big.Float).SetInt(usdtWei)
+	divisor := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	price, _ := new(big.Float).Quo(f, divisor).Float64()
+
+	return price, nil
+}
+
 // ensureAllowance checks the ERC-20 allowance and approves if needed.
 func ensureAllowance(ctx context.Context, ownerKey *ecdsa.PrivateKey, token, spender common.Address, amount *big.Int) error {
 	ownerAddr := crypto.PubkeyToAddress(ownerKey.PublicKey)

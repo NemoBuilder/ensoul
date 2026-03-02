@@ -319,7 +319,7 @@
     "personaSaved": "Persona saved!",
     "notSubscribed": "You don't have an active subscription.",
     "subscribeCTA": "Subscribe Now ",
-    "paymentNote": "Payment via USDT on BSC",
+    "paymentNote": "BSC üzerinde USDT veya BNB ile ödeme",
     "ecosystem": "Ecosystem",
     "track": "Track",
     "custom": "Custom",
@@ -386,7 +386,10 @@
     "tweetBy": "Tweet by @{handle}",
     "snipedAt": "Sniped {time}",
     "viewOnTwitter": "View on Twitter",
-    "backToFeed": "← Back to Feed"
+    "backToFeed": "← Back to Feed",
+    "paymentMethod": "Ödeme Yöntemi",
+    "payNow": "Şimdi Öde",
+    "bnbPriceNote": "Fiyat her 60 saniyede güncellenir"
   },
   "Holder": {
     "title": "Tutucu Geliri",

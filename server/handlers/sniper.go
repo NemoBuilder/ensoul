@@ -2,18 +2,97 @@ package handlers
 
 import (
 	"context"
+	"fmt"
+	"math/big"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/chain"
+	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/middleware"
+	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
+	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
 
+// ─── BNB price cache ────────────────────────────────────────────────────────
+
+var (
+	bnbPriceMu       sync.RWMutex
+	bnbPriceCached   float64
+	bnbPriceCachedAt time.Time
+	bnbPriceCacheTTL = 60 * time.Second
+)
+
+func getCachedBNBPrice(ctx context.Context) (float64, error) {
+	bnbPriceMu.RLock()
+	if time.Since(bnbPriceCachedAt) < bnbPriceCacheTTL && bnbPriceCached > 0 {
+		p := bnbPriceCached
+		bnbPriceMu.RUnlock()
+		return p, nil
+	}
+	bnbPriceMu.RUnlock()
+
+	// Fetch fresh price from PancakeSwap
+	price, err := chain.GetBNBPriceInUSDT(ctx)
+	if err != nil {
+		return 0, err
+	}
+
+	bnbPriceMu.Lock()
+	bnbPriceCached = price
+	bnbPriceCachedAt = time.Now()
+	bnbPriceMu.Unlock()
+
+	return price, nil
+}
+
+// SniperSubscribePrice handles GET /api/sniper/subscribe-price
+// Returns the Pro subscription price in both USDT and BNB.
+func SniperSubscribePrice(c *gin.Context) {
+	tier := c.DefaultQuery("tier", models.SubTierPro)
+	tierCfg, ok := models.SubscriptionTiers[tier]
+	if !ok || tierCfg.MonthlyPriceUSDT <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid or free tier"})
+		return
+	}
+
+	priceUSDT := tierCfg.MonthlyPriceUSDT
+
+	resp := gin.H{
+		"tier":       tier,
+		"price_usdt": priceUSDT,
+		"treasury":   config.Cfg.TreasuryAddr,
+	}
+
+	// Try to fetch BNB price for conversion
+	if chain.C != nil {
+		ctx, cancel := context.WithTimeout(c.Request.Context(), 10*time.Second)
+		defer cancel()
+
+		bnbPrice, err := getCachedBNBPrice(ctx)
+		if err == nil && bnbPrice > 0 {
+			// price_bnb = priceUSDT / bnbPrice, add 1% buffer for price movement
+			priceBNB := priceUSDT / bnbPrice * 1.01
+			resp["bnb_price"] = bnbPrice
+			resp["price_bnb"] = fmt.Sprintf("%.6f", priceBNB)
+		} else {
+			util.Log.Warn("[sniper] Failed to get BNB price: %v", err)
+			resp["bnb_price"] = 0
+			resp["price_bnb"] = "0"
+		}
+	}
+
+	c.JSON(http.StatusOK, resp)
+}
+
 // SniperSubscribe handles POST /api/sniper/subscribe
 // Creates or renews a Soul Sniper subscription.
+// Supports payment in USDT (ERC-20 transfer) or BNB (native transfer) to TREASURY_ADDR.
 func SniperSubscribe(c *gin.Context) {
 	walletAddr := middleware.GetSessionWallet(c)
 	if walletAddr == "" {
@@ -24,7 +103,7 @@ func SniperSubscribe(c *gin.Context) {
 	var req struct {
 		Tier          string  `json:"tier" binding:"required"`
 		PaymentTxHash string  `json:"payment_tx_hash" binding:"required"`
-		PaymentToken  string  `json:"payment_token"` // USDT/BNB/ENSOUL
+		PaymentToken  string  `json:"payment_token"` // "USDT" or "BNB"
 		PaymentAmount float64 `json:"payment_amount"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -32,32 +111,96 @@ func SniperSubscribe(c *gin.Context) {
 		return
 	}
 
+	req.PaymentToken = strings.ToUpper(req.PaymentToken)
 	if req.PaymentToken == "" {
 		req.PaymentToken = "USDT"
 	}
+	if req.PaymentToken != "USDT" && req.PaymentToken != "BNB" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "payment_token must be USDT or BNB"})
+		return
+	}
 
-	// Fix #1: Check tx_hash hasn't been used before (prevent replay attacks)
+	// Get tier config for minimum price
+	tierCfg, ok := models.SubscriptionTiers[req.Tier]
+	if !ok || tierCfg.MonthlyPriceUSDT <= 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid tier"})
+		return
+	}
+
+	// Check tx_hash hasn't been used before (prevent replay attacks)
 	if err := services.CheckAndMarkPaymentTx(req.PaymentTxHash, walletAddr, "subscription"); err != nil {
 		c.JSON(http.StatusConflict, gin.H{"error": err.Error()})
 		return
 	}
 
-	// Fix #2: Verify payment on-chain and use chain-verified amount (not client-provided)
+	// Verify payment on-chain
 	verifiedAmount := req.PaymentAmount
+	treasuryAddr := config.Cfg.TreasuryAddr
+	if treasuryAddr == "" {
+		services.UnmarkPaymentTx(req.PaymentTxHash)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "treasury address not configured"})
+		return
+	}
+
 	if chain.C != nil {
 		ctx, cancel := context.WithTimeout(c.Request.Context(), 30*time.Second)
 		defer cancel()
 
-		value, _, err := chain.VerifyPaymentTx(ctx, req.PaymentTxHash, walletAddr)
-		if err != nil {
-			// Rollback the tx_hash mark on verification failure
-			services.UnmarkPaymentTx(req.PaymentTxHash)
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Payment verification failed: " + err.Error()})
-			return
-		}
-		// Use chain-verified value instead of client-provided amount
-		if value != nil && value.Sign() > 0 {
-			verifiedAmount = services.WeiToFloat(value)
+		switch req.PaymentToken {
+		case "USDT":
+			// Verify ERC-20 USDT transfer to treasury
+			amount, err := chain.VerifyERC20PaymentTx(ctx, req.PaymentTxHash, walletAddr, treasuryAddr, config.Cfg.USDTAddr)
+			if err != nil {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "USDT payment verification failed: " + err.Error()})
+				return
+			}
+			verifiedAmount = services.WeiToFloat(amount)
+			// Verify amount >= required (allow 0.5% tolerance for rounding)
+			if verifiedAmount < tierCfg.MonthlyPriceUSDT*0.995 {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("insufficient USDT payment: got %.2f, need %.2f", verifiedAmount, tierCfg.MonthlyPriceUSDT),
+				})
+				return
+			}
+
+		case "BNB":
+			// Verify native BNB transfer to treasury
+			value, to, err := chain.VerifyPaymentTx(ctx, req.PaymentTxHash, walletAddr)
+			if err != nil {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "BNB payment verification failed: " + err.Error()})
+				return
+			}
+			// Check recipient is treasury
+			if !strings.EqualFold(to, treasuryAddr) {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusBadRequest, gin.H{"error": "BNB payment recipient is not the treasury address"})
+				return
+			}
+			bnbPaid := services.WeiToFloat(value)
+
+			// Convert BNB amount to USDT value for verification
+			bnbPrice, err := getCachedBNBPrice(ctx)
+			if err != nil || bnbPrice <= 0 {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to fetch BNB price for verification"})
+				return
+			}
+			usdtValue := bnbPaid * bnbPrice
+			// Allow 3% tolerance (price can move between user's quote and tx confirmation)
+			if usdtValue < tierCfg.MonthlyPriceUSDT*0.97 {
+				services.UnmarkPaymentTx(req.PaymentTxHash)
+				c.JSON(http.StatusBadRequest, gin.H{
+					"error": fmt.Sprintf("insufficient BNB payment: %.6f BNB ≈ $%.2f, need $%.2f", bnbPaid, usdtValue, tierCfg.MonthlyPriceUSDT),
+				})
+				return
+			}
+			// Store the USDT equivalent for the economic flywheel
+			verifiedAmount = usdtValue
+			// Also store the raw BNB wei for reference
+			_ = value
 		}
 	}
 
@@ -68,6 +211,16 @@ func SniperSubscribe(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, sub)
+}
+
+// toWei18 converts a float to *big.Int with 18 decimals — not used directly here
+// but kept for reference.
+func toWei18(amount float64) *big.Int {
+	f := new(big.Float).SetFloat64(amount)
+	exp := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+	f.Mul(f, exp)
+	result, _ := f.Int(nil)
+	return result
 }
 
 // SniperGetSubscription handles GET /api/sniper/subscription

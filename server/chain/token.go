@@ -285,3 +285,69 @@ func VerifyPaymentTx(ctx context.Context, txHashHex, expectedSender string) (val
 
 	return tx.Value(), toAddr, nil
 }
+
+// ERC-20 Transfer event topic: keccak256("Transfer(address,address,uint256)")
+var transferEventTopic = common.HexToHash("0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef")
+
+// VerifyERC20PaymentTx verifies that a transaction is a successful ERC-20 transfer
+// from `expectedSender` to `expectedRecipient` on the given token contract.
+// Returns the transferred amount in token-wei.
+func VerifyERC20PaymentTx(ctx context.Context, txHashHex, expectedSender, expectedRecipient, tokenContractAddr string) (*big.Int, error) {
+	if C == nil {
+		return nil, fmt.Errorf("chain client not initialized")
+	}
+
+	txHash := common.HexToHash(txHashHex)
+
+	// 1. Check receipt status
+	receipt, err := C.ethClient.TransactionReceipt(ctx, txHash)
+	if err != nil {
+		return nil, fmt.Errorf("tx not found or not yet mined: %w", err)
+	}
+	if receipt.Status != types.ReceiptStatusSuccessful {
+		return nil, fmt.Errorf("tx %s failed (status=0)", txHashHex)
+	}
+
+	// 2. Verify the tx was sent by expectedSender
+	tx, _, err := C.ethClient.TransactionByHash(ctx, txHash)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get tx details: %w", err)
+	}
+	signer := types.LatestSignerForChainID(C.chainID)
+	sender, err := types.Sender(signer, tx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to recover sender: %w", err)
+	}
+	if !strings.EqualFold(sender.Hex(), expectedSender) {
+		return nil, fmt.Errorf("sender mismatch: tx from %s, expected %s", sender.Hex(), expectedSender)
+	}
+
+	// 3. Verify the tx target is the token contract
+	tokenAddr := common.HexToAddress(tokenContractAddr)
+	if tx.To() == nil || !strings.EqualFold(tx.To().Hex(), tokenAddr.Hex()) {
+		return nil, fmt.Errorf("tx target %v is not the expected token contract %s", tx.To(), tokenContractAddr)
+	}
+
+	// 4. Parse Transfer events from logs to find the actual amount sent to recipient
+	recipientAddr := common.HexToAddress(expectedRecipient)
+	for _, log := range receipt.Logs {
+		if log.Address != tokenAddr {
+			continue
+		}
+		if len(log.Topics) < 3 || log.Topics[0] != transferEventTopic {
+			continue
+		}
+		// Topics[1] = from (padded to 32 bytes), Topics[2] = to
+		logFrom := common.BytesToAddress(log.Topics[1].Bytes())
+		logTo := common.BytesToAddress(log.Topics[2].Bytes())
+
+		if strings.EqualFold(logFrom.Hex(), expectedSender) &&
+			strings.EqualFold(logTo.Hex(), recipientAddr.Hex()) {
+			amount := new(big.Int).SetBytes(log.Data)
+			return amount, nil
+		}
+	}
+
+	return nil, fmt.Errorf("no Transfer event found from %s to %s in tx %s", expectedSender, expectedRecipient, txHashHex)
+}
+

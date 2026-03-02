@@ -319,7 +319,7 @@
     "personaSaved": "Persona saved!",
     "notSubscribed": "You don't have an active subscription.",
     "subscribeCTA": "Subscribe Now ",
-    "paymentNote": "Payment via USDT on BSC",
+    "paymentNote": "BSC पर USDT य BNB स भगतन",
     "ecosystem": "Ecosystem",
     "track": "Track",
     "custom": "Custom",
@@ -386,7 +386,10 @@
     "tweetBy": "Tweet by @{handle}",
     "snipedAt": "Sniped {time}",
     "viewOnTwitter": "View on Twitter",
-    "backToFeed": "← Back to Feed"
+    "backToFeed": "← Back to Feed",
+    "paymentMethod": "भगतन वध",
+    "payNow": "अभ भगतन कर",
+    "bnbPriceNote": "कमत हर 60 सकड म अपडट हत ह"
   },
   "Holder": {
     "title": "धारक राजस्व",
