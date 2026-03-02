@@ -141,16 +141,13 @@ func GetSubscriptionStatus(walletAddr string) (map[string]interface{}, error) {
 	if err != nil {
 		return map[string]interface{}{
 			"active": false,
+			"tier":   models.SubTierFree,
 		}, nil
 	}
 
 	tierCfg := models.SubscriptionTiers[sub.Tier]
 
-	// Count current KOLs
-	var kolCount int64
-	database.DB.Model(&models.SniperKOL{}).Where("subscription_id = ?", sub.ID).Count(&kolCount)
-
-	// Count today's replies
+	// Count today's snipes
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
 	var replyCount int64
 	database.DB.Model(&models.SniperReply{}).
@@ -162,28 +159,18 @@ func GetSubscriptionStatus(walletAddr string) (map[string]interface{}, error) {
 		"tier":          sub.Tier,
 		"llm_model":     sub.LLMModel,
 		"expires_at":    sub.ExpiresAt,
-		"kol_count":     kolCount,
-		"kol_limit":     tierCfg.MaxKOLs,
-		"daily_replies": replyCount,
+		"daily_snipes":  replyCount,
 		"daily_limit":   tierCfg.DailyReplies,
 		"payment_token": sub.PaymentToken,
 	}, nil
 }
 
 // AddSniperKOL adds a KOL to the user's tracking list.
+// DEPRECATED: This is a legacy v1 function. Sniper 2.0 uses tag-based feeds.
 func AddSniperKOL(walletAddr, handle string) (*models.SniperKOL, error) {
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
 		return nil, fmt.Errorf("active subscription required: %w", err)
-	}
-
-	tierCfg := models.SubscriptionTiers[sub.Tier]
-
-	// Check KOL limit
-	var kolCount int64
-	database.DB.Model(&models.SniperKOL{}).Where("subscription_id = ?", sub.ID).Count(&kolCount)
-	if int(kolCount) >= tierCfg.MaxKOLs {
-		return nil, fmt.Errorf("KOL limit reached (%d/%d for %s tier)", kolCount, tierCfg.MaxKOLs, sub.Tier)
 	}
 
 	// Verify the shell exists
@@ -244,11 +231,11 @@ func ListSniperKOLs(walletAddr string) ([]models.SniperKOL, error) {
 	return kols, nil
 }
 
-// CheckDailyReplyLimit returns whether the user can still generate replies today.
+// CheckDailyReplyLimit returns whether the user can still generate snipe replies today.
 func CheckDailyReplyLimit(walletAddr string, sub *models.Subscription) (bool, int64, error) {
 	tierCfg := models.SubscriptionTiers[sub.Tier]
-	if tierCfg.DailyReplies < 0 {
-		return true, 0, nil // unlimited
+	if tierCfg.DailyReplies <= 0 {
+		return false, 0, nil // tier does not support snipe
 	}
 
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)

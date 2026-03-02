@@ -9,6 +9,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/util"
+	"github.com/google/uuid"
 )
 
 // ReplyStyle represents a generated reply variant.
@@ -18,87 +19,117 @@ type ReplyStyle struct {
 	Model   string `json:"model"`
 }
 
-// GenerateReplies generates reply suggestions for a KOL's tweet.
-// Uses the Soul's personality + user's persona to craft contextual replies.
+// GenerateReplies is DEPRECATED — use Snipe() instead.
+// Kept for backward compatibility with old API clients.
 func GenerateReplies(walletAddr, handle, tweetID, tweetText string) (*models.SniperReply, error) {
-	// Verify subscription
+	return Snipe(walletAddr, handle, tweetID, tweetText, "")
+}
+
+// Snipe generates reply suggestions for any tweet (Sniper 2.0).
+// Soul association is optional — if the author has a Soul, it's used for persona enrichment.
+// Requires an active Pro subscription.
+func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.SniperReply, error) {
+	// 1. Verify Pro subscription
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
-		return nil, fmt.Errorf("active subscription required: %w", err)
+		return nil, fmt.Errorf("Pro subscription required to snipe")
 	}
 
-	// Check daily limit
+	if sub.Tier != models.SubTierPro {
+		return nil, fmt.Errorf("Pro subscription required to snipe")
+	}
+
+	// 2. Check daily limit (50/day for Pro)
 	canReply, used, err := CheckDailyReplyLimit(walletAddr, sub)
 	if err != nil {
 		return nil, err
 	}
 	if !canReply {
 		tierCfg := models.SubscriptionTiers[sub.Tier]
-		return nil, fmt.Errorf("daily reply limit reached (%d/%d)", used, tierCfg.DailyReplies)
+		return nil, fmt.Errorf("daily snipe limit reached (%d/%d)", used, tierCfg.DailyReplies)
 	}
 
-	// Check the KOL is in user's tracking list
-	var kol models.SniperKOL
-	if err := database.DB.Where("subscription_id = ? AND handle = ?", sub.ID, handle).
-		First(&kol).Error; err != nil {
-		return nil, fmt.Errorf("@%s is not in your tracking list", handle)
-	}
-
-	// Check for duplicate tweet reply
+	// 3. Check for cached reply (same user + tweet)
 	var existing models.SniperReply
 	if err := database.DB.Where("wallet_addr = ? AND tweet_id = ?", walletAddr, tweetID).
 		First(&existing).Error; err == nil {
-		return &existing, nil // Return cached reply
+		return &existing, nil
 	}
 
-	// Load the Soul
-	shell, err := GetShellByHandle(handle)
-	if err != nil {
-		return nil, fmt.Errorf("soul @%s not found", handle)
+	// 4. Try to find the author's Soul (optional)
+	var shell *models.Shell
+	usedSoul := false
+	shellByHandle, err := GetShellByHandle(authorHandle)
+	if err == nil {
+		shell = shellByHandle
+		usedSoul = true
 	}
 
-	// Load user persona
+	// 5. Load user persona (optional)
 	persona := getUserPersona(walletAddr)
 
-	// Build the reply generation prompt
-	replies, err := generateReplyVariants(shell, persona, tweetText, sub.LLMModel)
+	// 6. Generate reply variants
+	replies, err := generateSnipeVariants(shell, persona, authorHandle, tweetText, sub.LLMModel)
 	if err != nil {
 		return nil, fmt.Errorf("reply generation failed: %w", err)
 	}
 
-	// Convert replies to JSON
+	// 7. Convert replies to JSON
 	repliesJSON, _ := json.Marshal(replies)
 
-	// Save reply record
-	sniperReply := &models.SniperReply{
-		ShellID:    shell.ID,
-		WalletAddr: walletAddr,
-		TweetID:    tweetID,
-		TweetText:  tweetText,
-		Replies:    models.JSON{},
+	// 8. Build tweet URL
+	tweetURL := fmt.Sprintf("https://twitter.com/%s/status/%s", authorHandle, tweetID)
+
+	// 9. Save sniper reply record
+	var shellID *uuid.UUID
+	if shell != nil {
+		shellID = &shell.ID
 	}
-	// Store replies as JSON
+
+	sniperReply := &models.SniperReply{
+		ShellID:      shellID,
+		WalletAddr:   walletAddr,
+		TweetID:      tweetID,
+		TweetText:    tweetText,
+		Replies:      models.JSON{},
+		AuthorHandle: authorHandle,
+		TagID:        tagID,
+		TweetURL:     tweetURL,
+		UsedSoul:     usedSoul,
+	}
 	json.Unmarshal(repliesJSON, &sniperReply.Replies)
 
 	if err := database.DB.Create(sniperReply).Error; err != nil {
 		return nil, fmt.Errorf("failed to save reply: %w", err)
 	}
 
-	// Record usage for holder revenue calculation
-	RecordUsage(shell.ID, walletAddr)
+	// 10. Record usage for holder revenue (only if Soul was used)
+	if shell != nil {
+		RecordUsage(shell.ID, walletAddr)
+	}
 
-	util.Log.Info("[sniper] Generated %d replies for @%s tweet %s (user: %s)",
-		len(replies), handle, tweetID, walletAddr)
+	util.Log.Info("[sniper] Snipe: generated %d replies for @%s tweet %s (user: %s, soul: %v)",
+		len(replies), authorHandle, tweetID, walletAddr, usedSoul)
 
 	return sniperReply, nil
 }
 
-// generateReplyVariants uses LLM to generate 3 reply styles.
-func generateReplyVariants(shell *models.Shell, persona *models.UserPersona, tweetText, llmModel string) ([]ReplyStyle, error) {
-	// Build rich soul context
-	soulContext := buildRichSoulPrompt(shell)
+// generateSnipeVariants uses LLM to generate 3 reply styles.
+// shell is optional (nil = no Soul persona, use generic crypto persona).
+func generateSnipeVariants(shell *models.Shell, persona *models.UserPersona, authorHandle, tweetText, llmModel string) ([]ReplyStyle, error) {
+	// Build soul context (optional)
+	var soulSection string
+	if shell != nil {
+		soulSection = buildRichSoulPrompt(shell)
+	} else {
+		soulSection = `
+=== AUTHOR CONTEXT ===
+No Soul profile available for @` + authorHandle + `.
+Use your general knowledge of the crypto/web3 community to generate relevant replies.
+Analyze the tweet content to determine the appropriate tone and topic.`
+	}
 
-	// Build persona context
+	// Build persona context (optional)
 	var personaSection string
 	if persona != nil {
 		personaSection = fmt.Sprintf(`
@@ -109,7 +140,7 @@ Reference Materials: %s
 Preferred Language: %s
 `, persona.Bio, persona.Style, persona.Materials, persona.Language)
 	} else {
-		personaSection = "\n=== YOUR PERSONA ===\nNo persona configured. Generate replies in a general professional tone.\n"
+		personaSection = "\n=== YOUR PERSONA ===\nNo persona configured. Generate replies in a professional crypto-native tone.\n"
 	}
 
 	prompt := fmt.Sprintf(`You are a reply generation engine for Soul Sniper.
@@ -130,15 +161,16 @@ Generate exactly 3 reply variants in different styles:
 Each reply MUST:
 - Be under 280 characters (Twitter limit)
 - Sound natural, not AI-generated
-- Reflect the soul's personality and the user's persona
 - Be relevant to the tweet content
+- If a Soul profile is available, reflect that personality
+- If a persona is configured, reflect that style
 
 Respond in JSON format ONLY:
 [
   {"style": "insightful", "content": "..."},
   {"style": "witty", "content": "..."},
   {"style": "supportive", "content": "..."}
-]`, soulContext, personaSection, shell.Handle, tweetText)
+]`, soulSection, personaSection, authorHandle, tweetText)
 
 	var replies []ReplyStyle
 	err := CallLLMJSON([]ChatMessage{
@@ -156,6 +188,12 @@ Respond in JSON format ONLY:
 	}
 
 	return replies, nil
+}
+
+// generateReplyVariants is DEPRECATED — use generateSnipeVariants.
+// Kept for backward compatibility.
+func generateReplyVariants(shell *models.Shell, persona *models.UserPersona, tweetText, llmModel string) ([]ReplyStyle, error) {
+	return generateSnipeVariants(shell, persona, shell.Handle, tweetText, llmModel)
 }
 
 // getUserPersona returns the user's persona, or nil if not set.
@@ -225,8 +263,8 @@ func GetUserReplies(walletAddr string, limit int) ([]models.SniperReply, error) 
 	return replies, nil
 }
 
-// MonitorKOLTweets checks for new tweets from all tracked KOLs across all active subscriptions.
-// Called periodically by the scheduler.
+// MonitorKOLTweets is DEPRECATED — replaced by tag-based feed refresher in Sniper 2.0.
+// Kept for backward compatibility. New system uses StartFeedRefresher().
 func MonitorKOLTweets() {
 	// Get all active subscriptions with their KOLs
 	var subs []models.Subscription
@@ -323,7 +361,7 @@ func fetchRecentTweets(handle string) ([]TwitterTweet, error) {
 	return recent, nil
 }
 
-// StartSniperMonitor starts the background KOL tweet monitor.
+// StartSniperMonitor is DEPRECATED — replaced by StartFeedRefresher() in Sniper 2.0.
 func StartSniperMonitor(interval time.Duration) {
 	go func() {
 		ticker := time.NewTicker(interval)

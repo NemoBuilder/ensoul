@@ -161,18 +161,41 @@ func Setup() *gin.Engine {
 			mining.GET("/rewards/:claw_id", handlers.MiningRewards)
 		}
 
-		// Soul Sniper endpoints (Phase 3)
+		// Soul Sniper endpoints (Phase 3 → Sniper 2.0)
 		sniper := api.Group("/sniper")
 		{
+			// === Public endpoints (no auth) ===
+			sniper.GET("/tags", handlers.SniperGetTags)
+			sniper.GET("/feed", handlers.SniperGetFeed)
+			sniper.GET("/feed/stream", handlers.SniperFeedStream)
+			sniper.GET("/feed/refresh", handlers.SniperFeedRefresh)
+
+			// === Session-required endpoints ===
+			sniper.GET("/user/tags", middleware.AuthSession(), handlers.SniperGetUserTags)
+			sniper.PUT("/user/tags", middleware.AuthSession(), handlers.SniperUpdateUserTags)
+			sniper.GET("/user/muted", middleware.AuthSession(), handlers.SniperGetMuted)
+			sniper.POST("/user/muted", middleware.AuthSession(), handlers.SniperMuteAccount)
+			sniper.DELETE("/user/muted/:handle", middleware.AuthSession(), handlers.SniperUnmuteAccount)
+
+			// Snipe: generate reply (Pro only)
+			sniper.POST("/snipe", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperSnipe)
+
+			// Subscription management (kept from v1)
 			sniper.POST("/subscribe", middleware.AuthSession(), handlers.SniperSubscribe)
 			sniper.GET("/subscription", middleware.AuthSession(), handlers.SniperGetSubscription)
+
+			// Reply history (kept from v1)
+			sniper.GET("/replies", middleware.AuthSession(), handlers.SniperGetReplies)
+
+			// Persona management (kept from v1)
+			sniper.POST("/persona", middleware.AuthSession(), handlers.SniperSetPersona)
+			sniper.GET("/persona", middleware.AuthSession(), handlers.SniperGetPersona)
+
+			// Legacy v1 endpoints (deprecated but kept for compatibility)
 			sniper.POST("/kols", middleware.AuthSession(), handlers.SniperAddKOL)
 			sniper.GET("/kols", middleware.AuthSession(), handlers.SniperListKOLs)
 			sniper.DELETE("/kols/:id", middleware.AuthSession(), handlers.SniperRemoveKOL)
 			sniper.POST("/reply", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperGenerateReply)
-			sniper.GET("/replies", middleware.AuthSession(), handlers.SniperGetReplies)
-			sniper.POST("/persona", middleware.AuthSession(), handlers.SniperSetPersona)
-			sniper.GET("/persona", middleware.AuthSession(), handlers.SniperGetPersona)
 		}
 
 		// Holder revenue endpoints (Phase 4)
@@ -225,6 +248,13 @@ func Setup() *gin.Engine {
 			admin.GET("/mining/rewards/failed", handlers.MiningFailedRewards)
 			admin.POST("/mining/rewards/:id/retry", handlers.MiningRetryReward)
 			admin.POST("/mining/rewards/retry-all", handlers.MiningRetryAll)
+
+			// Sniper 2.0: Tag candidate management
+			admin.POST("/sniper/candidates/import", handlers.AdminSniperImportCandidates)
+			admin.GET("/sniper/candidates", handlers.AdminSniperListCandidates)
+			admin.POST("/sniper/candidates/:id/approve", handlers.AdminSniperApproveCandidate)
+			admin.POST("/sniper/candidates/:id/reject", handlers.AdminSniperRejectCandidate)
+			admin.POST("/sniper/candidates/batch", handlers.AdminSniperBatchReview)
 		}
 	}
 

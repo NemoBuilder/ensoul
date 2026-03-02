@@ -686,7 +686,7 @@ export const mintV2Api = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Soul Sniper API (Phase 3)
+// Soul Sniper API (Phase 3 → V2)
 // ═══════════════════════════════════════════════════════════════
 
 export interface Subscription {
@@ -706,9 +706,7 @@ export interface SubscriptionStatus {
   tier?: string;
   llm_model?: string;
   expires_at?: string;
-  kol_count?: number;
-  kol_limit?: number;
-  daily_replies?: number;
+  daily_snipes?: number;
   daily_limit?: number;
   payment_token?: string;
 }
@@ -733,6 +731,10 @@ export interface SniperReply {
   wallet_addr: string;
   tweet_id: string;
   tweet_text: string;
+  author_handle: string;
+  tag_id: string;
+  tweet_url: string;
+  used_soul: boolean;
   replies: ReplyVariant[];
   created_at: string;
   shell?: Shell;
@@ -747,7 +749,104 @@ export interface UserPersona {
   language: string;
 }
 
+// Sniper V2 — Tag & Feed types
+export interface SniperTagAccount {
+  handle: string;
+  display_name: string;
+  realtime_priority: boolean;
+}
+
+export interface SniperTag {
+  id: string;
+  name: string;
+  name_en: string;
+  icon: string;
+  category: string;
+  description: string;
+  is_default: boolean;
+  sort_order: number;
+  accounts: SniperTagAccount[];
+}
+
+export interface TweetCardAuthor {
+  handle: string;
+  name: string;
+  avatar: string;
+  verified: boolean;
+  followers_count: number;
+}
+
+export interface TweetCardStats {
+  replies: number;
+  retweets: number;
+  likes: number;
+  views: number;
+}
+
+export interface TweetCard {
+  id: string;
+  text: string;
+  author: TweetCardAuthor;
+  tags: string[];
+  created_at: string;
+  stats: TweetCardStats;
+  has_media: boolean;
+  tweet_url: string;
+  has_soul: boolean;
+  soul_handle?: string;
+}
+
+export interface FeedResult {
+  tag_ids: string[];
+  tweets: TweetCard[];
+  next_cursor: string;
+  cached: boolean;
+  cache_age_seconds: number;
+}
+
 export const sniperApi = {
+  // Tags
+  getTags: () => apiFetch<{ tags: SniperTag[]; defaults: string[] }>("/api/sniper/tags"),
+
+  // Feed
+  getFeed: (tagIds: string[], cursor?: string, count = 20) => {
+    const params = new URLSearchParams({ tag_ids: tagIds.join(","), count: String(count) });
+    if (cursor) params.set("cursor", cursor);
+    return apiFetch<FeedResult>(`/api/sniper/feed?${params.toString()}`);
+  },
+
+  feedRefresh: (tagIds: string[]) =>
+    apiFetch<{ status: string }>(`/api/sniper/feed/refresh?tag_ids=${tagIds.join(",")}`),
+
+  // User tag preferences
+  getUserTags: () => apiFetch<{ tag_ids: string[] }>("/api/sniper/user/tags"),
+
+  updateUserTags: (tagIds: string[]) =>
+    apiFetch<{ tag_ids: string[] }>("/api/sniper/user/tags", {
+      method: "PUT",
+      body: JSON.stringify({ tag_ids: tagIds }),
+    }),
+
+  // Mute
+  getMuted: () => apiFetch<{ handles: string[] }>("/api/sniper/user/muted"),
+
+  muteAccount: (handle: string) =>
+    apiFetch<{ status: string }>("/api/sniper/user/muted", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    }),
+
+  unmuteAccount: (handle: string) =>
+    apiFetch<{ status: string }>(`/api/sniper/user/muted/${handle}`, { method: "DELETE" }),
+
+  // Snipe
+  snipe: (tweetId: string, tweetText: string, authorHandle: string, tagId: string) =>
+    apiFetch<SniperReply>("/api/sniper/snipe", {
+      method: "POST",
+      body: JSON.stringify({ tweet_id: tweetId, tweet_text: tweetText, author_handle: authorHandle, tag_id: tagId }),
+    }),
+
+  // Subscription (kept)
   subscribe: (tier: string, paymentTxHash: string, paymentToken = "USDT", paymentAmount = 0) =>
     apiFetch<Subscription>("/api/sniper/subscribe", {
       method: "POST",
@@ -756,25 +855,9 @@ export const sniperApi = {
 
   getSubscription: () => apiFetch<SubscriptionStatus>("/api/sniper/subscription"),
 
-  addKOL: (handle: string) =>
-    apiFetch<SniperKOL>("/api/sniper/kols", {
-      method: "POST",
-      body: JSON.stringify({ handle }),
-    }),
-
-  listKOLs: () => apiFetch<{ kols: SniperKOL[] }>("/api/sniper/kols"),
-
-  removeKOL: (id: string) =>
-    apiFetch<{ status: string }>(`/api/sniper/kols/${id}`, { method: "DELETE" }),
-
-  generateReply: (handle: string, tweetId: string, tweetText: string) =>
-    apiFetch<SniperReply>("/api/sniper/reply", {
-      method: "POST",
-      body: JSON.stringify({ handle, tweet_id: tweetId, tweet_text: tweetText }),
-    }),
-
   getReplies: () => apiFetch<{ replies: SniperReply[] }>("/api/sniper/replies"),
 
+  // Persona (kept)
   setPersona: (bio: string, style: string, materials: string, language: string) =>
     apiFetch<UserPersona>("/api/sniper/persona", {
       method: "POST",
@@ -782,6 +865,21 @@ export const sniperApi = {
     }),
 
   getPersona: () => apiFetch<{ configured: boolean; persona?: UserPersona }>("/api/sniper/persona"),
+
+  // Legacy (deprecated)
+  addKOL: (handle: string) =>
+    apiFetch<SniperKOL>("/api/sniper/kols", {
+      method: "POST",
+      body: JSON.stringify({ handle }),
+    }),
+  listKOLs: () => apiFetch<{ kols: SniperKOL[] }>("/api/sniper/kols"),
+  removeKOL: (id: string) =>
+    apiFetch<{ status: string }>(`/api/sniper/kols/${id}`, { method: "DELETE" }),
+  generateReply: (handle: string, tweetId: string, tweetText: string) =>
+    apiFetch<SniperReply>("/api/sniper/reply", {
+      method: "POST",
+      body: JSON.stringify({ handle, tweet_id: tweetId, tweet_text: tweetText }),
+    }),
 };
 
 // ═══════════════════════════════════════════════════════════════

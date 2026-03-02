@@ -62,6 +62,12 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.SniperKOL{},
 		&models.SniperReply{},
 		&models.UserPersona{},
+		// Sniper 2.0 tag-based models
+		&models.SniperTag{},
+		&models.SniperTagAccount{},
+		&models.TagCandidate{},
+		&models.UserSelectedTag{},
+		&models.UserMutedAccount{},
 		// Holder Revenue & KOL Claim models
 		&models.HolderRevenue{},
 		&models.RevenuePool{},
@@ -95,6 +101,10 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Step 4: Seed the initial admin user from environment variables.
 	// Idempotent: only creates if no admin user exists yet.
 	seedAdminUser(cfg)
+
+	// Step 5: Seed Sniper 2.0 default tags and accounts.
+	// Idempotent: only creates if no tags exist yet.
+	seedSniperTags()
 
 	return DB
 }
@@ -226,4 +236,136 @@ func seedAdminUser(cfg *config.Config) {
 	}
 
 	util.Log.Info("Seeded initial admin user: %s (role=%s)", username, models.AdminRoleSuperAdmin)
+}
+
+// seedSniperTags creates the default Sniper 2.0 tags and their associated accounts.
+// Idempotent: only runs if no SniperTag records exist.
+func seedSniperTags() {
+	var count int64
+	DB.Model(&models.SniperTag{}).Count(&count)
+	if count > 0 {
+		return // Tags already seeded
+	}
+
+	util.Log.Info("Seeding Sniper 2.0 default tags and accounts...")
+
+	// Tag definitions: {id, name, name_en, icon, category, description, is_default, sort_order}
+	type tagDef struct {
+		ID          string
+		Name        string
+		NameEN      string
+		Icon        string
+		Category    string
+		Description string
+		IsDefault   bool
+		SortOrder   int
+	}
+
+	tags := []tagDef{
+		// Ecosystem tags
+		{"bnb_official", "BNB官方", "BNB Official", "🔶", "ecosystem", "BNB Chain ecosystem official accounts", true, 1},
+		{"bnb_kol", "BNB-KOL", "BNB KOLs", "🔶", "ecosystem", "BNB Chain key opinion leaders", false, 2},
+		{"sol_official", "SOL官方", "SOL Official", "🟣", "ecosystem", "Solana ecosystem official accounts", true, 3},
+		{"sol_kol", "SOL-KOL", "SOL KOLs", "🟣", "ecosystem", "Solana key opinion leaders", false, 4},
+		{"base_official", "Base官方", "Base Official", "🔵", "ecosystem", "Base / Coinbase ecosystem official accounts", false, 5},
+		{"base_kol", "Base-KOL", "Base KOLs", "🔵", "ecosystem", "Base ecosystem key opinion leaders", false, 6},
+		// Track tags
+		{"ai_track", "AI赛道", "AI Track", "🤖", "track", "AI + Crypto projects and researchers", true, 10},
+		{"defi_track", "DeFi赛道", "DeFi Track", "💰", "track", "DeFi protocols and analysts", false, 11},
+		{"prediction", "预测市场", "Prediction Markets", "🎲", "track", "Prediction market protocols", false, 12},
+		{"media", "聚合媒体", "Crypto Media", "📰", "track", "Crypto news and media aggregators", false, 13},
+	}
+
+	for _, t := range tags {
+		tag := models.SniperTag{
+			ID:          t.ID,
+			Name:        t.Name,
+			NameEN:      t.NameEN,
+			Icon:        t.Icon,
+			Category:    t.Category,
+			Description: t.Description,
+			IsDefault:   t.IsDefault,
+			Active:      true,
+			SortOrder:   t.SortOrder,
+		}
+		DB.Create(&tag)
+	}
+
+	// Account definitions: {tag_id, handle, display_name, realtime_priority}
+	type acctDef struct {
+		TagID            string
+		Handle           string
+		DisplayName      string
+		RealtimePriority bool
+	}
+
+	accounts := []acctDef{
+		// BNB Official
+		{"bnb_official", "bnbchain", "BNB Chain", true},
+		{"bnb_official", "BinanceLabs", "Binance Labs", true},
+		{"bnb_official", "BNBChainDev", "BNB Chain Dev", false},
+		{"bnb_official", "PancakeSwap", "PancakeSwap", false},
+		{"bnb_official", "ABORINGZ", "caBoring", false},
+		{"bnb_official", "BinanceWallet", "Binance Wallet", false},
+
+		// BNB KOL
+		{"bnb_kol", "cz_binance", "CZ", true},
+		{"bnb_kol", "haboringz", "Bo", false},
+		{"bnb_kol", "BinanceResearch", "Binance Research", false},
+
+		// SOL Official
+		{"sol_official", "solana", "Solana", true},
+		{"sol_official", "JupiterExchange", "Jupiter", true},
+		{"sol_official", "RaydiumProtocol", "Raydium", false},
+		{"sol_official", "phantom", "Phantom", false},
+		{"sol_official", "MagicEden", "Magic Eden", false},
+
+		// SOL KOL
+		{"sol_kol", "0xMert_", "Mert", true},
+		{"sol_kol", "aaboringz", "toly", false},
+
+		// Base Official
+		{"base_official", "base", "Base", true},
+		{"base_official", "coinbase", "Coinbase", true},
+		{"base_official", "BuildOnBase", "Build On Base", false},
+
+		// Base KOL
+		{"base_kol", "jessepollak", "Jesse Pollak", true},
+
+		// AI Track
+		{"ai_track", "ai16zdao", "ai16z", true},
+		{"ai_track", "virtuals_io", "Virtuals Protocol", true},
+		{"ai_track", "griffaindotcom", "GRIFFAIN", false},
+		{"ai_track", "auaboringz", "Autonolas", false},
+		{"ai_track", "0xzerebro", "Zerebro", false},
+
+		// DeFi Track
+		{"defi_track", "AaveAave", "Aave", true},
+		{"defi_track", "Uniswap", "Uniswap", true},
+		{"defi_track", "CurveFinance", "Curve", false},
+		{"defi_track", "MakerDAO", "Maker", false},
+		{"defi_track", "1inch", "1inch", false},
+
+		// Prediction Markets
+		{"prediction", "Polymarket", "Polymarket", true},
+		{"prediction", "AzuroProtocol", "Azuro", false},
+
+		// Media
+		{"media", "CoinDesk", "CoinDesk", true},
+		{"media", "WuBlockchain", "Wu Blockchain", true},
+		{"media", "BlockBeatsAsia", "BlockBeats", false},
+		{"media", "TheBlock__", "The Block", false},
+	}
+
+	for _, a := range accounts {
+		acct := models.SniperTagAccount{
+			TagID:            a.TagID,
+			Handle:           a.Handle,
+			DisplayName:      a.DisplayName,
+			RealtimePriority: a.RealtimePriority,
+		}
+		DB.Create(&acct)
+	}
+
+	util.Log.Info("Seeded %d tags and %d accounts for Sniper 2.0", len(tags), len(accounts))
 }

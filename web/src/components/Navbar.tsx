@@ -155,11 +155,11 @@ export default function Navbar() {
                           <span>{t("clawDashboard")}</span>
                         </Link>
                         <Link
-                          href="/sniper/dashboard"
+                          href="/sniper/settings"
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🎯</span>
-                          <span>{t("sniperDashboard")}</span>
+                          <span>{t("sniperSettings")}</span>
                         </Link>
                         <Link
                           href="/holder"

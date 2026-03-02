@@ -49,8 +49,12 @@ func main() {
 	// Start tax wallet auto-mint scheduler (weekly, Monday 00:00 UTC)
 	services.StartTaxWalletScheduler()
 
-	// Start Soul Sniper KOL tweet monitor (every 1 minute)
-	services.StartSniperMonitor(1 * time.Minute)
+	// Start Soul Sniper KOL tweet monitor (DEPRECATED — replaced by feed refresher)
+	// services.StartSniperMonitor(1 * time.Minute)
+
+	// Sniper 2.0: Initialize SSE hub and start tag-based feed refresher
+	services.InitSSEHub()
+	services.StartFeedRefresher(5 * time.Minute) // refresh all tag feeds every 5 minutes
 
 	// Start subscription expiry checker (every 1 hour)
 	services.StartSubscriptionCleanup(1 * time.Hour)

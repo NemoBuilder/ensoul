@@ -221,6 +221,89 @@ func (c *socialDataClient) FetchTweets(userID string, maxTweets int) ([]sdTweet,
 	return allTweets, nil
 }
 
+// SearchTweets searches Twitter via SocialData search endpoint.
+// query follows Twitter search syntax, e.g. "from:bnbchain OR from:caboringz".
+func (c *socialDataClient) SearchTweets(query string, maxTweets int) ([]sdTweet, error) {
+	if maxTweets <= 0 {
+		maxTweets = socialDataMaxTweets
+	}
+
+	var allTweets []sdTweet
+	cursor := ""
+	pagesLoaded := 0
+	maxPages := (maxTweets / socialDataTweetsPerPage) + 2
+
+	for pagesLoaded < maxPages {
+		endpoint := fmt.Sprintf("/twitter/search?query=%s&type=Latest", urlEncode(query))
+		if cursor != "" {
+			endpoint += "&cursor=" + urlEncode(cursor)
+		}
+
+		body, status, err := c.doRequest(endpoint)
+		if err != nil {
+			return allTweets, err
+		}
+
+		if status != http.StatusOK {
+			if len(allTweets) > 0 {
+				util.Log.Warn("[socialdata] search page %d returned status %d, returning %d tweets collected so far",
+					pagesLoaded+1, status, len(allTweets))
+				break
+			}
+			return nil, fmt.Errorf("socialdata: search request failed (status %d): %s", status, string(body))
+		}
+
+		var resp sdTweetsResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return allTweets, fmt.Errorf("socialdata: failed to decode search response: %w", err)
+		}
+
+		// Filter: keep only original tweets (not retweets, not replies)
+		for _, t := range resp.Tweets {
+			if t.RetweetedStatus != nil {
+				continue
+			}
+			if t.InReplyToStatusIDStr != nil && *t.InReplyToStatusIDStr != "" {
+				continue
+			}
+			allTweets = append(allTweets, t)
+			if len(allTweets) >= maxTweets {
+				break
+			}
+		}
+
+		pagesLoaded++
+
+		if len(allTweets) >= maxTweets || resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
+	}
+
+	util.Log.Debug("[socialdata] search collected %d tweets across %d pages (query: %s)", len(allTweets), pagesLoaded, query)
+	return allTweets, nil
+}
+
+// urlEncode performs simple URL encoding for query parameters.
+func urlEncode(s string) string {
+	var result strings.Builder
+	for _, c := range s {
+		switch {
+		case (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '-' || c == '_' || c == '.' || c == '~':
+			result.WriteRune(c)
+		case c == ' ':
+			result.WriteString("%20")
+		case c == ':':
+			result.WriteString("%3A")
+		case c == '@':
+			result.WriteString("%40")
+		default:
+			result.WriteString(fmt.Sprintf("%%%02X", c))
+		}
+	}
+	return result.String()
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Conversion helpers: SocialData → internal TwitterProfile
 // ──────────────────────────────────────────────────────────────────────────────

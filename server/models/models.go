@@ -278,9 +278,8 @@ type BuybackRecord struct {
 
 // Subscription tier constants
 const (
-	SubTierStarter = "starter" // 3 KOLs, 10 replies/day, deepseek-v3
-	SubTierPro     = "pro"     // 10 KOLs, 50 replies/day, gpt-4o
-	SubTierElite   = "elite"   // 30 KOLs, unlimited, claude-opus
+	SubTierFree = "free" // browse only, no snipe
+	SubTierPro  = "pro"  // 50 snipes/day, Claude Sonnet
 )
 
 // Subscription status constants
@@ -320,18 +319,22 @@ type SniperKOL struct {
 	Shell        Shell        `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
 }
 
-// SniperReply represents a generated reply for a KOL's tweet.
+// SniperReply represents a generated reply for a tweet (Sniper 2.0).
 type SniperReply struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	ShellID    uuid.UUID `gorm:"type:uuid;not null;index" json:"shell_id"`
-	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
-	TweetID    string    `gorm:"type:varchar(30);not null;index" json:"tweet_id"`
-	TweetText  string    `gorm:"type:text" json:"tweet_text"`
-	Replies    JSON      `gorm:"type:jsonb;default:'[]'" json:"replies"` // [{style, content, model}]
-	CreatedAt  time.Time `json:"created_at"`
+	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID      *uuid.UUID `gorm:"type:uuid;index" json:"shell_id"` // nullable: Soul is optional
+	WalletAddr   string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	TweetID      string     `gorm:"type:varchar(30);not null;index" json:"tweet_id"`
+	TweetText    string     `gorm:"type:text" json:"tweet_text"`
+	Replies      JSON       `gorm:"type:jsonb;default:'[]'" json:"replies"` // [{style, content, model}]
+	AuthorHandle string     `gorm:"type:varchar(30)" json:"author_handle"`  // tweet author handle
+	TagID        string     `gorm:"type:varchar(50)" json:"tag_id"`         // originating tag
+	TweetURL     string     `gorm:"type:text" json:"tweet_url"`             // full tweet URL
+	UsedSoul     bool       `gorm:"default:false" json:"used_soul"`         // whether Soul persona was used
+	CreatedAt    time.Time  `json:"created_at"`
 
 	// Relations
-	Shell Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
+	Shell *Shell `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
 }
 
 // UserPersona represents a user's custom persona for reply generation.
@@ -345,19 +348,92 @@ type UserPersona struct {
 	UpdatedAt  time.Time `json:"updated_at"`
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Sniper 2.0: Tag-based Feed + Snipe Models
+// ═══════════════════════════════════════════════════════════════════════
+
+// SniperTag defines a content tag (maintained by Admin).
+type SniperTag struct {
+	ID          string    `gorm:"type:varchar(50);primaryKey" json:"id"` // e.g. "bnb_official"
+	Name        string    `gorm:"type:varchar(100)" json:"name"`         // Chinese name
+	NameEN      string    `gorm:"type:varchar(100)" json:"name_en"`      // English name
+	Icon        string    `gorm:"type:varchar(10)" json:"icon"`          // Emoji icon
+	Category    string    `gorm:"type:varchar(20)" json:"category"`      // ecosystem / track / custom
+	Description string    `gorm:"type:text" json:"description"`
+	IsDefault   bool      `gorm:"default:false" json:"is_default"` // auto-selected for new users
+	Active      bool      `gorm:"default:true" json:"active"`
+	SortOrder   int       `gorm:"default:0" json:"sort_order"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// SniperTagAccount links a Twitter account to a tag (many-to-many, Admin maintained).
+type SniperTagAccount struct {
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TagID            string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_account" json:"tag_id"`
+	Handle           string    `gorm:"type:varchar(30);not null;uniqueIndex:idx_tag_account" json:"handle"`
+	DisplayName      string    `gorm:"type:varchar(100)" json:"display_name"`  // cached display name
+	RealtimePriority bool      `gorm:"default:false" json:"realtime_priority"` // allocate to Twitter Stream
+	SortOrder        int       `gorm:"default:0" json:"sort_order"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// TagCandidate represents an AI-recommended account pending admin review.
+type TagCandidate struct {
+	ID               uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Handle           string         `gorm:"type:varchar(30);not null;index" json:"handle"`
+	DisplayName      string         `gorm:"type:varchar(100)" json:"display_name"`
+	Bio              string         `gorm:"type:text" json:"bio"`
+	FollowersCount   int            `gorm:"default:0" json:"followers_count"`
+	Source           string         `gorm:"type:varchar(20)" json:"source"`                         // "list_import" | "batch_input"
+	SourceDetail     string         `gorm:"type:varchar(255)" json:"source_detail"`                 // List URL or batch note
+	RecommendedTags  JSON           `gorm:"type:jsonb" json:"recommended_tags"`                     // [{"id":"bnb_official","confidence":0.85}]
+	AIReason         string         `gorm:"type:text" json:"ai_reason"`                             // LLM recommendation reason
+	Status           string         `gorm:"type:varchar(20);default:'pending';index" json:"status"` // pending | approved | rejected
+	ApprovedTags     JSON           `gorm:"type:jsonb" json:"approved_tags"`                        // Admin-confirmed tag IDs
+	RealtimePriority bool           `gorm:"default:false" json:"realtime_priority"`
+	ReviewedBy       string         `gorm:"type:varchar(42)" json:"reviewed_by"` // Admin wallet
+	ReviewedAt       *time.Time     `json:"reviewed_at"`
+	CreatedAt        time.Time      `json:"created_at"`
+	DeletedAt        gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// TagCandidate status constants
+const (
+	TagCandidatePending  = "pending"
+	TagCandidateApproved = "approved"
+	TagCandidateRejected = "rejected"
+)
+
+// UserSelectedTag records which tags a user has selected for their feed.
+type UserSelectedTag struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr string    `gorm:"type:varchar(42);not null;uniqueIndex:idx_user_tags" json:"wallet_addr"`
+	TagID      string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_user_tags" json:"tag_id"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// UserMutedAccount records accounts a user has muted from their feed.
+type UserMutedAccount struct {
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr string    `gorm:"type:varchar(42);not null;uniqueIndex:idx_user_muted" json:"wallet_addr"`
+	Handle     string    `gorm:"type:varchar(30);not null;uniqueIndex:idx_user_muted" json:"handle"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
 // SubscriptionTierConfig holds the limits for each subscription tier.
 type SubscriptionTierConfig struct {
-	MaxKOLs          int
-	DailyReplies     int // -1 = unlimited
+	DailyReplies     int // 0 = not available, 50 = daily snipe limit
 	DefaultModel     string
 	MonthlyPriceUSDT float64
 }
 
 // SubscriptionTiers maps tier names to their configurations.
+// Free users have no Subscription record (nil = free tier).
+// Pro users have an active Subscription record with tier = "pro".
 var SubscriptionTiers = map[string]SubscriptionTierConfig{
-	SubTierStarter: {MaxKOLs: 3, DailyReplies: 10, DefaultModel: "deepseek-chat", MonthlyPriceUSDT: 9.9},
-	SubTierPro:     {MaxKOLs: 10, DailyReplies: 50, DefaultModel: "gpt-4o", MonthlyPriceUSDT: 29.9},
-	SubTierElite:   {MaxKOLs: 30, DailyReplies: -1, DefaultModel: "claude-sonnet-4-20250514", MonthlyPriceUSDT: 99.9},
+	SubTierFree: {DailyReplies: 0, DefaultModel: "", MonthlyPriceUSDT: 0},
+	SubTierPro:  {DailyReplies: 50, DefaultModel: "claude-sonnet-4-20250514", MonthlyPriceUSDT: 99},
 }
 
 // PublicSoul tracks Soul NFTs minted by the Tax Wallet as public assets.
