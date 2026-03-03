@@ -76,6 +76,17 @@ func AuthLogin(c *gin.Context) {
 		return
 	}
 
+	// Create or update User record (for admin user management)
+	services.EnsureUser(claimed.Hex())
+
+	// Check if user is banned
+	if banned, reason := services.IsUserBanned(claimed.Hex()); banned {
+		// Delete the session we just created
+		database.DB.Where("token_hash = ?", util.HashToken(token)).Delete(&models.WalletSession{})
+		c.JSON(http.StatusForbidden, gin.H{"error": "Account has been banned", "reason": reason})
+		return
+	}
+
 	// Set HttpOnly cookie — Secure=true in production (HTTPS)
 	secureCookie := config.Cfg.IsProduction()
 	c.SetSameSite(http.SameSiteLaxMode)

@@ -615,3 +615,45 @@ type WithdrawRecord struct {
 	// Relations
 	Claw Claw `gorm:"foreignKey:ClawID" json:"claw,omitempty"`
 }
+
+// ═══════════════════════════════════════════════════════════════════════
+// User Management Models
+// ═══════════════════════════════════════════════════════════════════════
+
+// User status constants
+const (
+	UserStatusActive = "active"
+	UserStatusBanned = "banned"
+)
+
+// User represents a registered user account (one per wallet address).
+// Created automatically on first wallet login (SIWE).
+type User struct {
+	ID          uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr  string         `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
+	Status      string         `gorm:"type:varchar(20);default:'active'" json:"status"`
+	BanReason   string         `gorm:"type:text" json:"ban_reason,omitempty"`
+	BannedAt    *time.Time     `json:"banned_at,omitempty"`
+	BannedBy    string         `gorm:"type:varchar(50)" json:"banned_by,omitempty"`
+	Note        string         `gorm:"type:text" json:"note,omitempty"`
+	FirstSeenAt time.Time      `json:"first_seen_at"`
+	LastSeenAt  time.Time      `json:"last_seen_at"`
+	LoginCount  int            `gorm:"default:0" json:"login_count"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// AdminAuditLog records admin operations for auditing.
+type AdminAuditLog struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	AdminUserID uuid.UUID `gorm:"type:uuid;not null;index" json:"admin_user_id"`
+	AdminName   string    `gorm:"type:varchar(50)" json:"admin_name"`
+	Action      string    `gorm:"type:varchar(50);not null;index" json:"action"`
+	TargetType  string    `gorm:"type:varchar(30)" json:"target_type"`
+	TargetID    string    `gorm:"type:varchar(100)" json:"target_id"`
+	Detail      JSON      `gorm:"type:jsonb;default:'{}'" json:"detail"`
+	IP          string    `gorm:"type:varchar(45)" json:"ip"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+

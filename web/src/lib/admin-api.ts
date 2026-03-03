@@ -292,3 +292,179 @@ export const adminSniperApi = {
       { method: "DELETE" }
     ),
 };
+
+// ── User Management Types ──────────────────────────────────────
+
+export interface AdminUserListItem {
+  wallet_addr: string;
+  status: "active" | "banned";
+  first_seen_at: string;
+  last_seen_at: string;
+  login_count: number;
+  note: string;
+  ban_reason?: string;
+  banned_at?: string;
+  sub_tier: string | null;
+  sub_status: string | null;
+  sub_expires_at: string | null;
+  snipe_count: number;
+}
+
+export interface AdminUserDetailResponse {
+  user: {
+    id: string;
+    wallet_addr: string;
+    status: "active" | "banned";
+    ban_reason: string;
+    banned_at: string | null;
+    banned_by: string;
+    note: string;
+    first_seen_at: string;
+    last_seen_at: string;
+    login_count: number;
+  };
+  subscription: {
+    id: string;
+    wallet_addr: string;
+    tier: string;
+    llm_model: string;
+    status: string;
+    expires_at: string;
+    payment_tx_hash: string;
+    payment_token: string;
+    payment_amount: number;
+    created_at: string;
+  } | null;
+  subscription_history: Array<{
+    id: string;
+    tier: string;
+    status: string;
+    expires_at: string;
+    payment_tx_hash: string;
+    payment_token: string;
+    payment_amount: number;
+    created_at: string;
+  }>;
+  persona: {
+    bio: string;
+    style: string;
+    materials: string;
+    language: string;
+  } | null;
+  selected_tags: string[];
+  muted_accounts: string[];
+  stats: {
+    total_snipes: number;
+    today_snipes: number;
+    total_chats: number;
+    shells_owned: number;
+    claws_bound: number;
+    total_withdrawals: number;
+  };
+}
+
+export interface AdminUserOverviewStats {
+  total_users: number;
+  active_users: number;
+  banned_users: number;
+  pro_subscribers: number;
+  free_users: number;
+  today_new_users: number;
+  today_active_users: number;
+  weekly_active_users: number;
+}
+
+// ── User Management API ────────────────────────────────────────
+
+export const adminUserApi = {
+  list: (params: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    subscription?: string;
+    sort?: string;
+    order?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    });
+    return adminFetch<{ items: AdminUserListItem[]; total: number; page: number; page_size: number }>(
+      `/api/admin/users?${qs}`
+    );
+  },
+
+  detail: (wallet: string) =>
+    adminFetch<AdminUserDetailResponse>(`/api/admin/users/${wallet}`),
+
+  ban: (wallet: string, reason: string) =>
+    adminFetch<{ status: string; wallet_addr: string }>(
+      `/api/admin/users/${wallet}/ban`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+
+  unban: (wallet: string) =>
+    adminFetch<{ status: string; wallet_addr: string }>(
+      `/api/admin/users/${wallet}/unban`,
+      { method: "POST" }
+    ),
+
+  updateNote: (wallet: string, note: string) =>
+    adminFetch<{ status: string; wallet_addr: string }>(
+      `/api/admin/users/${wallet}/note`,
+      { method: "PUT", body: JSON.stringify({ note }) }
+    ),
+
+  grantSubscription: (wallet: string, tier: string, days: number, reason: string) =>
+    adminFetch<{ status: string; wallet_addr: string; tier: string; days: number }>(
+      `/api/admin/users/${wallet}/subscription/grant`,
+      { method: "POST", body: JSON.stringify({ tier, days, reason }) }
+    ),
+
+  extendSubscription: (wallet: string, days: number, reason: string) =>
+    adminFetch<{ status: string; wallet_addr: string; days: number }>(
+      `/api/admin/users/${wallet}/subscription/extend`,
+      { method: "POST", body: JSON.stringify({ days, reason }) }
+    ),
+
+  revokeSubscription: (wallet: string, reason: string) =>
+    adminFetch<{ status: string; wallet_addr: string }>(
+      `/api/admin/users/${wallet}/subscription/revoke`,
+      { method: "POST", body: JSON.stringify({ reason }) }
+    ),
+
+  stats: () =>
+    adminFetch<AdminUserOverviewStats>(`/api/admin/users/stats`),
+};
+
+// ── Audit Log API ──────────────────────────────────────────────
+
+export interface AdminAuditLogItem {
+  id: string;
+  admin_user_id: string;
+  admin_name: string;
+  action: string;
+  target_type: string;
+  target_id: string;
+  detail: Record<string, unknown>;
+  ip: string;
+  created_at: string;
+}
+
+export const adminAuditApi = {
+  list: (params: {
+    page?: number;
+    page_size?: number;
+    action?: string;
+    target_id?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    });
+    return adminFetch<{ items: AdminAuditLogItem[]; total: number; page: number }>(
+      `/api/admin/audit-log?${qs}`
+    );
+  },
+};

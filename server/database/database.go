@@ -79,6 +79,9 @@ func Connect(cfg *config.Config) *gorm.DB {
 		// Admin authentication models
 		&models.AdminUser{},
 		&models.AdminSession{},
+		// User management models
+		&models.User{},
+		&models.AdminAuditLog{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}
@@ -105,6 +108,10 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Step 5: Seed Sniper 2.0 default tags and accounts.
 	// Idempotent: only creates if no tags exist yet.
 	seedSniperTags()
+
+	// Step 6: Backfill User records from existing wallet_sessions.
+	// Idempotent: only inserts users that don't exist yet.
+	backfillUsers()
 
 	return DB
 }
@@ -369,3 +376,54 @@ func seedSniperTags() {
 
 	util.Log.Info("Seeded %d tags and %d accounts for Sniper 2.0", len(tags), len(accounts))
 }
+
+// backfillUsers creates User records from existing wallet_sessions.
+// Idempotent: skips wallets that already have a User record.
+func backfillUsers() {
+	var count int64
+	DB.Model(&models.User{}).Count(&count)
+	if count > 0 {
+		return // already have users, skip backfill
+	}
+
+	result := DB.Exec(`
+		INSERT INTO users (id, wallet_addr, status, first_seen_at, last_seen_at, login_count, created_at, updated_at)
+		SELECT
+			gen_random_uuid(),
+			ws.wallet_addr,
+			'active',
+			MIN(ws.created_at),
+			MAX(ws.created_at),
+			COUNT(*),
+			NOW(),
+			NOW()
+		FROM wallet_sessions ws
+		GROUP BY ws.wallet_addr
+		ON CONFLICT (wallet_addr) DO NOTHING
+	`)
+	if result.RowsAffected > 0 {
+		util.Log.Info("Backfilled %d User records from wallet_sessions", result.RowsAffected)
+	}
+
+	// Also backfill from subscriptions (users who may have paid but session expired)
+	result2 := DB.Exec(`
+		INSERT INTO users (id, wallet_addr, status, first_seen_at, last_seen_at, login_count, created_at, updated_at)
+		SELECT
+			gen_random_uuid(),
+			s.wallet_addr,
+			'active',
+			MIN(s.created_at),
+			MAX(s.created_at),
+			0,
+			NOW(),
+			NOW()
+		FROM subscriptions s
+		WHERE s.deleted_at IS NULL
+		GROUP BY s.wallet_addr
+		ON CONFLICT (wallet_addr) DO NOTHING
+	`)
+	if result2.RowsAffected > 0 {
+		util.Log.Info("Backfilled %d additional User records from subscriptions", result2.RowsAffected)
+	}
+}
+

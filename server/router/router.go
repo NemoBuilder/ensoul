@@ -265,6 +265,20 @@ func Setup() *gin.Engine {
 			admin.POST("/sniper/candidates/:id/approve", handlers.AdminSniperApproveCandidate)
 			admin.POST("/sniper/candidates/:id/reject", handlers.AdminSniperRejectCandidate)
 			admin.POST("/sniper/candidates/batch", handlers.AdminSniperBatchReview)
+
+			// User management
+			admin.GET("/users/stats", handlers.AdminUserStats)
+			admin.GET("/users", handlers.AdminListUsers)
+			admin.GET("/users/:wallet", handlers.AdminGetUser)
+			admin.POST("/users/:wallet/ban", handlers.AdminBanUser)
+			admin.POST("/users/:wallet/unban", handlers.AdminUnbanUser)
+			admin.PUT("/users/:wallet/note", handlers.AdminUpdateUserNote)
+			admin.POST("/users/:wallet/subscription/grant", handlers.AdminGrantSubscription)
+			admin.POST("/users/:wallet/subscription/extend", handlers.AdminExtendSubscription)
+			admin.POST("/users/:wallet/subscription/revoke", handlers.AdminRevokeSubscription)
+
+			// Audit log
+			admin.GET("/audit-log", handlers.AdminAuditLog)
 		}
 	}
 

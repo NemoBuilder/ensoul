@@ -31,6 +31,20 @@ func AuthSession() gin.HandlerFunc {
 		}
 
 		c.Set("session_wallet", session.WalletAddr)
+
+		// Check if the user is banned
+		var user models.User
+		if err := database.DB.Where("wallet_addr = ?", session.WalletAddr).First(&user).Error; err == nil {
+			if user.Status == models.UserStatusBanned {
+				c.JSON(http.StatusForbidden, gin.H{
+					"error":  "Account has been banned",
+					"reason": user.BanReason,
+				})
+				c.Abort()
+				return
+			}
+		}
+
 		c.Next()
 	}
 }

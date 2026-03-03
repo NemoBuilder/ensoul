@@ -10,6 +10,7 @@ import "../globals.css";
 
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊" },
+  { href: "/admin/users", label: "Users", icon: "👥" },
   { href: "/admin/candidates", label: "Candidates", icon: "🎯" },
   { href: "/admin/sniper-tags", label: "Sniper Tags", icon: "🏷️" },
   { href: "/admin/tax-wallet", label: "Tax Wallet", icon: "💰" },
@@ -123,7 +124,7 @@ export default function AdminLayout({
             <nav className="flex-1 overflow-y-auto p-4">
               <ul className="space-y-1">
                 {navItems.map((item) => {
-                  const isActive = pathname === item.href;
+                  const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
                   return (
                     <li key={item.href}>
                       <Link
@@ -178,7 +179,7 @@ export default function AdminLayout({
                 </svg>
               </button>
               <h1 className="text-lg font-semibold text-[#e2e8f0]">
-                {navItems.find((n) => n.href === pathname)?.label || "Admin"}
+                {navItems.find((n) => pathname.startsWith(n.href))?.label || "Admin"}
               </h1>
             </header>
 
