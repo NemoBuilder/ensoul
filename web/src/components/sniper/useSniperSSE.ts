@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useCallback, useState, useMemo } from "react";
+import { useEffect, useRef, useState, useMemo } from "react";
 import type { TweetCard } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
@@ -22,16 +22,30 @@ export function useSniperSSE({ tagIds, enabled, onNewTweets }: UseSSEOptions) {
     onNewTweetsRef.current = onNewTweets;
   }, [onNewTweets]);
 
-  const connect = useCallback(() => {
-    if (tagIds.length === 0) return;
+  // Stable string key so we only reconnect when tag selection actually changes
+  const tagKey = useMemo(() => [...tagIds].sort().join(","), [tagIds]);
 
-    // Close existing connection
-    if (esRef.current) {
-      esRef.current.close();
-      esRef.current = null;
+  useEffect(() => {
+    // Cleanup helper
+    const cleanup = () => {
+      if (esRef.current) {
+        esRef.current.close();
+        esRef.current = null;
+      }
+    };
+
+    if (!enabled || tagKey === "") {
+      cleanup();
+      setInnerStatus("disconnected");
+      return;
     }
 
-    const url = `${API_BASE}/api/sniper/feed/stream?tag_ids=${tagIds.join(",")}`;
+    // About to connect — show "reconnecting" immediately so user sees yellow
+    // instead of stale red while the TCP handshake is in progress
+    cleanup();
+    setInnerStatus("reconnecting");
+
+    const url = `${API_BASE}/api/sniper/feed/stream?tag_ids=${tagKey}`;
     const es = new EventSource(url);
     esRef.current = es;
 
@@ -60,32 +74,17 @@ export function useSniperSSE({ tagIds, enabled, onNewTweets }: UseSSEOptions) {
     });
 
     es.onerror = () => {
-      setInnerStatus("reconnecting");
-      // EventSource has built-in auto-reconnect
-    };
-  }, [tagIds]);
-
-  useEffect(() => {
-    if (!enabled || tagIds.length === 0) {
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
-      }
-      return;
-    }
-
-    connect();
-
-    return () => {
-      if (esRef.current) {
-        esRef.current.close();
-        esRef.current = null;
+      // EventSource has built-in auto-reconnect; show reconnecting
+      if (esRef.current === es) {
+        setInnerStatus("reconnecting");
       }
     };
-  }, [enabled, connect, tagIds]);
+
+    return cleanup;
+  }, [enabled, tagKey]);
 
   // Derive effective status: if SSE is disabled, always report disconnected
-  const isActive = enabled && tagIds.length > 0;
+  const isActive = enabled && tagKey !== "";
   const status: SSEStatus = useMemo(
     () => (isActive ? innerStatus : "disconnected"),
     [isActive, innerStatus]
