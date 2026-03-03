@@ -202,3 +202,93 @@ export const adminMiningApi = {
       { method: "POST" }
     ),
 };
+
+// ── Sniper Tag Types ───────────────────────────────────────────
+
+export interface SniperTagAccount {
+  id: string;
+  tag_id: string;
+  handle: string;
+  display_name: string;
+  realtime_priority: boolean;
+  sort_order: number;
+  created_at: string;
+}
+
+export interface SniperTag {
+  id: string;
+  name: string;
+  name_en: string;
+  icon: string;
+  category: string;
+  description: string;
+  is_default: boolean;
+  active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+  accounts: { handle: string; name: string; realtime_priority: boolean }[];
+}
+
+// ── Sniper Tags Admin API ──────────────────────────────────────
+
+export const adminSniperApi = {
+  // Tag CRUD
+  listTags: () =>
+    adminFetch<{ tags: SniperTag[] }>("/api/admin/sniper/tags"),
+
+  createTag: (tag: {
+    id: string;
+    name: string;
+    name_en?: string;
+    icon?: string;
+    category?: string;
+    description?: string;
+    is_default?: boolean;
+    sort_order?: number;
+  }) =>
+    adminFetch<{ tag: SniperTag }>("/api/admin/sniper/tags", {
+      method: "POST",
+      body: JSON.stringify(tag),
+    }),
+
+  updateTag: (tagId: string, updates: Partial<Omit<SniperTag, "id" | "accounts" | "created_at" | "updated_at">>) =>
+    adminFetch<{ status: string; tag_id: string }>(
+      `/api/admin/sniper/tags/${tagId}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(updates),
+      }
+    ),
+
+  deleteTag: (tagId: string) =>
+    adminFetch<{ status: string; tag_id: string }>(
+      `/api/admin/sniper/tags/${tagId}`,
+      { method: "DELETE" }
+    ),
+
+  // Tag Account CRUD
+  listTagAccounts: (tagId: string) =>
+    adminFetch<{ accounts: SniperTagAccount[]; tag_id: string }>(
+      `/api/admin/sniper/tags/${tagId}/accounts`
+    ),
+
+  addTagAccount: (tagId: string, handle: string, displayName?: string, realtimePriority?: boolean) =>
+    adminFetch<{ status: string; tag_id: string; handle: string }>(
+      `/api/admin/sniper/tags/${tagId}/accounts`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          handle,
+          display_name: displayName || "",
+          realtime_priority: realtimePriority || false,
+        }),
+      }
+    ),
+
+  removeTagAccount: (tagId: string, handle: string) =>
+    adminFetch<{ status: string; tag_id: string; handle: string }>(
+      `/api/admin/sniper/tags/${tagId}/accounts/${handle}`,
+      { method: "DELETE" }
+    ),
+};

@@ -259,6 +259,66 @@ func AdminRemoveAccountFromTag(tagID, handle string) error {
 	return nil
 }
 
+// AdminListTags returns ALL tags (including inactive) for admin management.
+func AdminListTags() ([]TagWithAccounts, error) {
+	var tags []models.SniperTag
+	if err := database.DB.Order("sort_order ASC, created_at ASC").
+		Find(&tags).Error; err != nil {
+		return nil, fmt.Errorf("failed to fetch tags: %w", err)
+	}
+
+	result := make([]TagWithAccounts, 0, len(tags))
+	for _, tag := range tags {
+		var accounts []models.SniperTagAccount
+		database.DB.Where("tag_id = ?", tag.ID).
+			Order("sort_order ASC, created_at ASC").
+			Find(&accounts)
+
+		acctInfos := make([]TagAccountInfo, 0, len(accounts))
+		for _, a := range accounts {
+			acctInfos = append(acctInfos, TagAccountInfo{
+				Handle:           a.Handle,
+				DisplayName:      a.DisplayName,
+				RealtimePriority: a.RealtimePriority,
+			})
+		}
+		result = append(result, TagWithAccounts{
+			SniperTag: tag,
+			Accounts:  acctInfos,
+		})
+	}
+	return result, nil
+}
+
+// AdminDeleteTag soft-deletes a tag by setting active=false and removing its accounts.
+func AdminDeleteTag(tagID string) error {
+	var tag models.SniperTag
+	if err := database.DB.First(&tag, "id = ?", tagID).Error; err != nil {
+		return fmt.Errorf("tag %s not found", tagID)
+	}
+
+	// Remove all associated accounts
+	database.DB.Where("tag_id = ?", tagID).Delete(&models.SniperTagAccount{})
+
+	// Set tag inactive
+	tag.Active = false
+	database.DB.Save(&tag)
+
+	util.Log.Info("[sniper-admin] Deleted tag %s (%s)", tagID, tag.Name)
+	return nil
+}
+
+// AdminListTagAccounts returns all accounts for a given tag.
+func AdminListTagAccounts(tagID string) ([]models.SniperTagAccount, error) {
+	var accounts []models.SniperTagAccount
+	if err := database.DB.Where("tag_id = ?", tagID).
+		Order("sort_order ASC, created_at ASC").
+		Find(&accounts).Error; err != nil {
+		return nil, err
+	}
+	return accounts, nil
+}
+
 // ──────────────────────────────────────────────────────────────────────────────
 // Admin: Tag Candidate Management (AI-assisted)
 // ──────────────────────────────────────────────────────────────────────────────

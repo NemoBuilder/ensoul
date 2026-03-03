@@ -250,6 +250,15 @@ func Setup() *gin.Engine {
 			admin.POST("/mining/rewards/:id/retry", handlers.MiningRetryReward)
 			admin.POST("/mining/rewards/retry-all", handlers.MiningRetryAll)
 
+			// Sniper 2.0: Tag management
+			admin.GET("/sniper/tags", handlers.AdminSniperListTags)
+			admin.POST("/sniper/tags", handlers.AdminSniperCreateTag)
+			admin.PUT("/sniper/tags/:id", handlers.AdminSniperUpdateTag)
+			admin.DELETE("/sniper/tags/:id", handlers.AdminSniperDeleteTag)
+			admin.GET("/sniper/tags/:id/accounts", handlers.AdminSniperListTagAccounts)
+			admin.POST("/sniper/tags/:id/accounts", handlers.AdminSniperAddTagAccount)
+			admin.DELETE("/sniper/tags/:id/accounts/:handle", handlers.AdminSniperRemoveTagAccount)
+
 			// Sniper 2.0: Tag candidate management
 			admin.POST("/sniper/candidates/import", handlers.AdminSniperImportCandidates)
 			admin.GET("/sniper/candidates", handlers.AdminSniperListCandidates)

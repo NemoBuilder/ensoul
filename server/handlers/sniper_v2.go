@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/middleware"
+	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -339,7 +340,170 @@ func SniperSnipe(c *gin.Context) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
-// Admin: Sniper Tag Management
+// Admin: Sniper Tag CRUD
+// ══════════════════════════════════════════════════════════════════════════════
+
+// AdminSniperListTags handles GET /api/admin/sniper/tags
+// Returns all tags (including inactive) with their accounts.
+func AdminSniperListTags(c *gin.Context) {
+	tags, err := services.AdminListTags()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"tags": tags})
+}
+
+// AdminSniperCreateTag handles POST /api/admin/sniper/tags
+// Creates a new tag.
+func AdminSniperCreateTag(c *gin.Context) {
+	var req struct {
+		ID          string `json:"id" binding:"required"`
+		Name        string `json:"name" binding:"required"`
+		NameEN      string `json:"name_en"`
+		Icon        string `json:"icon"`
+		Category    string `json:"category"`
+		Description string `json:"description"`
+		IsDefault   bool   `json:"is_default"`
+		SortOrder   int    `json:"sort_order"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "id and name are required"})
+		return
+	}
+
+	tag := &models.SniperTag{
+		ID:          req.ID,
+		Name:        req.Name,
+		NameEN:      req.NameEN,
+		Icon:        req.Icon,
+		Category:    req.Category,
+		Description: req.Description,
+		IsDefault:   req.IsDefault,
+		Active:      true,
+		SortOrder:   req.SortOrder,
+	}
+
+	if err := services.AdminCreateTag(tag); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"tag": tag})
+}
+
+// AdminSniperUpdateTag handles PUT /api/admin/sniper/tags/:id
+// Updates an existing tag.
+func AdminSniperUpdateTag(c *gin.Context) {
+	tagID := c.Param("id")
+	if tagID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tag id is required"})
+		return
+	}
+
+	var req map[string]interface{}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid request body"})
+		return
+	}
+
+	// Don't allow changing the ID
+	delete(req, "id")
+
+	if err := services.AdminUpdateTag(tagID, req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "updated", "tag_id": tagID})
+}
+
+// AdminSniperDeleteTag handles DELETE /api/admin/sniper/tags/:id
+// Soft-deletes a tag (sets inactive, removes accounts).
+func AdminSniperDeleteTag(c *gin.Context) {
+	tagID := c.Param("id")
+	if tagID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tag id is required"})
+		return
+	}
+
+	if err := services.AdminDeleteTag(tagID); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "deleted", "tag_id": tagID})
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Admin: Sniper Tag Account Management
+// ══════════════════════════════════════════════════════════════════════════════
+
+// AdminSniperListTagAccounts handles GET /api/admin/sniper/tags/:id/accounts
+// Returns all accounts for a tag.
+func AdminSniperListTagAccounts(c *gin.Context) {
+	tagID := c.Param("id")
+	accounts, err := services.AdminListTagAccounts(tagID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"accounts": accounts, "tag_id": tagID})
+}
+
+// AdminSniperAddTagAccount handles POST /api/admin/sniper/tags/:id/accounts
+// Adds an account to a tag.
+func AdminSniperAddTagAccount(c *gin.Context) {
+	tagID := c.Param("id")
+	if tagID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tag id is required"})
+		return
+	}
+
+	var req struct {
+		Handle           string `json:"handle" binding:"required"`
+		DisplayName      string `json:"display_name"`
+		RealtimePriority bool   `json:"realtime_priority"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+
+	// Strip @ prefix
+	handle := req.Handle
+	if len(handle) > 0 && handle[0] == '@' {
+		handle = handle[1:]
+	}
+
+	if err := services.AdminAddAccountToTag(tagID, handle, req.DisplayName, req.RealtimePriority); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "added", "tag_id": tagID, "handle": handle})
+}
+
+// AdminSniperRemoveTagAccount handles DELETE /api/admin/sniper/tags/:id/accounts/:handle
+// Removes an account from a tag.
+func AdminSniperRemoveTagAccount(c *gin.Context) {
+	tagID := c.Param("id")
+	handle := c.Param("handle")
+	if tagID == "" || handle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "tag id and handle are required"})
+		return
+	}
+
+	if err := services.AdminRemoveAccountFromTag(tagID, handle); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "removed", "tag_id": tagID, "handle": handle})
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// Admin: Sniper Tag Candidate Management
 // ══════════════════════════════════════════════════════════════════════════════
 
 // AdminSniperImportCandidates handles POST /api/admin/sniper/candidates/import

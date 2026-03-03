@@ -11,6 +11,7 @@ import "../globals.css";
 const navItems = [
   { href: "/admin/dashboard", label: "Dashboard", icon: "📊" },
   { href: "/admin/candidates", label: "Candidates", icon: "🎯" },
+  { href: "/admin/sniper-tags", label: "Sniper Tags", icon: "🏷️" },
   { href: "/admin/tax-wallet", label: "Tax Wallet", icon: "💰" },
   { href: "/admin/mining", label: "Mining Pool", icon: "⛏️" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },
