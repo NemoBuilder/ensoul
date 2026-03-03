@@ -350,4 +350,3 @@ func VerifyERC20PaymentTx(ctx context.Context, txHashHex, expectedSender, expect
 
 	return nil, fmt.Errorf("no Transfer event found from %s to %s in tx %s", expectedSender, expectedRecipient, txHashHex)
 }
-

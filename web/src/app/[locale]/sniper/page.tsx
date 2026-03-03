@@ -55,37 +55,42 @@ export default function SniperPage() {
   useEffect(() => {
     async function init() {
       try {
+        // Always fetch tags first (needed for defaults)
         const tagData = await sniperApi.getTags();
         setTags(tagData.tags || []);
 
-        // Try to load user preferences if connected
-        let userTagIds: string[] | null = null;
         if (isConnected) {
-          try {
-            const userTags = await sniperApi.getUserTags();
-            if (userTags.tag_ids && userTags.tag_ids.length > 0) {
-              userTagIds = userTags.tag_ids;
+          // Fetch user prefs, subscription, and muted list in parallel
+          const [userTagsRes, subRes, mutedRes] = await Promise.allSettled([
+            sniperApi.getUserTags(),
+            sniperApi.getSubscription(),
+            sniperApi.getMuted(),
+          ]);
+
+          // User tag preferences
+          let userTagIds: string[] | null = null;
+          if (userTagsRes.status === "fulfilled") {
+            const val = userTagsRes.value;
+            if (val.tag_ids && val.tag_ids.length > 0) {
+              userTagIds = val.tag_ids;
             }
-          } catch {
-            // Not logged in or no preferences saved
           }
 
-          try {
-            const sub = await sniperApi.getSubscription();
-            setSubscription(sub);
-          } catch {
-            // No subscription
+          // Subscription
+          if (subRes.status === "fulfilled") {
+            setSubscription(subRes.value);
           }
 
-          try {
-            const muted = await sniperApi.getMuted();
-            setMutedHandles(new Set(muted.handles || []));
-          } catch {
-            // No muted accounts
+          // Muted handles
+          if (mutedRes.status === "fulfilled") {
+            setMutedHandles(new Set(mutedRes.value.handles || []));
           }
+
+          setSelectedTagIds(userTagIds || tagData.defaults || []);
+        } else {
+          setSelectedTagIds(tagData.defaults || []);
         }
 
-        setSelectedTagIds(userTagIds || tagData.defaults || []);
         setTagsLoaded(true);
       } catch {
         // Tag loading failed

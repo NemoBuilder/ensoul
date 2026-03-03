@@ -45,9 +45,38 @@ export default function TweetFeed({
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#8b5cf6] border-t-transparent" />
-        <p className="mt-3 text-sm text-[#64748b]">{t("loadingFeed")}</p>
+      <div className="space-y-3">
+        {/* Skeleton tweet cards */}
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div
+            key={i}
+            className="rounded-xl border border-[#1e1e2e] bg-[#12121a] p-4 animate-pulse"
+          >
+            {/* Author row */}
+            <div className="flex items-center gap-3 mb-3">
+              <div className="h-10 w-10 rounded-full bg-[#1e1e2e]" />
+              <div className="flex-1">
+                <div className="h-4 w-28 rounded bg-[#1e1e2e] mb-1.5" />
+                <div className="h-3 w-20 rounded bg-[#1e1e2e]" />
+              </div>
+              <div className="h-3 w-16 rounded bg-[#1e1e2e]" />
+            </div>
+            {/* Text lines */}
+            <div className="space-y-2 mb-3">
+              <div className="h-3.5 w-full rounded bg-[#1e1e2e]" />
+              <div className="h-3.5 w-5/6 rounded bg-[#1e1e2e]" />
+              <div className="h-3.5 w-3/4 rounded bg-[#1e1e2e]" />
+            </div>
+            {/* Stats row */}
+            <div className="flex items-center gap-6">
+              <div className="h-3 w-12 rounded bg-[#1e1e2e]" />
+              <div className="h-3 w-12 rounded bg-[#1e1e2e]" />
+              <div className="h-3 w-12 rounded bg-[#1e1e2e]" />
+              <div className="h-3 w-12 rounded bg-[#1e1e2e]" />
+            </div>
+          </div>
+        ))}
+        <p className="text-center text-xs text-[#4a4a5a] pt-2">{t("loadingFeed")}</p>
       </div>
     );
   }

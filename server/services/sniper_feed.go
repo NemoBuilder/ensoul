@@ -156,8 +156,9 @@ func BuildFeed(tagIDs []string, mutedHandles []string, cursor string, count int)
 	var cacheAge time.Duration
 	var allTweets []TweetCard
 
+	// Separate cached vs uncached tags
+	var uncachedTagIDs []string
 	for _, tagID := range tagIDs {
-		// Try cache first
 		cached, fetchedAt, ok := getCachedFeed(tagID)
 		if ok {
 			allTweets = append(allTweets, cached...)
@@ -166,20 +167,45 @@ func BuildFeed(tagIDs []string, mutedHandles []string, cursor string, count int)
 				cacheAge = age
 			}
 		} else {
-			// Cache miss: fetch from SocialData
 			allCached = false
-			tweets, err := fetchTagFeed(tagID, handleToTags)
-			if err != nil {
-				util.Log.Warn("[feed] Failed to fetch feed for tag %s: %v", tagID, err)
-				continue
-			}
-			allTweets = append(allTweets, tweets...)
+			uncachedTagIDs = append(uncachedTagIDs, tagID)
+		}
+	}
 
-			// Store in cache + broadcast new tweets via SSE
-			newTweets := setCachedFeed(tagID, tweets)
-			if len(newTweets) > 0 && sseHubInstance != nil {
-				sseHubInstance.Broadcast(tagID, newTweets)
-			}
+	// Fetch uncached tags concurrently
+	if len(uncachedTagIDs) > 0 {
+		type tagResult struct {
+			tagID  string
+			tweets []TweetCard
+		}
+		var (
+			wg      sync.WaitGroup
+			results []tagResult
+			resMu   sync.Mutex
+		)
+		for _, tagID := range uncachedTagIDs {
+			wg.Add(1)
+			go func(tid string) {
+				defer wg.Done()
+				tweets, err := fetchTagFeed(tid, handleToTags)
+				if err != nil {
+					util.Log.Warn("[feed] Failed to fetch feed for tag %s: %v", tid, err)
+					return
+				}
+				// Store in cache + broadcast
+				newTweets := setCachedFeed(tid, tweets)
+				if len(newTweets) > 0 && sseHubInstance != nil {
+					sseHubInstance.Broadcast(tid, newTweets)
+				}
+				resMu.Lock()
+				results = append(results, tagResult{tagID: tid, tweets: tweets})
+				resMu.Unlock()
+			}(tagID)
+		}
+		wg.Wait()
+
+		for _, r := range results {
+			allTweets = append(allTweets, r.tweets...)
 		}
 	}
 
@@ -253,22 +279,32 @@ func RefreshTagFeed(tagIDs []string) (int, error) {
 		return 0, err
 	}
 
-	totalNew := 0
+	var (
+		wg       sync.WaitGroup
+		totalNew int64 // use atomic-safe counter via mutex
+		countMu  sync.Mutex
+	)
 	for _, tagID := range tagIDs {
-		tweets, err := fetchTagFeed(tagID, handleToTags)
-		if err != nil {
-			util.Log.Warn("[feed] Refresh failed for tag %s: %v", tagID, err)
-			continue
-		}
-
-		newTweets := setCachedFeed(tagID, tweets)
-		if len(newTweets) > 0 && sseHubInstance != nil {
-			sseHubInstance.Broadcast(tagID, newTweets)
-		}
-		totalNew += len(newTweets)
+		wg.Add(1)
+		go func(tid string) {
+			defer wg.Done()
+			tweets, err := fetchTagFeed(tid, handleToTags)
+			if err != nil {
+				util.Log.Warn("[feed] Refresh failed for tag %s: %v", tid, err)
+				return
+			}
+			newTweets := setCachedFeed(tid, tweets)
+			if len(newTweets) > 0 && sseHubInstance != nil {
+				sseHubInstance.Broadcast(tid, newTweets)
+			}
+			countMu.Lock()
+			totalNew += int64(len(newTweets))
+			countMu.Unlock()
+		}(tagID)
 	}
+	wg.Wait()
 
-	return totalNew, nil
+	return int(totalNew), nil
 }
 
 // fetchTagFeed fetches tweets for all accounts under a tag from SocialData.
@@ -299,10 +335,19 @@ func fetchTagFeed(tagID string, handleToTags map[string][]string) ([]TweetCard, 
 		return nil, fmt.Errorf("search failed for tag %s: %w", tagID, err)
 	}
 
+	// Batch lookup: collect all unique handles and query Soul table once
+	handleSet := make(map[string]bool)
+	for _, t := range sdTweets {
+		if t.User != nil {
+			handleSet[strings.ToLower(t.User.ScreenName)] = true
+		}
+	}
+	soulMap := batchLookupSouls(handleSet)
+
 	// Convert to TweetCards
 	cards := make([]TweetCard, 0, len(sdTweets))
 	for _, t := range sdTweets {
-		card := sdTweetToCard(t, handleToTags)
+		card := sdTweetToCard(t, handleToTags, soulMap)
 		cards = append(cards, card)
 	}
 
@@ -310,8 +355,30 @@ func fetchTagFeed(tagID string, handleToTags map[string][]string) ([]TweetCard, 
 	return cards, nil
 }
 
+// batchLookupSouls queries the shells table once for all handles and returns
+// a map[lowercase_handle] → shell.Handle for those that exist.
+func batchLookupSouls(handleSet map[string]bool) map[string]string {
+	result := make(map[string]string)
+	if len(handleSet) == 0 {
+		return result
+	}
+
+	handles := make([]string, 0, len(handleSet))
+	for h := range handleSet {
+		handles = append(handles, h)
+	}
+
+	var shells []models.Shell
+	database.DB.Where("LOWER(handle) IN ?", handles).Find(&shells)
+	for _, s := range shells {
+		result[strings.ToLower(s.Handle)] = s.Handle
+	}
+	return result
+}
+
 // sdTweetToCard converts a SocialData tweet to a TweetCard.
-func sdTweetToCard(t sdTweet, handleToTags map[string][]string) TweetCard {
+// soulMap is a pre-fetched map[lowercase_handle] → handle for batch Soul lookup.
+func sdTweetToCard(t sdTweet, handleToTags map[string][]string, soulMap map[string]string) TweetCard {
 	text := t.FullText
 	if text == "" && t.Text != nil {
 		text = *t.Text
@@ -343,15 +410,12 @@ func sdTweetToCard(t sdTweet, handleToTags map[string][]string) TweetCard {
 		}
 	}
 
-	// Check if author has a Soul
+	// Check if author has a Soul (from pre-fetched batch)
 	hasSoul := false
 	var soulHandle *string
 	if t.User != nil {
-		var shell models.Shell
-		if err := database.DB.Where("LOWER(handle) = ?", strings.ToLower(t.User.ScreenName)).
-			First(&shell).Error; err == nil {
+		if h, ok := soulMap[strings.ToLower(t.User.ScreenName)]; ok {
 			hasSoul = true
-			h := shell.Handle
 			soulHandle = &h
 		}
 	}
@@ -396,9 +460,26 @@ func mergeTags(a, b []string) []string {
 // Background Feed Refresher
 // ──────────────────────────────────────────────────────────────────────────────
 
+// WarmupFeedCache pre-fills the feed cache for all active tags on startup.
+// This runs synchronously to ensure cache is warm before first user request.
+func WarmupFeedCache() {
+	if !SocialDataAvailable() {
+		util.Log.Warn("[feed] SocialData not configured, skipping cache warmup")
+		return
+	}
+
+	util.Log.Info("[feed] Warming up feed cache...")
+	start := time.Now()
+	refreshAllTagFeeds()
+	util.Log.Info("[feed] Cache warmup complete in %s", time.Since(start).Round(time.Millisecond))
+}
+
 // StartFeedRefresher starts a background loop that periodically refreshes
 // all active tag feeds and broadcasts new tweets via SSE.
 func StartFeedRefresher(interval time.Duration) {
+	// Warm up cache immediately in background
+	go WarmupFeedCache()
+
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
