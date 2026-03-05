@@ -386,7 +386,43 @@ func CallLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, res
 		return err
 	}
 
-	// Strip markdown code fences if present
+	return parseLLMJSON(raw, result)
+}
+
+// ────────────────────────────────────────────────────────────────
+// Sniper-specific LLM calls (uses SNIPER_LLM_* config, falls back to LLM_*)
+// ────────────────────────────────────────────────────────────────
+
+// CallSniperLLM sends a non-streaming chat completion request using the Sniper LLM config.
+func CallSniperLLM(messages []ChatMessage, maxTokens int, temperature float64) (string, error) {
+	provider, apiKey, model, baseURL := config.Cfg.SniperLLM()
+
+	if apiKey == "" {
+		return "", fmt.Errorf("SNIPER_LLM_API_KEY (or LLM_API_KEY) not configured")
+	}
+
+	provider = strings.ToLower(provider)
+	if provider == "claude" || provider == "anthropic" {
+		return callClaudeWith(apiKey, model, messages, maxTokens, temperature)
+	}
+	return callOpenAIWith(apiKey, model, baseURL, provider, messages, maxTokens, temperature)
+}
+
+// CallSniperLLMJSON calls the Sniper LLM and parses JSON from the response.
+func CallSniperLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, result interface{}) error {
+	raw, err := CallSniperLLM(messages, maxTokens, temperature)
+	if err != nil {
+		return err
+	}
+	return parseLLMJSON(raw, result)
+}
+
+// ────────────────────────────────────────────────────────────────
+// Shared helpers
+// ────────────────────────────────────────────────────────────────
+
+// parseLLMJSON strips markdown code fences and unmarshals JSON.
+func parseLLMJSON(raw string, result interface{}) error {
 	cleaned := strings.TrimSpace(raw)
 	if strings.HasPrefix(cleaned, "```json") {
 		cleaned = strings.TrimPrefix(cleaned, "```json")
@@ -401,6 +437,125 @@ func CallLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, res
 	if err := json.Unmarshal([]byte(cleaned), result); err != nil {
 		return fmt.Errorf("failed to parse LLM JSON response: %w\nraw response:\n%s", err, raw)
 	}
-
 	return nil
+}
+
+// resolveBaseURL returns the effective base URL for an OpenAI-compatible provider.
+func resolveBaseURL(baseURL, provider string) string {
+	if baseURL != "" {
+		return strings.TrimRight(baseURL, "/")
+	}
+	switch strings.ToLower(provider) {
+	case "claude", "anthropic":
+		return "https://api.anthropic.com/v1"
+	default:
+		return "https://api.openai.com/v1"
+	}
+}
+
+// callOpenAIWith is the parameterized version of callOpenAI.
+func callOpenAIWith(apiKey, model, baseURL, provider string, messages []ChatMessage, maxTokens int, temperature float64) (string, error) {
+	reqBody := ChatRequest{
+		Model:       model,
+		Messages:    messages,
+		MaxTokens:   maxTokens,
+		Temperature: temperature,
+		Stream:      false,
+	}
+
+	body, _ := json.Marshal(reqBody)
+	url := resolveBaseURL(baseURL, provider) + "/chat/completions"
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("LLM API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("LLM API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var chatResp ChatResponse
+	if err := json.NewDecoder(resp.Body).Decode(&chatResp); err != nil {
+		return "", fmt.Errorf("failed to decode LLM response: %w", err)
+	}
+
+	if len(chatResp.Choices) == 0 {
+		return "", fmt.Errorf("LLM returned no choices")
+	}
+
+	util.Log.Debug("[llm] Tokens used: prompt=%d, completion=%d, total=%d",
+		chatResp.Usage.PromptTokens, chatResp.Usage.CompletionTokens, chatResp.Usage.TotalTokens)
+
+	return chatResp.Choices[0].Message.Content, nil
+}
+
+// callClaudeWith is the parameterized version of callClaude.
+func callClaudeWith(apiKey, model string, messages []ChatMessage, maxTokens int, temperature float64) (string, error) {
+	var system string
+	var userMessages []ChatMessage
+	for _, m := range messages {
+		if m.Role == "system" {
+			system = m.Content
+		} else {
+			userMessages = append(userMessages, m)
+		}
+	}
+
+	if maxTokens == 0 {
+		maxTokens = 4096
+	}
+
+	reqBody := claudeRequest{
+		Model:       model,
+		MaxTokens:   maxTokens,
+		System:      system,
+		Messages:    userMessages,
+		Temperature: temperature,
+		Stream:      false,
+	}
+
+	body, _ := json.Marshal(reqBody)
+
+	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("Claude API request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return "", fmt.Errorf("Claude API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	var claudeResp claudeResponse
+	if err := json.NewDecoder(resp.Body).Decode(&claudeResp); err != nil {
+		return "", fmt.Errorf("failed to decode Claude response: %w", err)
+	}
+
+	if len(claudeResp.Content) == 0 {
+		return "", fmt.Errorf("Claude returned no content")
+	}
+
+	util.Log.Debug("[llm] Claude tokens: input=%d, output=%d",
+		claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens)
+
+	return claudeResp.Content[0].Text, nil
 }

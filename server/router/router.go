@@ -67,6 +67,7 @@ func Setup() *gin.Engine {
 				middleware.RateLimit(middleware.SubmitLimiter),
 				middleware.AuthClaw(),
 				middleware.RequireClaimed(),
+				middleware.RequireMiningApproved(),
 				handlers.FragmentSubmit,
 			)
 			// Batch submit: 3-6 dimensions per request, same 5-min cooldown per Claw
@@ -74,6 +75,7 @@ func Setup() *gin.Engine {
 				middleware.RateLimit(middleware.SubmitLimiter),
 				middleware.AuthClaw(),
 				middleware.RequireClaimed(),
+				middleware.RequireMiningApproved(),
 				middleware.RateLimitByKey(middleware.ClawSubmitLimiter, func(c *gin.Context) string {
 					if claw, exists := c.Get("claw"); exists {
 						if cl, ok := claw.(*models.Claw); ok {
@@ -276,6 +278,13 @@ func Setup() *gin.Engine {
 			admin.POST("/users/:wallet/subscription/grant", handlers.AdminGrantSubscription)
 			admin.POST("/users/:wallet/subscription/extend", handlers.AdminExtendSubscription)
 			admin.POST("/users/:wallet/subscription/revoke", handlers.AdminRevokeSubscription)
+
+			// Claw management (mining approval)
+			admin.GET("/claws/stats", handlers.AdminClawStats)
+			admin.GET("/claws", handlers.AdminListClaws)
+			admin.POST("/claws/:id/approve", handlers.AdminApproveClaw)
+			admin.POST("/claws/:id/reject", handlers.AdminRejectClaw)
+			admin.POST("/claws/batch-approve", handlers.AdminBatchApproveClaws)
 
 			// Audit log
 			admin.GET("/audit-log", handlers.AdminAuditLog)

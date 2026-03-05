@@ -95,6 +95,7 @@ type Claw struct {
 	ClaimCode        string         `gorm:"type:varchar(255);uniqueIndex;not null" json:"-"`
 	VerificationCode string         `gorm:"type:varchar(20);not null" json:"-"`
 	Status           string         `gorm:"type:varchar(20);default:'pending_claim'" json:"status"`
+	MiningApproved   bool           `gorm:"default:false" json:"mining_approved"`
 	TwitterHandle    string         `gorm:"type:varchar(255)" json:"twitter_handle,omitempty"`
 	TwitterTweetURL  string         `gorm:"type:text" json:"twitter_tweet_url,omitempty"`
 	WalletAddr       string         `gorm:"type:varchar(42)" json:"wallet_addr"`
@@ -656,4 +657,3 @@ type AdminAuditLog struct {
 	IP          string    `gorm:"type:varchar(45)" json:"ip"`
 	CreatedAt   time.Time `json:"created_at"`
 }
-

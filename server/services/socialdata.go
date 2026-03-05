@@ -166,7 +166,10 @@ func (c *socialDataClient) FetchTweets(userID string, maxTweets int) ([]sdTweet,
 	var allTweets []sdTweet
 	cursor := ""
 	pagesLoaded := 0
-	maxPages := (maxTweets / socialDataTweetsPerPage) + 2 // safety margin
+	maxPages := maxTweets / socialDataTweetsPerPage
+	if maxPages < 1 {
+		maxPages = 1
+	}
 
 	for pagesLoaded < maxPages {
 		endpoint := fmt.Sprintf("/twitter/user/%s/tweets", userID)
@@ -231,7 +234,11 @@ func (c *socialDataClient) SearchTweets(query string, maxTweets int) ([]sdTweet,
 	var allTweets []sdTweet
 	cursor := ""
 	pagesLoaded := 0
-	maxPages := (maxTweets / socialDataTweetsPerPage) + 2
+	// Only fetch exactly enough pages (no +2 padding to save API credits)
+	maxPages := maxTweets / socialDataTweetsPerPage
+	if maxPages < 1 {
+		maxPages = 1
+	}
 
 	for pagesLoaded < maxPages {
 		endpoint := fmt.Sprintf("/twitter/search?query=%s&type=Latest", urlEncode(query))

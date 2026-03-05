@@ -210,13 +210,13 @@ func AdminListUsers(params AdminUserListParams) ([]AdminUserListItem, int64, err
 
 // AdminUserDetail is the full detail for a single user.
 type AdminUserDetail struct {
-	User                models.User          `json:"user"`
-	Subscription        *models.Subscription `json:"subscription"`
+	User                models.User           `json:"user"`
+	Subscription        *models.Subscription  `json:"subscription"`
 	SubscriptionHistory []models.Subscription `json:"subscription_history"`
-	Persona             *models.UserPersona  `json:"persona"`
-	SelectedTags        []string             `json:"selected_tags"`
-	MutedAccounts       []string             `json:"muted_accounts"`
-	Stats               AdminUserStats       `json:"stats"`
+	Persona             *models.UserPersona   `json:"persona"`
+	SelectedTags        []string              `json:"selected_tags"`
+	MutedAccounts       []string              `json:"muted_accounts"`
+	Stats               AdminUserStats        `json:"stats"`
 }
 
 // AdminUserStats holds aggregated stats for a user.
@@ -318,7 +318,7 @@ func AdminBanUser(walletAddr, reason string, admin *models.AdminUser) error {
 
 	// Ban the user
 	database.DB.Model(&user).Updates(map[string]interface{}{
-		"status":    models.UserStatusBanned,
+		"status":     models.UserStatusBanned,
 		"ban_reason": reason,
 		"banned_at":  &now,
 		"banned_by":  adminName,
@@ -467,13 +467,13 @@ func AdminRevokeSubscription(walletAddr, reason string, admin *models.AdminUser)
 
 // AdminUserOverviewStats holds aggregate numbers for the admin dashboard.
 type AdminUserOverviewStats struct {
-	TotalUsers       int64 `json:"total_users"`
-	ActiveUsers      int64 `json:"active_users"`
-	BannedUsers      int64 `json:"banned_users"`
-	ProSubscribers   int64 `json:"pro_subscribers"`
-	FreeUsers        int64 `json:"free_users"`
-	TodayNewUsers    int64 `json:"today_new_users"`
-	TodayActiveUsers int64 `json:"today_active_users"`
+	TotalUsers        int64 `json:"total_users"`
+	ActiveUsers       int64 `json:"active_users"`
+	BannedUsers       int64 `json:"banned_users"`
+	ProSubscribers    int64 `json:"pro_subscribers"`
+	FreeUsers         int64 `json:"free_users"`
+	TodayNewUsers     int64 `json:"today_new_users"`
+	TodayActiveUsers  int64 `json:"today_active_users"`
 	WeeklyActiveUsers int64 `json:"weekly_active_users"`
 }
 

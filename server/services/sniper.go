@@ -1,7 +1,6 @@
 package services
 
 import (
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -22,13 +21,13 @@ type ReplyStyle struct {
 // GenerateReplies is DEPRECATED — use Snipe() instead.
 // Kept for backward compatibility with old API clients.
 func GenerateReplies(walletAddr, handle, tweetID, tweetText string) (*models.SniperReply, error) {
-	return Snipe(walletAddr, handle, tweetID, tweetText, "")
+	return Snipe(walletAddr, handle, tweetID, tweetText, "", "")
 }
 
 // Snipe generates reply suggestions for any tweet (Sniper 2.0).
 // Soul association is optional — if the author has a Soul, it's used for persona enrichment.
 // Requires an active Pro subscription.
-func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.SniperReply, error) {
+func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID, language string) (*models.SniperReply, error) {
 	// 1. Verify Pro subscription
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
@@ -53,7 +52,14 @@ func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.
 	var existing models.SniperReply
 	if err := database.DB.Where("wallet_addr = ? AND tweet_id = ?", walletAddr, tweetID).
 		First(&existing).Error; err == nil {
-		return &existing, nil
+		// Validate cached data — old records may have empty replies due to a storage bug
+		if variants, ok := existing.Replies["variants"]; ok {
+			if arr, ok := variants.([]interface{}); ok && len(arr) > 0 {
+				return &existing, nil
+			}
+		}
+		// Invalid cache: delete and regenerate
+		database.DB.Delete(&existing)
 	}
 
 	// 4. Try to find the author's Soul (optional)
@@ -68,14 +74,28 @@ func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.
 	// 5. Load user persona (optional)
 	persona := getUserPersona(walletAddr)
 
-	// 6. Generate reply variants
-	replies, err := generateSnipeVariants(shell, persona, authorHandle, tweetText, sub.LLMModel)
+	// 6. Generate reply variants (language from request overrides persona setting)
+	snipeLang := language
+	if snipeLang == "" && persona != nil {
+		snipeLang = persona.Language
+	}
+	if snipeLang == "" {
+		snipeLang = "en"
+	}
+	replies, err := generateSnipeVariants(shell, persona, authorHandle, tweetText, sub.LLMModel, snipeLang)
 	if err != nil {
 		return nil, fmt.Errorf("reply generation failed: %w", err)
 	}
 
-	// 7. Convert replies to JSON
-	repliesJSON, _ := json.Marshal(replies)
+	// 7. Build replies JSON — wrap in object for models.JSON (map) compatibility
+	var repliesAny []interface{}
+	for _, r := range replies {
+		repliesAny = append(repliesAny, map[string]interface{}{
+			"style":   r.Style,
+			"content": r.Content,
+			"model":   r.Model,
+		})
+	}
 
 	// 8. Build tweet URL
 	tweetURL := fmt.Sprintf("https://twitter.com/%s/status/%s", authorHandle, tweetID)
@@ -91,13 +111,12 @@ func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.
 		WalletAddr:   walletAddr,
 		TweetID:      tweetID,
 		TweetText:    tweetText,
-		Replies:      models.JSON{},
+		Replies:      models.JSON{"variants": repliesAny},
 		AuthorHandle: authorHandle,
 		TagID:        tagID,
 		TweetURL:     tweetURL,
 		UsedSoul:     usedSoul,
 	}
-	json.Unmarshal(repliesJSON, &sniperReply.Replies)
 
 	if err := database.DB.Create(sniperReply).Error; err != nil {
 		return nil, fmt.Errorf("failed to save reply: %w", err)
@@ -116,7 +135,7 @@ func Snipe(walletAddr, authorHandle, tweetID, tweetText, tagID string) (*models.
 
 // generateSnipeVariants uses LLM to generate 3 reply styles.
 // shell is optional (nil = no Soul persona, use generic crypto persona).
-func generateSnipeVariants(shell *models.Shell, persona *models.UserPersona, authorHandle, tweetText, llmModel string) ([]ReplyStyle, error) {
+func generateSnipeVariants(shell *models.Shell, persona *models.UserPersona, authorHandle, tweetText, llmModel, language string) ([]ReplyStyle, error) {
 	// Build soul context (optional)
 	var soulSection string
 	if shell != nil {
@@ -138,9 +157,9 @@ Bio: %s
 Communication Style: %s
 Reference Materials: %s
 Preferred Language: %s
-`, persona.Bio, persona.Style, persona.Materials, persona.Language)
+`, persona.Bio, persona.Style, persona.Materials, language)
 	} else {
-		personaSection = "\n=== YOUR PERSONA ===\nNo persona configured. Generate replies in a professional crypto-native tone.\n"
+		personaSection = fmt.Sprintf("\n=== YOUR PERSONA ===\nNo persona configured. Generate replies in a professional crypto-native tone.\nPreferred Language: %s\n", language)
 	}
 
 	prompt := fmt.Sprintf(`You are a reply generation engine for Soul Sniper.
@@ -164,6 +183,7 @@ Each reply MUST:
 - Be relevant to the tweet content
 - If a Soul profile is available, reflect that personality
 - If a persona is configured, reflect that style
+- MUST be written in the Preferred Language specified above (if "auto", match the tweet's language)
 
 Respond in JSON format ONLY:
 [
@@ -173,7 +193,7 @@ Respond in JSON format ONLY:
 ]`, soulSection, personaSection, authorHandle, tweetText)
 
 	var replies []ReplyStyle
-	err := CallLLMJSON([]ChatMessage{
+	err := CallSniperLLMJSON([]ChatMessage{
 		{Role: "system", Content: "You are a precise reply generation engine. Output valid JSON only, no markdown."},
 		{Role: "user", Content: prompt},
 	}, 1000, 0.8, &replies)
@@ -193,7 +213,11 @@ Respond in JSON format ONLY:
 // generateReplyVariants is DEPRECATED — use generateSnipeVariants.
 // Kept for backward compatibility.
 func generateReplyVariants(shell *models.Shell, persona *models.UserPersona, tweetText, llmModel string) ([]ReplyStyle, error) {
-	return generateSnipeVariants(shell, persona, shell.Handle, tweetText, llmModel)
+	lang := "en"
+	if persona != nil && persona.Language != "" {
+		lang = persona.Language
+	}
+	return generateSnipeVariants(shell, persona, shell.Handle, tweetText, llmModel, lang)
 }
 
 // getUserPersona returns the user's persona, or nil if not set.

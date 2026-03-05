@@ -13,15 +13,18 @@ interface TweetFeedProps {
   hasMore: boolean;
   onLoadMore: () => void;
   // Snipe state
-  activeSnipeTweetId: string | null;
-  snipeLoading: boolean;
-  snipeError: string | null;
-  snipeResult: SniperReply | null;
+  expandedTweetIds: Set<string>;
+  snipeLoadingIds: Set<string>;
+  snipeErrors: Record<string, string | null>;
+  snipeResults: Record<string, SniperReply | null>;
+  snipedTweetIds: Set<string>;
   subscription: SubscriptionStatus | null;
+  snipeLanguage: string;
   onSnipe: (tweet: TweetCardType) => void;
-  onRegenerate: () => void;
-  onCollapseSnipe: () => void;
+  onRegenerate: (tweet: TweetCardType) => void;
+  onCollapseSnipe: (tweetId: string) => void;
   onMute: (handle: string) => void;
+  onLanguageChange: (lang: string) => void;
 }
 
 export default function TweetFeed({
@@ -31,15 +34,18 @@ export default function TweetFeed({
   loadingMore,
   hasMore,
   onLoadMore,
-  activeSnipeTweetId,
-  snipeLoading,
-  snipeError,
-  snipeResult,
+  expandedTweetIds,
+  snipeLoadingIds,
+  snipeErrors,
+  snipeResults,
+  snipedTweetIds,
   subscription,
+  snipeLanguage,
   onSnipe,
   onRegenerate,
   onCollapseSnipe,
   onMute,
+  onLanguageChange,
 }: TweetFeedProps) {
   const t = useTranslations("Sniper");
 
@@ -93,31 +99,44 @@ export default function TweetFeed({
 
   return (
     <div className="space-y-3">
-      {tweets.map((tweet) => {
-        const isSnipeActive = activeSnipeTweetId === tweet.id;
-        return (
-          <TweetCard
-            key={tweet.id}
-            tweet={tweet}
-            tags={tags}
-            onSnipe={onSnipe}
-            onMute={onMute}
-            isSnipeActive={isSnipeActive}
-          >
-            {isSnipeActive && (
-              <SniperPanel
-                reply={snipeResult}
-                loading={snipeLoading}
-                error={snipeError}
-                subscription={subscription}
-                onRegenerate={onRegenerate}
-                onCollapse={onCollapseSnipe}
-                tweetUrl={tweet.tweet_url}
-              />
-            )}
-          </TweetCard>
-        );
-      })}
+      {(() => {
+        const seen = new Set<string>();
+        return tweets.filter((t) => {
+          if (seen.has(t.id)) return false;
+          seen.add(t.id);
+          return true;
+        }).map((tweet) => {
+          const isSnipeActive = expandedTweetIds.has(tweet.id);
+          const snipeLoading = snipeLoadingIds.has(tweet.id);
+          const snipeError = snipeErrors[tweet.id] || null;
+          const snipeResult = snipeResults[tweet.id] || null;
+          return (
+            <TweetCard
+              key={tweet.id}
+              tweet={tweet}
+              tags={tags}
+              onSnipe={onSnipe}
+              onMute={onMute}
+              isSnipeActive={isSnipeActive}
+              hasSniped={snipedTweetIds.has(tweet.id)}
+              snipeLanguage={snipeLanguage}
+              onLanguageChange={onLanguageChange}
+            >
+              {isSnipeActive && (
+                <SniperPanel
+                  reply={snipeResult}
+                  loading={snipeLoading}
+                  error={snipeError}
+                  subscription={subscription}
+                  onRegenerate={() => onRegenerate(tweet)}
+                  onCollapse={() => onCollapseSnipe(tweet.id)}
+                  tweetUrl={tweet.tweet_url}
+                />
+              )}
+            </TweetCard>
+          );
+        });
+      })()}
 
       {/* Load more */}
       {hasMore && (

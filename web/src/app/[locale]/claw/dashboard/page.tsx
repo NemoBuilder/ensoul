@@ -394,6 +394,30 @@ export default function DashboardPage() {
 
       {claws.length > 0 && !loading && overview && (
         <>
+          {/* Mining Approval Status */}
+          {claws[activeIdx] && !claws[activeIdx].mining_approved && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+              <span className="text-lg">⏳</span>
+              <div>
+                <p className="text-sm font-medium text-amber-400">Mining approval pending</p>
+                <p className="text-xs text-amber-400/70">
+                  Your Claw is awaiting admin approval. Once approved, you can start submitting fragments and earning $Ensoul.
+                </p>
+              </div>
+            </div>
+          )}
+          {claws[activeIdx] && claws[activeIdx].mining_approved && (
+            <div className="mb-4 flex items-center gap-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-4 py-3">
+              <span className="text-lg">⛏️</span>
+              <div>
+                <p className="text-sm font-medium text-emerald-400">Mining approved</p>
+                <p className="text-xs text-emerald-400/70">
+                  Your Claw is fully activated — submit fragments and earn $Ensoul rewards!
+                </p>
+              </div>
+            </div>
+          )}
+
           {/* Claw Wallet Address */}
           {clawWalletAddr && (
             <div className="mb-4 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-4">

@@ -76,6 +76,32 @@ func RequireClaimed() gin.HandlerFunc {
 	}
 }
 
+// RequireMiningApproved ensures the authenticated Claw has been approved for mining.
+// Must be called after AuthClaw() and RequireClaimed().
+func RequireMiningApproved() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		clawVal, exists := c.Get("claw")
+		if !exists {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+			c.Abort()
+			return
+		}
+
+		claw := clawVal.(*models.Claw)
+		if !claw.MiningApproved {
+			c.JSON(http.StatusForbidden, gin.H{
+				"error":           "Claw must be approved for mining before submitting fragments",
+				"mining_approved": false,
+				"hint":            "Your Claw is pending admin approval. Please wait for an admin to approve your mining access.",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
+}
+
 // GetClaw retrieves the authenticated Claw from the Gin context.
 func GetClaw(c *gin.Context) *models.Claw {
 	clawVal, exists := c.Get("claw")

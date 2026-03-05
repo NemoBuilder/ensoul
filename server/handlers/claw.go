@@ -55,9 +55,10 @@ func ClawStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"status":    claw.Status,
-		"claimed":   claw.Status == "claimed",
-		"claim_url": "/claim/" + claw.ClaimCode,
+		"status":          claw.Status,
+		"claimed":         claw.Status == "claimed",
+		"mining_approved": claw.MiningApproved,
+		"claim_url":       "/claim/" + claw.ClaimCode,
 	})
 }
 
@@ -103,6 +104,7 @@ func ClawMe(c *gin.Context) {
 		"claim_code":        claw.ClaimCode,
 		"verification_code": claw.VerificationCode,
 		"status":            claw.Status,
+		"mining_approved":   claw.MiningApproved,
 		"twitter_handle":    claw.TwitterHandle,
 		"wallet_addr":       claw.WalletAddr,
 		"total_submitted":   claw.TotalSubmitted,

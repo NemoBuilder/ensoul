@@ -377,15 +377,9 @@ func seedSniperTags() {
 	util.Log.Info("Seeded %d tags and %d accounts for Sniper 2.0", len(tags), len(accounts))
 }
 
-// backfillUsers creates User records from existing wallet_sessions.
-// Idempotent: skips wallets that already have a User record.
+// backfillUsers creates User records from existing wallet_sessions and subscriptions.
+// Idempotent: uses ON CONFLICT DO NOTHING, safe to run on every startup.
 func backfillUsers() {
-	var count int64
-	DB.Model(&models.User{}).Count(&count)
-	if count > 0 {
-		return // already have users, skip backfill
-	}
-
 	result := DB.Exec(`
 		INSERT INTO users (id, wallet_addr, status, first_seen_at, last_seen_at, login_count, created_at, updated_at)
 		SELECT
@@ -426,4 +420,3 @@ func backfillUsers() {
 		util.Log.Info("Backfilled %d additional User records from subscriptions", result2.RowsAffected)
 	}
 }
-

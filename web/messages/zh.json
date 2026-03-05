@@ -309,7 +309,7 @@
   },
   "Sniper": {
     "title": "灵魂狙击",
-    "subtitle": "精选币圈推特信息流 × AI 智能回复引擎",
+    "subtitle": "精选内容流 × AI 高质量回复",
     "pro": "专业版",
     "perMonth": "/月",
     "subscribe": "订阅",
@@ -341,6 +341,7 @@
     "sseDisconnected": "离线",
     "newTweets": "{count} 条新推文 ↑",
     "snipe": "狙击",
+    "sniped": "已狙击",
     "openOriginal": "查看原文",
     "moreActions": "更多",
     "muteAccount": "屏蔽 @{handle}",

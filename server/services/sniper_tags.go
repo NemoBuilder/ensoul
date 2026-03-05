@@ -507,7 +507,7 @@ Rules:
 	}
 
 	var result classResult
-	err := CallLLMJSON([]ChatMessage{
+	err := CallSniperLLMJSON([]ChatMessage{
 		{Role: "system", Content: "You are a precise classifier. Output valid JSON only."},
 		{Role: "user", Content: prompt},
 	}, 500, 0.3, &result)

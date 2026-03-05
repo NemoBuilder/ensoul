@@ -500,6 +500,7 @@ export interface ClawBindingInfo {
   claw_id: string;
   claw_name: string;
   wallet_addr: string;
+  mining_approved: boolean;
 }
 
 export const clawKeyApi = {
@@ -848,10 +849,10 @@ export const sniperApi = {
     apiFetch<{ status: string }>(`/api/sniper/user/muted/${handle}`, { method: "DELETE" }),
 
   // Snipe
-  snipe: (tweetId: string, tweetText: string, authorHandle: string, tagId: string) =>
+  snipe: (tweetId: string, tweetText: string, authorHandle: string, tagId: string, language = "en") =>
     apiFetch<SniperReply>("/api/sniper/snipe", {
       method: "POST",
-      body: JSON.stringify({ tweet_id: tweetId, tweet_text: tweetText, author_handle: authorHandle, tag_id: tagId }),
+      body: JSON.stringify({ tweet_id: tweetId, tweet_text: tweetText, author_handle: authorHandle, tag_id: tagId, language }),
     }),
 
   // Subscription (kept)

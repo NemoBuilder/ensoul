@@ -314,13 +314,14 @@ func SniperSnipe(c *gin.Context) {
 		TweetText    string `json:"tweet_text" binding:"required"`
 		AuthorHandle string `json:"author_handle" binding:"required"`
 		TagID        string `json:"tag_id"`
+		Language     string `json:"language"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "tweet_id, tweet_text, and author_handle are required"})
 		return
 	}
 
-	reply, err := services.Snipe(walletAddr, req.AuthorHandle, req.TweetID, req.TweetText, req.TagID)
+	reply, err := services.Snipe(walletAddr, req.AuthorHandle, req.TweetID, req.TweetText, req.TagID, req.Language)
 	if err != nil {
 		// Distinguish between auth errors and other errors
 		errMsg := err.Error()

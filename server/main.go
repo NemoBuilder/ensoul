@@ -54,7 +54,7 @@ func main() {
 
 	// Sniper 2.0: Initialize SSE hub and start tag-based feed refresher
 	services.InitSSEHub()
-	services.StartFeedRefresher(2 * time.Minute) // refresh all tag feeds every 2 minutes
+	services.StartFeedRefresher(10 * time.Minute) // refresh all tag feeds every 10 minutes
 
 	// Start subscription expiry checker (every 1 hour)
 	services.StartSubscriptionCleanup(1 * time.Hour)

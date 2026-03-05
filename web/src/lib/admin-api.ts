@@ -438,6 +438,78 @@ export const adminUserApi = {
     adminFetch<AdminUserOverviewStats>(`/api/admin/users/stats`),
 };
 
+// ── Claw Management Types ──────────────────────────────────────
+
+export interface AdminClawListItem {
+  id: string;
+  name: string;
+  description: string;
+  status: "pending_claim" | "claimed";
+  mining_approved: boolean;
+  wallet_addr: string;
+  twitter_handle: string;
+  total_submitted: number;
+  total_accepted: number;
+  earnings: number;
+  withdrawn: number;
+  created_at: string;
+}
+
+export interface AdminClawStats {
+  total_claws: number;
+  claimed_claws: number;
+  approved_claws: number;
+  pending_approval: number;
+  total_submitted: number;
+  total_accepted: number;
+}
+
+// ── Claw Management API ────────────────────────────────────────
+
+export const adminClawApi = {
+  stats: () =>
+    adminFetch<AdminClawStats>("/api/admin/claws/stats"),
+
+  list: (params: {
+    page?: number;
+    page_size?: number;
+    search?: string;
+    status?: string;
+    mining_approved?: string;
+    sort?: string;
+    order?: string;
+  }) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    });
+    return adminFetch<{ items: AdminClawListItem[]; total: number; page: number; page_size: number }>(
+      `/api/admin/claws?${qs}`
+    );
+  },
+
+  approve: (clawId: string) =>
+    adminFetch<{ status: string; claw_id: string; name: string }>(
+      `/api/admin/claws/${clawId}/approve`,
+      { method: "POST" }
+    ),
+
+  reject: (clawId: string) =>
+    adminFetch<{ status: string; claw_id: string; name: string }>(
+      `/api/admin/claws/${clawId}/reject`,
+      { method: "POST" }
+    ),
+
+  batchApprove: (clawIds: string[]) =>
+    adminFetch<{ approved: number; errors: string[] }>(
+      "/api/admin/claws/batch-approve",
+      {
+        method: "POST",
+        body: JSON.stringify({ claw_ids: clawIds }),
+      }
+    ),
+};
+
 // ── Audit Log API ──────────────────────────────────────────────
 
 export interface AdminAuditLogItem {

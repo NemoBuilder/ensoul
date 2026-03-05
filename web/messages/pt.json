@@ -296,7 +296,7 @@
   },
   "Sniper": {
     "title": "Soul Sniper",
-    "subtitle": "Curated crypto Twitter feed  AI-powered smart replies",
+    "subtitle": "Conteúdo curado × Respostas de IA de alta qualidade",
     "pro": "Pro",
     "perMonth": "/month",
     "subscribe": "Subscribe",
@@ -328,6 +328,7 @@
     "sseDisconnected": "Offline",
     "newTweets": "{count} new tweets ",
     "snipe": "Snipe",
+    "sniped": "Sniped",
     "openOriginal": "Open Original",
     "moreActions": "More",
     "muteAccount": "Mute @{handle}",

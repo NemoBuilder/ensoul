@@ -17,10 +17,11 @@ import (
 // ──────────────────────────────────────────────────────────────────────────────
 
 const (
-	feedCacheTTL       = 10 * time.Minute // cache TTL per tag
-	feedRefreshMinWait = 2 * time.Minute  // minimum time between refreshes per tag
+	feedCacheTTL       = 15 * time.Minute // cache TTL per tag
+	feedRefreshMinWait = 10 * time.Minute // minimum time between refreshes per tag
 	feedDefaultCount   = 20
-	feedMaxCount       = 50
+	feedMaxCount       = 20   // reduced from 50 to save SocialData credits
+	feedDailyBudget    = 2000 // max SocialData API calls per day (safety)
 )
 
 // TweetCard is the unified tweet representation for the feed.
@@ -65,8 +66,13 @@ type feedCacheEntry struct {
 }
 
 var (
-	feedCache   = make(map[string]*feedCacheEntry) // key: tag_id
-	feedCacheMu sync.RWMutex
+	feedCache       = make(map[string]*feedCacheEntry) // key: tag_id
+	feedCacheMu     sync.RWMutex
+	lastRefreshed   = make(map[string]time.Time) // key: tag_id → last SocialData call time
+	lastRefreshedMu sync.RWMutex
+	dailyAPICount   int64  // daily SocialData API call counter
+	dailyAPIDate    string // date string (YYYY-MM-DD) for daily reset
+	dailyAPIMu      sync.Mutex
 )
 
 // getCachedFeed returns cached tweets for a tag, or nil if expired/missing.
@@ -117,6 +123,52 @@ func setCachedFeed(tagID string, tweets []TweetCard) []TweetCard {
 	}
 
 	return newTweets
+}
+
+// canRefreshTag returns true if enough time has passed since last refresh for this tag.
+func canRefreshTag(tagID string) bool {
+	lastRefreshedMu.RLock()
+	defer lastRefreshedMu.RUnlock()
+	t, ok := lastRefreshed[tagID]
+	if !ok {
+		return true
+	}
+	return time.Since(t) >= feedRefreshMinWait
+}
+
+// markTagRefreshed records the current time as last refresh for a tag.
+func markTagRefreshed(tagID string) {
+	lastRefreshedMu.Lock()
+	defer lastRefreshedMu.Unlock()
+	lastRefreshed[tagID] = time.Now()
+}
+
+// trackAPICall increments the daily API call counter. Returns false if budget exceeded.
+func trackAPICall(count int) bool {
+	dailyAPIMu.Lock()
+	defer dailyAPIMu.Unlock()
+
+	today := time.Now().UTC().Format("2006-01-02")
+	if dailyAPIDate != today {
+		// New day — reset counter
+		dailyAPICount = 0
+		dailyAPIDate = today
+		util.Log.Info("[feed] Daily API budget reset for %s (limit: %d)", today, feedDailyBudget)
+	}
+
+	if dailyAPICount >= int64(feedDailyBudget) {
+		return false // budget exceeded
+	}
+
+	dailyAPICount += int64(count)
+	return true
+}
+
+// GetDailyAPIUsage returns the current daily API call count.
+func GetDailyAPIUsage() (int64, int) {
+	dailyAPIMu.Lock()
+	defer dailyAPIMu.Unlock()
+	return dailyAPICount, feedDailyBudget
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -192,6 +244,7 @@ func BuildFeed(tagIDs []string, mutedHandles []string, cursor string, count int)
 					util.Log.Warn("[feed] Failed to fetch feed for tag %s: %v", tid, err)
 					return
 				}
+				markTagRefreshed(tid)
 				// Store in cache + broadcast
 				newTweets := setCachedFeed(tid, tweets)
 				if len(newTweets) > 0 && sseHubInstance != nil {
@@ -272,19 +325,37 @@ func BuildFeed(tagIDs []string, mutedHandles []string, cursor string, count int)
 	}, nil
 }
 
-// RefreshTagFeed forces a cache refresh for specific tags and broadcasts new tweets.
+// RefreshTagFeed refreshes feeds for specific tags, respecting per-tag cooldown and daily budget.
 func RefreshTagFeed(tagIDs []string) (int, error) {
-	handleToTags, err := GetHandleToTagsMap(tagIDs)
+	// Filter out tags that were refreshed too recently
+	var eligibleTags []string
+	for _, tid := range tagIDs {
+		if canRefreshTag(tid) {
+			eligibleTags = append(eligibleTags, tid)
+		}
+	}
+
+	if len(eligibleTags) == 0 {
+		return 0, nil // all tags still within cooldown
+	}
+
+	// Check daily budget
+	if !trackAPICall(0) {
+		util.Log.Warn("[feed] Daily SocialData API budget (%d) exceeded, skipping refresh", feedDailyBudget)
+		return 0, nil
+	}
+
+	handleToTags, err := GetHandleToTagsMap(eligibleTags)
 	if err != nil {
 		return 0, err
 	}
 
 	var (
 		wg       sync.WaitGroup
-		totalNew int64 // use atomic-safe counter via mutex
+		totalNew int64
 		countMu  sync.Mutex
 	)
-	for _, tagID := range tagIDs {
+	for _, tagID := range eligibleTags {
 		wg.Add(1)
 		go func(tid string) {
 			defer wg.Done()
@@ -293,6 +364,7 @@ func RefreshTagFeed(tagIDs []string) (int, error) {
 				util.Log.Warn("[feed] Refresh failed for tag %s: %v", tid, err)
 				return
 			}
+			markTagRefreshed(tid)
 			newTweets := setCachedFeed(tid, tweets)
 			if len(newTweets) > 0 && sseHubInstance != nil {
 				sseHubInstance.Broadcast(tid, newTweets)
@@ -321,6 +393,12 @@ func fetchTagFeed(tagID string, handleToTags map[string][]string) ([]TweetCard, 
 		return nil, nil
 	}
 
+	// Check daily budget before making API call
+	if !trackAPICall(1) {
+		util.Log.Warn("[feed] Daily API budget exceeded, skipping fetch for tag %s", tagID)
+		return nil, nil
+	}
+
 	// Build search query: "from:handle1 OR from:handle2 OR ..."
 	// SocialData search API supports Twitter search syntax
 	var parts []string
@@ -330,7 +408,8 @@ func fetchTagFeed(tagID string, handleToTags map[string][]string) ([]TweetCard, 
 	query := strings.Join(parts, " OR ")
 
 	client := newSocialDataClient()
-	sdTweets, err := client.SearchTweets(query, feedMaxCount)
+	// Only fetch 1 page (20 tweets) — enough for a live feed, saves credits
+	sdTweets, err := client.SearchTweets(query, socialDataTweetsPerPage)
 	if err != nil {
 		return nil, fmt.Errorf("search failed for tag %s: %w", tagID, err)
 	}

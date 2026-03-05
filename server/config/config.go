@@ -30,11 +30,17 @@ type Config struct {
 	PrivateKey             string // Platform wallet private key for Soul minting
 	ClawPKSecret           string // AES key for encrypting Claw private keys
 
-	// LLM
+	// LLM (default — used by ensouling, shell, fragment, chat)
 	LLMProvider string // "openai" or "claude"
 	LLMAPIKey   string
 	LLMModel    string
 	LLMBaseURL  string // Custom base URL for OpenAI-compatible APIs
+
+	// Sniper LLM (separate config for sniper feature; falls back to LLM_* if empty)
+	SniperLLMProvider string
+	SniperLLMAPIKey   string
+	SniperLLMModel    string
+	SniperLLMBaseURL  string
 
 	// Twitter (for seed extraction)
 	TwitterBearerToken string
@@ -91,6 +97,10 @@ func Load() *Config {
 		LLMAPIKey:              getEnv("LLM_API_KEY", ""),
 		LLMModel:               getEnv("LLM_MODEL", "gpt-4o"),
 		LLMBaseURL:             getEnv("LLM_BASE_URL", ""),
+		SniperLLMProvider:      getEnv("SNIPER_LLM_PROVIDER", ""), // fallback to LLM_PROVIDER
+		SniperLLMAPIKey:        getEnv("SNIPER_LLM_API_KEY", ""),  // fallback to LLM_API_KEY
+		SniperLLMModel:         getEnv("SNIPER_LLM_MODEL", ""),    // fallback to LLM_MODEL
+		SniperLLMBaseURL:       getEnv("SNIPER_LLM_BASE_URL", ""), // fallback to LLM_BASE_URL
 		TwitterBearerToken:     getEnv("TWITTER_BEARER_TOKEN", ""),
 		SocialDataAPIKey:       getEnv("SOCIALDATA_API_KEY", ""),
 		SocialDataBaseURL:      getEnv("SOCIALDATA_BASE_URL", ""),
@@ -147,6 +157,27 @@ func (c *Config) DatabaseURL() string {
 // IsProduction returns true if running in production mode.
 func (c *Config) IsProduction() bool {
 	return c.Env == "production" || c.Env == "prod"
+}
+
+// SniperLLM returns the effective Sniper LLM config, falling back to global LLM_* values.
+func (c *Config) SniperLLM() (provider, apiKey, model, baseURL string) {
+	provider = c.SniperLLMProvider
+	if provider == "" {
+		provider = c.LLMProvider
+	}
+	apiKey = c.SniperLLMAPIKey
+	if apiKey == "" {
+		apiKey = c.LLMAPIKey
+	}
+	model = c.SniperLLMModel
+	if model == "" {
+		model = c.LLMModel
+	}
+	baseURL = c.SniperLLMBaseURL
+	if baseURL == "" {
+		baseURL = c.LLMBaseURL
+	}
+	return
 }
 
 // getEnv reads an environment variable with a fallback default value.

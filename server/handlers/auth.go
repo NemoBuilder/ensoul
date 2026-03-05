@@ -198,32 +198,38 @@ func ClawListKeys(c *gin.Context) {
 
 	// Return binding info (without API keys!)
 	type bindingInfo struct {
-		ID         string `json:"id"`
-		ClawID     string `json:"claw_id"`
-		ClawName   string `json:"claw_name"`
-		WalletAddr string `json:"wallet_addr"`
+		ID             string `json:"id"`
+		ClawID         string `json:"claw_id"`
+		ClawName       string `json:"claw_name"`
+		WalletAddr     string `json:"wallet_addr"`
+		MiningApproved bool   `json:"mining_approved"`
 	}
 
-	// Load claw wallet addresses
+	// Load claw details (wallet + mining approval)
 	clawIDs := make([]string, len(bindings))
 	for i, b := range bindings {
 		clawIDs[i] = b.ClawID.String()
 	}
 	var claws []models.Claw
 	database.DB.Where("id IN ?", clawIDs).Find(&claws)
-	clawWallets := make(map[string]string)
-	for _, c := range claws {
-		clawWallets[c.ID.String()] = c.WalletAddr
+	clawMap := make(map[string]*models.Claw)
+	for i := range claws {
+		clawMap[claws[i].ID.String()] = &claws[i]
 	}
 
 	result := make([]bindingInfo, len(bindings))
 	for i, b := range bindings {
-		result[i] = bindingInfo{
-			ID:         b.ID.String(),
-			ClawID:     b.ClawID.String(),
-			ClawName:   b.ClawName,
-			WalletAddr: clawWallets[b.ClawID.String()],
+		cid := b.ClawID.String()
+		info := bindingInfo{
+			ID:       b.ID.String(),
+			ClawID:   cid,
+			ClawName: b.ClawName,
 		}
+		if cl, ok := clawMap[cid]; ok {
+			info.WalletAddr = cl.WalletAddr
+			info.MiningApproved = cl.MiningApproved
+		}
+		result[i] = info
 	}
 
 	c.JSON(http.StatusOK, gin.H{"claws": result})

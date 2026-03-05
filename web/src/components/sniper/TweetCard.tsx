@@ -11,6 +11,9 @@ interface TweetCardProps {
   onSnipe: (tweet: TweetCardType) => void;
   onMute: (handle: string) => void;
   isSnipeActive: boolean;
+  hasSniped?: boolean;
+  snipeLanguage: string;
+  onLanguageChange: (lang: string) => void;
   children?: React.ReactNode; // SniperPanel slot
 }
 
@@ -31,12 +34,24 @@ function formatCount(n: number): string {
   return String(n);
 }
 
+const SNIPE_LANGUAGES = [
+  { value: "en", label: "English" },
+  { value: "zh", label: "中文" },
+  { value: "ja", label: "日本語" },
+  { value: "ko", label: "한국어" },
+  { value: "ru", label: "Русский" },
+  { value: "auto", flag: "🌐" },
+];
+
 export default function TweetCard({
   tweet,
   tags,
   onSnipe,
   onMute,
   isSnipeActive,
+  hasSniped,
+  snipeLanguage,
+  onLanguageChange,
   children,
 }: TweetCardProps) {
   const t = useTranslations("Sniper");
@@ -56,8 +71,26 @@ export default function TweetCard({
   // Find the first matching tag for badge display
   const primaryTag = tags.find((tg) => tweet.tags.includes(tg.id));
 
+  // Allow clicking on the card body to toggle sniped results panel
+  const isClickableToToggle = !!hasSniped;
+
+  function handleCardClick(e: React.MouseEvent) {
+    if (!isClickableToToggle) return;
+    // Don't intercept clicks on interactive elements
+    const target = e.target as HTMLElement;
+    if (target.closest("button, a, select, input, textarea")) return;
+    onSnipe(tweet);
+  }
+
   return (
-    <div className="rounded-xl border border-[#1e1e2e] bg-[#14141f] transition-colors hover:border-[#2a2a3e]">
+    <div
+      className={`rounded-xl border transition-colors ${
+        hasSniped
+          ? "border-[#8b5cf6]/40 bg-[#14141f] ring-1 ring-[#8b5cf6]/20"
+          : "border-[#1e1e2e] bg-[#14141f] hover:border-[#2a2a3e]"
+      } ${isClickableToToggle ? "cursor-pointer" : ""}`}
+      onClick={handleCardClick}
+    >
       <div className="p-4">
         {/* Tag badge row */}
         {primaryTag && (
@@ -147,17 +180,38 @@ export default function TweetCard({
           <button
             onClick={() => onSnipe(tweet)}
             className={`
-              inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
+              relative inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-medium
               transition-all duration-150
               ${
                 isSnipeActive
                   ? "bg-[#8b5cf6] text-white"
-                  : "bg-[#8b5cf6]/10 text-[#c4b5fd] hover:bg-[#8b5cf6]/20"
+                  : hasSniped
+                    ? "bg-[#8b5cf6]/20 text-[#c4b5fd] ring-1 ring-[#8b5cf6]/40"
+                    : "bg-[#8b5cf6]/10 text-[#c4b5fd] hover:bg-[#8b5cf6]/20"
               }
             `}
           >
-            🎯 {t("snipe")}
+            🎯 {hasSniped ? t("sniped") : t("snipe")}
+            {hasSniped && (
+              <span className="flex h-4 w-4 items-center justify-center rounded-full bg-[#8b5cf6] text-[10px] font-bold text-white">
+                ✓
+              </span>
+            )}
           </button>
+
+          {/* Language selector */}
+          <select
+            value={snipeLanguage}
+            onChange={(e) => onLanguageChange(e.target.value)}
+            className="rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-2 py-1.5 text-xs text-[#94a3b8]
+              hover:border-[#334155] focus:border-[#8b5cf6] focus:outline-none transition-colors cursor-pointer"
+          >
+            {SNIPE_LANGUAGES.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.flag ? `${opt.flag} ${t("personaLanguageAuto")}` : opt.label}
+              </option>
+            ))}
+          </select>
 
           <a
             href={tweet.tweet_url}

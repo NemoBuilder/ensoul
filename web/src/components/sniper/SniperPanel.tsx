@@ -79,7 +79,16 @@ export default function SniperPanel({
 
   if (!reply) return null;
 
-  const variants: ReplyVariant[] = reply.replies || [];
+  // Support both formats:
+  // - New: replies = { variants: [{style, content, model}, ...] }
+  // - Legacy: replies = [{style, content, model}, ...]
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw = reply.replies as any;
+  const variants: ReplyVariant[] = Array.isArray(raw)
+    ? raw
+    : Array.isArray(raw?.variants)
+      ? raw.variants
+      : [];
 
   return (
     <div className="p-4">

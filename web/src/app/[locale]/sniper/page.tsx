@@ -2,11 +2,12 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useTranslations } from "next-intl";
-import { useAccount } from "wagmi";
+import { useAccount, useSignMessage } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { Link } from "@/i18n/navigation";
 import {
   sniperApi,
+  sessionApi,
   type SniperTag,
   type TweetCard as TweetCardType,
   type SniperReply,
@@ -20,7 +21,8 @@ import { useSniperSSE, type SSEStatus } from "@/components/sniper/useSniperSSE";
 
 export default function SniperPage() {
   const t = useTranslations("Sniper");
-  const { isConnected } = useAccount();
+  const { isConnected, address } = useAccount();
+  const { signMessageAsync } = useSignMessage();
 
   // Tags
   const [tags, setTags] = useState<SniperTag[]>([]);
@@ -44,49 +46,114 @@ export default function SniperPage() {
   const [subscription, setSubscription] = useState<SubscriptionStatus | null>(null);
   const [showSubscribeModal, setShowSubscribeModal] = useState(false);
 
-  // Snipe state
-  const [activeSnipeTweetId, setActiveSnipeTweetId] = useState<string | null>(null);
-  const [snipeLoading, setSnipeLoading] = useState(false);
-  const [snipeError, setSnipeError] = useState<string | null>(null);
-  const [snipeResult, setSnipeResult] = useState<SniperReply | null>(null);
-  const activeTweetRef = useRef<TweetCardType | null>(null);
+  // Snipe state (per-tweet)
+  const [expandedTweetIds, setExpandedTweetIds] = useState<Set<string>>(new Set());
+  const [snipeLoadingIds, setSnipeLoadingIds] = useState<Set<string>>(new Set());
+  const [snipeErrors, setSnipeErrors] = useState<Record<string, string | null>>({});
+  const [snipeResults, setSnipeResults] = useState<Record<string, SniperReply | null>>({});
+  const [snipedTweetIds, setSnipedTweetIds] = useState<Set<string>>(new Set());
+  const [snipeLanguage, setSnipeLanguage] = useState("en");
+  const pendingSnipeTweetRef = useRef<TweetCardType | null>(null);
+  const tweetsRef = useRef<TweetCardType[]>([]);
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    tweetsRef.current = tweets;
+  }, [tweets]);
 
   // ── Init: load tags, user prefs, subscription ──────────────────────
   useEffect(() => {
+    let cancelled = false;
+
     async function init() {
       try {
         // Always fetch tags first (needed for defaults)
         const tagData = await sniperApi.getTags();
+        if (cancelled) return;
         setTags(tagData.tags || []);
 
-        if (isConnected) {
-          // Fetch user prefs, subscription, and muted list in parallel
-          const [userTagsRes, subRes, mutedRes] = await Promise.allSettled([
-            sniperApi.getUserTags(),
-            sniperApi.getSubscription(),
-            sniperApi.getMuted(),
-          ]);
+        if (isConnected && address) {
+          // Try to use existing session first (no wallet popup)
+          let hasSession = false;
+          try {
+            await sessionApi.session();
+            hasSession = true;
+          } catch {
+            // No session — we'll try auto-login in background (non-blocking)
+          }
 
-          // User tag preferences
-          let userTagIds: string[] | null = null;
-          if (userTagsRes.status === "fulfilled") {
-            const val = userTagsRes.value;
-            if (val.tag_ids && val.tag_ids.length > 0) {
-              userTagIds = val.tag_ids;
+          if (hasSession) {
+            // Session exists — fetch user prefs, subscription, muted, snipe history
+            const [userTagsRes, subRes, mutedRes, repliesRes, personaRes] = await Promise.allSettled([
+              sniperApi.getUserTags(),
+              sniperApi.getSubscription(),
+              sniperApi.getMuted(),
+              sniperApi.getReplies(),
+              sniperApi.getPersona(),
+            ]);
+            if (cancelled) return;
+
+            let userTagIds: string[] | null = null;
+            if (userTagsRes.status === "fulfilled") {
+              const val = userTagsRes.value;
+              if (val.tag_ids && val.tag_ids.length > 0) {
+                userTagIds = val.tag_ids;
+              }
             }
-          }
+            if (subRes.status === "fulfilled") setSubscription(subRes.value);
+            if (mutedRes.status === "fulfilled") setMutedHandles(new Set(mutedRes.value.handles || []));
+            if (repliesRes.status === "fulfilled") {
+              const ids = (repliesRes.value.replies || []).map((r) => r.tweet_id);
+              setSnipedTweetIds(new Set(ids));
+            }
+            if (personaRes.status === "fulfilled" && personaRes.value.configured && personaRes.value.persona?.language) {
+              setSnipeLanguage(personaRes.value.persona.language);
+            }
+            setSelectedTagIds(userTagIds || tagData.defaults || []);
+          } else {
+            // No session yet — show feed immediately with defaults, then try SIWE login in background
+            setSelectedTagIds(tagData.defaults || []);
+            setTagsLoaded(true);
 
-          // Subscription
-          if (subRes.status === "fulfilled") {
-            setSubscription(subRes.value);
+            // Background auto-login (non-blocking — won't prevent feed from loading)
+            (async () => {
+              try {
+                const message = `ensoul:login:${Date.now()}`;
+                const signature = await signMessageAsync({ message });
+                await sessionApi.login(address, signature, message);
+                if (cancelled) return;
+                // Login succeeded — now fetch user prefs to upgrade from defaults
+                const [userTagsRes, subRes, mutedRes, repliesRes, personaRes] = await Promise.allSettled([
+                  sniperApi.getUserTags(),
+                  sniperApi.getSubscription(),
+                  sniperApi.getMuted(),
+                  sniperApi.getReplies(),
+                  sniperApi.getPersona(),
+                ]);
+                if (cancelled) return;
+                let userTagIds: string[] | null = null;
+                if (userTagsRes.status === "fulfilled") {
+                  const val = userTagsRes.value;
+                  if (val.tag_ids && val.tag_ids.length > 0) {
+                    userTagIds = val.tag_ids;
+                  }
+                }
+                if (subRes.status === "fulfilled") setSubscription(subRes.value);
+                if (mutedRes.status === "fulfilled") setMutedHandles(new Set(mutedRes.value.handles || []));
+                if (repliesRes.status === "fulfilled") {
+                  const ids = (repliesRes.value.replies || []).map((r) => r.tweet_id);
+                  setSnipedTweetIds(new Set(ids));
+                }
+                if (personaRes.status === "fulfilled" && personaRes.value.configured && personaRes.value.persona?.language) {
+                  setSnipeLanguage(personaRes.value.persona.language);
+                }
+                if (userTagIds) setSelectedTagIds(userTagIds);
+              } catch {
+                // User rejected signature or login failed — feed already showing with defaults
+              }
+            })();
+            return; // tagsLoaded already set above
           }
-
-          // Muted handles
-          if (mutedRes.status === "fulfilled") {
-            setMutedHandles(new Set(mutedRes.value.handles || []));
-          }
-
-          setSelectedTagIds(userTagIds || tagData.defaults || []);
         } else {
           setSelectedTagIds(tagData.defaults || []);
         }
@@ -94,10 +161,12 @@ export default function SniperPage() {
         setTagsLoaded(true);
       } catch {
         // Tag loading failed
-        setTagsLoaded(true);
+        if (!cancelled) setTagsLoaded(true);
       }
     }
     init();
+
+    return () => { cancelled = true; };
   }, [isConnected]);
 
   // ── Load feed when selected tags change ───────────────────────────
@@ -162,12 +231,16 @@ export default function SniperPage() {
       );
       if (filtered.length === 0) return;
       setNewTweets((prev) => {
-        const existingIds = new Set([...prev.map((t) => t.id), ...tweets.map((t) => t.id)]);
+        const existingIds = new Set([
+          ...prev.map((t) => t.id),
+          ...tweetsRef.current.map((t) => t.id),
+        ]);
         const newOnly = filtered.filter((t) => !existingIds.has(t.id));
+        if (newOnly.length === 0) return prev;
         return [...newOnly, ...prev];
       });
     },
-    [mutedHandles, tweets]
+    [mutedHandles]
   );
 
   const { status: sseStatus } = useSniperSSE({
@@ -192,9 +265,14 @@ export default function SniperPage() {
 
   function handleFlushNewTweets() {
     setTweets((prev) => {
-      const existingIds = new Set(prev.map((t) => t.id));
-      const toAdd = newTweets.filter((t) => !existingIds.has(t.id));
-      return [...toAdd, ...prev];
+      // Merge & deduplicate by id, keeping the newest version
+      const map = new Map<string, TweetCardType>();
+      for (const t of prev) map.set(t.id, t);
+      for (const t of newTweets) map.set(t.id, t);
+      // Sort by created_at descending (newest first)
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+      );
     });
     setNewTweets([]);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -207,67 +285,79 @@ export default function SniperPage() {
   }
 
   async function handleSnipe(tweet: TweetCardType) {
-    // Toggle off if same tweet
-    if (activeSnipeTweetId === tweet.id) {
-      setActiveSnipeTweetId(null);
-      setSnipeResult(null);
-      setSnipeError(null);
+    // Toggle panel for this tweet only (allow multiple open)
+    if (expandedTweetIds.has(tweet.id)) {
+      setExpandedTweetIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tweet.id);
+        return next;
+      });
+      setSnipeErrors((prev) => ({ ...prev, [tweet.id]: null }));
       return;
     }
 
+    setExpandedTweetIds((prev) => new Set(prev).add(tweet.id));
+
     // Check auth
     if (!isConnected) {
-      setActiveSnipeTweetId(tweet.id);
-      setSnipeError(t("loginToSnipe"));
-      activeTweetRef.current = tweet;
+      setSnipeErrors((prev) => ({ ...prev, [tweet.id]: t("loginToSnipe") }));
+      setSnipeResults((prev) => ({ ...prev, [tweet.id]: null }));
+      pendingSnipeTweetRef.current = tweet;
       return;
     }
 
     // Check subscription
     if (!subscription?.active || subscription?.tier === "free") {
-      activeTweetRef.current = tweet;
+      pendingSnipeTweetRef.current = tweet;
       setShowSubscribeModal(true);
       return;
     }
 
     // Do snipe
-    activeTweetRef.current = tweet;
-    setActiveSnipeTweetId(tweet.id);
-    setSnipeLoading(true);
-    setSnipeError(null);
-    setSnipeResult(null);
+    setSnipeLoadingIds((prev) => new Set(prev).add(tweet.id));
+    setSnipeErrors((prev) => ({ ...prev, [tweet.id]: null }));
+    setSnipeResults((prev) => ({ ...prev, [tweet.id]: null }));
 
     try {
       const result = await sniperApi.snipe(
         tweet.id,
         tweet.text,
         tweet.author.handle,
-        tweet.tags[0] || ""
+        tweet.tags[0] || "",
+        snipeLanguage
       );
-      setSnipeResult(result);
+      setSnipeResults((prev) => ({ ...prev, [tweet.id]: result }));
+      setSnipedTweetIds((prev) => new Set(prev).add(tweet.id));
       // Refresh subscription to update daily count
       try {
         const sub = await sniperApi.getSubscription();
         setSubscription(sub);
       } catch {}
     } catch (err: unknown) {
-      setSnipeError(err instanceof Error ? err.message : "Snipe failed");
+      setSnipeErrors((prev) => ({
+        ...prev,
+        [tweet.id]: err instanceof Error ? err.message : "Snipe failed",
+      }));
     } finally {
-      setSnipeLoading(false);
+      setSnipeLoadingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(tweet.id);
+        return next;
+      });
     }
   }
 
-  function handleRegenerate() {
-    if (activeTweetRef.current) {
-      handleSnipe(activeTweetRef.current);
-    }
+  function handleRegenerate(tweet: TweetCardType) {
+    handleSnipe(tweet);
   }
 
-  function handleCollapseSnipe() {
-    setActiveSnipeTweetId(null);
-    setSnipeResult(null);
-    setSnipeError(null);
-    activeTweetRef.current = null;
+  function handleCollapseSnipe(tweetId: string) {
+    setExpandedTweetIds((prev) => {
+      const next = new Set(prev);
+      next.delete(tweetId);
+      return next;
+    });
+    setSnipeErrors((prev) => ({ ...prev, [tweetId]: null }));
   }
 
   async function handleMute(handle: string) {
@@ -291,8 +381,8 @@ export default function SniperPage() {
   function handleSubscribeSuccess() {
     setShowSubscribeModal(false);
     sniperApi.getSubscription().then(setSubscription).catch(() => {});
-    if (activeTweetRef.current) {
-      handleSnipe(activeTweetRef.current);
+    if (pendingSnipeTweetRef.current) {
+      handleSnipe(pendingSnipeTweetRef.current);
     }
   }
 
@@ -385,15 +475,18 @@ export default function SniperPage() {
         loadingMore={feedLoadingMore}
         hasMore={hasMore}
         onLoadMore={handleLoadMore}
-        activeSnipeTweetId={activeSnipeTweetId}
-        snipeLoading={snipeLoading}
-        snipeError={snipeError}
-        snipeResult={snipeResult}
+        expandedTweetIds={expandedTweetIds}
+        snipeLoadingIds={snipeLoadingIds}
+        snipeErrors={snipeErrors}
+        snipeResults={snipeResults}
+        snipedTweetIds={snipedTweetIds}
         subscription={subscription}
+        snipeLanguage={snipeLanguage}
         onSnipe={handleSnipe}
         onRegenerate={handleRegenerate}
         onCollapseSnipe={handleCollapseSnipe}
         onMute={handleMute}
+        onLanguageChange={setSnipeLanguage}
       />
 
       {/* Subscribe modal */}

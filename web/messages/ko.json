@@ -296,7 +296,7 @@
   },
   "Sniper": {
     "title": "Soul Sniper",
-    "subtitle": "Curated crypto Twitter feed  AI-powered smart replies",
+    "subtitle": "엄선된 콘텐츠 피드 × 고품질 AI 답글",
     "pro": "Pro",
     "perMonth": "/month",
     "subscribe": "Subscribe",
@@ -328,6 +328,7 @@
     "sseDisconnected": "Offline",
     "newTweets": "{count} new tweets ",
     "snipe": "Snipe",
+    "sniped": "Sniped",
     "openOriginal": "Open Original",
     "moreActions": "More",
     "muteAccount": "Mute @{handle}",

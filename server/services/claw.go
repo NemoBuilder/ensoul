@@ -167,6 +167,7 @@ func GetClawDashboard(claw *models.Claw) (map[string]interface{}, error) {
 		},
 		"claw_id":              claw.ID.String(),
 		"wallet_addr":          claw.WalletAddr,
+		"mining_approved":      claw.MiningApproved,
 		"recent_contributions": recentFragments,
 		"mining_rewards":       rewards,
 		"total_earned":         totalEarned,
