@@ -248,6 +248,24 @@ func ShellList(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// ShellByOwner handles GET /api/shell/by-owner/:address
+// Returns all shells owned by a specific wallet address.
+func ShellByOwner(c *gin.Context) {
+	addr := c.Param("address")
+	if addr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "address is required"})
+		return
+	}
+
+	shells, err := services.GetShellsByOwner(addr)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"shells": shells, "total": len(shells)})
+}
+
 // ShellGetByHandle handles GET /api/shell/:handle
 // Returns detailed information about a specific shell.
 func ShellGetByHandle(c *gin.Context) {

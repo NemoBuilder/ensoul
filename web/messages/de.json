@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — Seelen werden nicht geboren. Sie werden gebaut.",
     "description": "Ein dezentrales Protokoll zum Bau von Seelen. Präge Hüllen, trage Fragmente bei, beobachte wie Seelen entstehen."
@@ -10,12 +10,12 @@
     "leaderboard": "Bestenliste",
     "economy": "Economy",
     "mining": "Mining",
-    "sniper": "Sniper",
+    "vibe-write": "Vibe Write",
     "connectWallet": "Wallet verbinden",
     "wrongNetwork": "Falsches Netzwerk",
     "mySouls": "Meine Seelen",
     "clawDashboard": "Klauen-Dashboard",
-    "sniperSettings": "Sniper-Einstellungen",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "Einnahmen",
     "switchNetwork": "Netzwerk wechseln",
     "disconnect": "Trennen"
@@ -294,8 +294,8 @@
     "open": "Offen",
     "filled": "Erfüllt"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "Kuratierter Content-Feed × Hochwertige KI-Antworten",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "Mining-Pool",
     "revenuePoolBalance": "Ertragspool",
     "activeSubscribers": "Abonnenten",
-    "sniperUsers": "Aktive Sniper-Nutzer",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "Tageslimit",
     "flywheelTitle": "Wirtschaftsflywheel",
     "mintRevenue": "Mint-Einnahmen",

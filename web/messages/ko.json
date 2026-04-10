@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — 영혼은 태어나는 것이 아니라 구축되는 것이다.",
     "description": "탈중앙화 영혼 구축 프로토콜. 셸을 민팅하고, 프래그먼트를 기여하고, 영혼이 탄생하는 것을 지켜보세요."
@@ -10,12 +10,12 @@
     "leaderboard": "리더보드",
     "economy": "Economy",
     "mining": "마이닝",
-    "sniper": "스나이퍼",
+    "vibe-write": "Vibe Write",
     "connectWallet": "지갑 연결",
     "wrongNetwork": "네트워크 오류",
     "mySouls": "내 영혼",
     "clawDashboard": "클로 대시보드",
-    "sniperSettings": "스나이퍼 설정",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "수익",
     "switchNetwork": "네트워크 전환",
     "disconnect": "연결 해제"
@@ -294,8 +294,8 @@
     "open": "오픈",
     "filled": "완료"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "엄선된 콘텐츠 피드 × 고품질 AI 답글",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "마이닝 풀",
     "revenuePoolBalance": "수익 풀",
     "activeSubscribers": "구독자",
-    "sniperUsers": "활성 스나이퍼",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "일일 한도",
     "flywheelTitle": "경제 플라이휠",
     "mintRevenue": "민트 수익",

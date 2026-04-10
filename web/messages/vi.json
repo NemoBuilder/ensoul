@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — Linh hồn không sinh ra. Chúng được xây dựng.",
     "description": "Giao thức xây dựng linh hồn phi tập trung. Đúc vỏ, đóng góp mảnh ghép, chứng kiến linh hồn xuất hiện."
@@ -10,12 +10,12 @@
     "leaderboard": "Bảng xếp hạng",
     "economy": "Economy",
     "mining": "Đào",
-    "sniper": "Sniper",
+    "vibe-write": "Vibe Write",
     "connectWallet": "Kết nối ví",
     "wrongNetwork": "Sai mạng",
     "mySouls": "Linh hồn của tôi",
     "clawDashboard": "Bảng điều khiển Vuốt",
-    "sniperSettings": "Cài đặt Sniper",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "Doanh thu",
     "switchNetwork": "Chuyển mạng",
     "disconnect": "Ngắt kết nối"
@@ -294,8 +294,8 @@
     "open": "Mở",
     "filled": "Đã đầy"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "Nguồn nội dung chọn lọc × AI trả lời chất lượng cao",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "Mining Pool",
     "revenuePoolBalance": "Revenue Pool",
     "activeSubscribers": "Subscribers",
-    "sniperUsers": "Active Sniper users",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "Daily Limit",
     "flywheelTitle": "Economic Flywheel",
     "mintRevenue": "Mint Revenue",

@@ -1,4 +1,4 @@
-package services
+﻿package services
 
 import (
 	"context"
@@ -29,7 +29,7 @@ var stageMultiplier = map[string]float64{
 const MaxUsagePerWalletPerDay = 50
 
 // RecordUsage increments the usage count for a Soul in the current period.
-// Called every time a Soul is used (chat, sniper reply, etc.)
+// Called every time a Soul is used (chat, vibe-write reply, etc.)
 // walletAddr is used for anti-gaming: if the same wallet exceeds the daily cap
 // for a specific Soul, additional usage is not counted.
 func RecordUsage(shellID uuid.UUID, walletAddr string) {

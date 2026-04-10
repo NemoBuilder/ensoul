@@ -1,4 +1,4 @@
-package main
+﻿package main
 
 import (
 	"fmt"
@@ -23,10 +23,10 @@ func main() {
 	// Connect to database and run migrations
 	database.Connect(cfg)
 
-	// Initialize blockchain client and ERC-8004 contract bindings
-	if err := chain.Init(); err != nil {
-		util.Log.Warn("Chain initialization failed (on-chain features disabled): %v", err)
-	}
+	// Initialize blockchain client and ERC-8004 contract bindings.
+	// If the first attempt fails (e.g. RPC timeout), retries in background
+	// with exponential backoff so the server can start serving immediately.
+	chain.InitWithRetry(10)
 
 	// Start background agent_id backfill (checks every 2 minutes)
 	services.StartAgentIDBackfill(2 * time.Minute)
@@ -49,10 +49,10 @@ func main() {
 	// Start tax wallet auto-mint scheduler (weekly, Monday 00:00 UTC)
 	services.StartTaxWalletScheduler()
 
-	// Start Soul Sniper KOL tweet monitor (DEPRECATED — replaced by feed refresher)
-	// services.StartSniperMonitor(1 * time.Minute)
+	// Start Vibe Write KOL tweet monitor (DEPRECATED — replaced by feed refresher)
+	// services.StartVibeWriteMonitor(1 * time.Minute)
 
-	// Sniper 2.0: Initialize SSE hub and start tag-based feed refresher
+	// Vibe Write 2.0: Initialize SSE hub and start tag-based feed refresher
 	services.InitSSEHub()
 	services.StartFeedRefresher(10 * time.Minute) // refresh all tag feeds every 10 minutes
 

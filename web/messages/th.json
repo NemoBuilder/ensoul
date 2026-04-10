@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — วิญญาณไม่ได้เกิดมา พวกมันถูกสร้างขึ้น",
     "description": "โปรโตคอลสร้างวิญญาณแบบกระจายศูนย์ สร้างเปลือก มอบชิ้นส่วน เฝ้าดูวิญญาณปรากฏ"
@@ -10,12 +10,12 @@
     "leaderboard": "อันดับ",
     "economy": "Economy",
     "mining": "ขุด",
-    "sniper": "สไนเปอร์",
+    "vibe-write": "Vibe Write",
     "connectWallet": "เชื่อมต่อกระเป๋า",
     "wrongNetwork": "เครือข่ายผิด",
     "mySouls": "วิญญาณของฉัน",
     "clawDashboard": "แดชบอร์ดกรงเล็บ",
-    "sniperSettings": "การตั้งค่า Sniper",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "รายได้",
     "switchNetwork": "เปลี่ยนเครือข่าย",
     "disconnect": "ตัดการเชื่อมต่อ"
@@ -294,8 +294,8 @@
     "open": "เปิด",
     "filled": "เต็ม"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "ฟีดเนื้อหาคัดสรร × AI ตอบกลับคุณภาพสูง",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "พูลขุด",
     "revenuePoolBalance": "พูลรายได้",
     "activeSubscribers": "สมาชิก",
-    "sniperUsers": "ผู้ใช้ Sniper ที่ใช้งาน",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "ขีดจำกัดรายวัน",
     "flywheelTitle": "Flywheel เศรษฐกิจ",
     "mintRevenue": "รายได้ Mint",

@@ -82,7 +82,7 @@ func AutoMintPublicSouls() {
 
 		// Use stored price from candidate record
 		price := new(big.Int)
-		if _, ok := price.SetString(cand.PriceWei, 10); !ok || price.Sign() <= 0 {
+		if _, ok := price.SetString(cand.PriceWei, 10); !ok || price.Sign() < 0 {
 			// Price not stored or invalid — fetch fresh
 			util.Log.Warn("[tax_wallet] Invalid stored price for @%s, fetching fresh", cand.Handle)
 			freshPrice, followers, tier, fetchErr := GetMintPriceForHandle(cand.Handle)

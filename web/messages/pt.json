@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — Almas não nascem. São construídas.",
     "description": "Um protocolo descentralizado de construção de almas. Cunhe cascas, contribua fragmentos, observe as almas emergirem."
@@ -10,12 +10,12 @@
     "leaderboard": "Classificação",
     "economy": "Economy",
     "mining": "Mineração",
-    "sniper": "Sniper",
+    "vibe-write": "Vibe Write",
     "connectWallet": "Conectar carteira",
     "wrongNetwork": "Rede incorreta",
     "mySouls": "Minhas almas",
     "clawDashboard": "Painel de Garras",
-    "sniperSettings": "Configurações Sniper",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "Receita",
     "switchNetwork": "Trocar rede",
     "disconnect": "Desconectar"
@@ -294,8 +294,8 @@
     "open": "Aberto",
     "filled": "Preenchido"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "Conteúdo curado × Respostas de IA de alta qualidade",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "Pool de Mineração",
     "revenuePoolBalance": "Pool de Receita",
     "activeSubscribers": "Assinantes",
-    "sniperUsers": "Usuários Sniper ativos",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "Limite Diário",
     "flywheelTitle": "Volante Econômico",
     "mintRevenue": "Receita de Mint",

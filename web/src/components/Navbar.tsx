@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useState, useRef, useEffect } from "react";
 import Image from "next/image";
@@ -47,7 +47,7 @@ export default function Navbar() {
               { href: "/claw" as const, label: t("claws") },
               { href: "/mining" as const, label: t("mining") },
               { href: "/economy" as const, label: t("economy") },
-              { href: "/sniper" as const, label: t("sniper") },
+              { href: "/vibe-write" as const, label: t("vibe-write") },
               { href: "/leaderboard" as const, label: t("leaderboard") },
             ].map((item) => (
               <Link
@@ -155,11 +155,11 @@ export default function Navbar() {
                           <span>{t("clawDashboard")}</span>
                         </Link>
                         <Link
-                          href="/sniper/settings"
+                          href="/vibe-write/settings"
                           className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
                         >
                           <span>🎯</span>
-                          <span>{t("sniperSettings")}</span>
+                          <span>{t("vibeWriteSettings")}</span>
                         </Link>
                         <Link
                           href="/holder"

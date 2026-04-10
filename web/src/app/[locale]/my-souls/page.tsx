@@ -3,72 +3,33 @@
 import { useEffect, useState, useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { Link } from "@/i18n/navigation";
-import { useAccount, usePublicClient } from "wagmi";
+import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { parseAbi } from "viem";
 import { shellApi, type Shell } from "@/lib/api";
 import SoulCard from "@/components/SoulCard";
-
-const IDENTITY_REGISTRY = "0x8004A169FB4a3325136EB29fA0ceB6D2e539a432" as `0x${string}`;
-
-const ERC721_ABI = parseAbi([
-  "function ownerOf(uint256 tokenId) view returns (address)",
-]);
 
 export default function MySoulsPage() {
   const t = useTranslations("MySouls");
   const { address, isConnected } = useAccount();
-  const publicClient = usePublicClient();
   const [mySouls, setMySouls] = useState<Shell[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const fetchMySouls = useCallback(async () => {
-    if (!address || !publicClient) return;
+    if (!address) return;
     setLoading(true);
     setError("");
 
     try {
-      const result = await shellApi.list({ limit: 500 });
-      const mintedShells = (result.shells || []).filter(
-        (s) => s.agent_id != null && s.agent_id > 0
-      );
-
-      if (mintedShells.length === 0) {
-        setMySouls([]);
-        setLoading(false);
-        return;
-      }
-
-      const ownerResults = await publicClient.multicall({
-        contracts: mintedShells.map((s) => ({
-          address: IDENTITY_REGISTRY,
-          abi: ERC721_ABI,
-          functionName: "ownerOf",
-          args: [BigInt(s.agent_id!)],
-        })),
-        allowFailure: true,
-      });
-
-      const owned: Shell[] = [];
-      for (let i = 0; i < mintedShells.length; i++) {
-        const res = ownerResults[i];
-        if (
-          res.status === "success" &&
-          (res.result as string).toLowerCase() === address.toLowerCase()
-        ) {
-          owned.push(mintedShells[i]);
-        }
-      }
-
-      setMySouls(owned);
+      const result = await shellApi.byOwner(address);
+      setMySouls(result.shells || []);
     } catch (err) {
       console.error("Failed to fetch my souls:", err);
       setError(t("loadFailed"));
     } finally {
       setLoading(false);
     }
-  }, [address, publicClient, t]);
+  }, [address, t]);
 
   useEffect(() => {
     if (isConnected && address) {

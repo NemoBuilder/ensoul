@@ -102,6 +102,11 @@ func SignMintPermit(
 //	1M-10M    → 1.0  BNB
 //	> 10M     → 3.0  BNB
 func GetMintPrice(followers int) *big.Int {
+	// Global free mint switch
+	if config.Cfg != nil && config.Cfg.FreeMintEnabled {
+		return big.NewInt(0)
+	}
+
 	var ethAmount float64
 	switch {
 	case followers < 1000:

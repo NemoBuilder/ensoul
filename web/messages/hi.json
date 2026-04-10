@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — आत्माएँ पैदा नहीं होतीं। वे निर्मित होती हैं।",
     "description": "एक विकेंद्रीकृत आत्मा निर्माण प्रोटोकॉल। शेल मिंट करें, फ्रैगमेंट योगदान करें, आत्माओं को उभरते देखें।"
@@ -10,12 +10,12 @@
     "leaderboard": "लीडरबोर्ड",
     "economy": "Economy",
     "mining": "माइनिंग",
-    "sniper": "स्नाइपर",
+    "vibe-write": "Vibe Write",
     "connectWallet": "वॉलेट जोड़ें",
     "wrongNetwork": "गलत नेटवर्क",
     "mySouls": "मेरी आत्माएँ",
     "clawDashboard": "क्लॉ डैशबोर्ड",
-    "sniperSettings": "स्नाइपर सेटिंग्स",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "राजस्व",
     "switchNetwork": "नेटवर्क बदलें",
     "disconnect": "डिस्कनेक्ट"
@@ -294,8 +294,8 @@
     "open": "खुला",
     "filled": "पूर्ण"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "क्यूरेटेड कंटेंट फ़ीड × उच्च गुणवत्ता AI उत्तर",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "माइनिंग पूल",
     "revenuePoolBalance": "राजस्व पूल",
     "activeSubscribers": "सब्सक्राइबर",
-    "sniperUsers": "सक्रिय स्नाइपर उपयोगकर्ता",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "दैनिक सीमा",
     "flywheelTitle": "आर्थिक फ्लाईव्हील",
     "mintRevenue": "मिंट राजस्व",

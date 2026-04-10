@@ -1,4 +1,4 @@
-{
+﻿{
   "Metadata": {
     "title": "Ensoul — Ruhlar doğmaz. İnşa edilir.",
     "description": "Merkezi olmayan ruh inşa protokolü. Kabuk oluştur, parçalar katkıda bulun, ruhların ortaya çıkışını izle."
@@ -10,12 +10,12 @@
     "leaderboard": "Sıralama",
     "economy": "Economy",
     "mining": "Madencilik",
-    "sniper": "Sniper",
+    "vibe-write": "Vibe Write",
     "connectWallet": "Cüzdan Bağla",
     "wrongNetwork": "Yanlış Ağ",
     "mySouls": "Ruhlarım",
     "clawDashboard": "Pençe Paneli",
-    "sniperSettings": "Sniper Ayarları",
+    "vibeWriteSettings": "Vibe Write Settings",
     "holderRevenue": "Gelir",
     "switchNetwork": "Ağ Değiştir",
     "disconnect": "Bağlantıyı Kes"
@@ -294,8 +294,8 @@
     "open": "Açık",
     "filled": "Dolu"
   },
-  "Sniper": {
-    "title": "Soul Sniper",
+  "VibeWrite": {
+    "title": "Vibe Write",
     "subtitle": "Seçilmiş içerik akışı × Yüksek kaliteli AI yanıtlar",
     "pro": "Pro",
     "perMonth": "/month",
@@ -350,7 +350,7 @@
     "collapsePanel": "Collapse",
     "openTwitterReply": "Reply on Twitter",
     "loginToSnipe": "Connect wallet to snipe",
-    "upgradeToSnipe": "Upgrade to Pro to unlock Sniper",
+    "upgradeToSnipe": "Upgrade to Pro to unlock Vibe Write",
     "upgradePro": "Upgrade to Pro",
     "proFeatures": "50 snipes/day  Claude Sonnet  Soul persona  Full Persona config",
     "proPrice": "$99",
@@ -364,7 +364,7 @@
     "refreshing": "Refreshing...",
     "settings": "Settings",
     "history": "History",
-    "settingsTitle": "Sniper Settings",
+    "settingsTitle": "Vibe Write Settings",
     "tagPreferences": "Tag Preferences",
     "tagPreferencesDesc": "Select the tags you want to follow. Tweets from all selected tags will appear in your feed.",
     "mutedAccounts": "Muted Accounts",
@@ -451,7 +451,7 @@
     "miningPoolBalance": "Madencilik Havuzu",
     "revenuePoolBalance": "Gelir Havuzu",
     "activeSubscribers": "Aboneler",
-    "sniperUsers": "Aktif Sniper kullanıcıları",
+    "vibeWriteUsers": "Active Vibe Write users",
     "dailyLimit": "Günlük Limit",
     "flywheelTitle": "Ekonomik Volan",
     "mintRevenue": "Mint Geliri",

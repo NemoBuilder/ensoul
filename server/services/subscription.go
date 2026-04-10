@@ -1,4 +1,4 @@
-package services
+﻿package services
 
 import (
 	"fmt"
@@ -150,7 +150,7 @@ func GetSubscriptionStatus(walletAddr string) (map[string]interface{}, error) {
 	// Count today's snipes
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
 	var replyCount int64
-	database.DB.Model(&models.SniperReply{}).
+	database.DB.Model(&models.VibeWriteReply{}).
 		Where("wallet_addr = ? AND created_at >= ?", walletAddr, todayStart).
 		Count(&replyCount)
 
@@ -165,9 +165,9 @@ func GetSubscriptionStatus(walletAddr string) (map[string]interface{}, error) {
 	}, nil
 }
 
-// AddSniperKOL adds a KOL to the user's tracking list.
-// DEPRECATED: This is a legacy v1 function. Sniper 2.0 uses tag-based feeds.
-func AddSniperKOL(walletAddr, handle string) (*models.SniperKOL, error) {
+// AddVibeWriteKOL adds a KOL to the user's tracking list.
+// DEPRECATED: This is a legacy v1 function. Vibe Write 2.0 uses tag-based feeds.
+func AddVibeWriteKOL(walletAddr, handle string) (*models.VibeWriteKOL, error) {
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
 		return nil, fmt.Errorf("active subscription required: %w", err)
@@ -180,13 +180,13 @@ func AddSniperKOL(walletAddr, handle string) (*models.SniperKOL, error) {
 	}
 
 	// Check for duplicate
-	var existing models.SniperKOL
+	var existing models.VibeWriteKOL
 	if err := database.DB.Where("subscription_id = ? AND shell_id = ?", sub.ID, shell.ID).
 		First(&existing).Error; err == nil {
 		return nil, fmt.Errorf("@%s is already in your tracking list", handle)
 	}
 
-	kol := &models.SniperKOL{
+	kol := &models.VibeWriteKOL{
 		SubscriptionID: sub.ID,
 		ShellID:        shell.ID,
 		Handle:         handle,
@@ -196,18 +196,18 @@ func AddSniperKOL(walletAddr, handle string) (*models.SniperKOL, error) {
 		return nil, fmt.Errorf("failed to add KOL: %w", err)
 	}
 
-	util.Log.Info("[sniper] Added @%s to tracking for %s", handle, walletAddr)
+	util.Log.Info("[vibe-write] Added @%s to tracking for %s", handle, walletAddr)
 	return kol, nil
 }
 
-// RemoveSniperKOL removes a KOL from the user's tracking list.
-func RemoveSniperKOL(walletAddr string, kolID uuid.UUID) error {
+// RemoveVibeWriteKOL removes a KOL from the user's tracking list.
+func RemoveVibeWriteKOL(walletAddr string, kolID uuid.UUID) error {
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
 		return fmt.Errorf("active subscription required: %w", err)
 	}
 
-	result := database.DB.Where("id = ? AND subscription_id = ?", kolID, sub.ID).Delete(&models.SniperKOL{})
+	result := database.DB.Where("id = ? AND subscription_id = ?", kolID, sub.ID).Delete(&models.VibeWriteKOL{})
 	if result.RowsAffected == 0 {
 		return fmt.Errorf("KOL not found in your tracking list")
 	}
@@ -215,14 +215,14 @@ func RemoveSniperKOL(walletAddr string, kolID uuid.UUID) error {
 	return nil
 }
 
-// ListSniperKOLs returns the user's tracked KOLs.
-func ListSniperKOLs(walletAddr string) ([]models.SniperKOL, error) {
+// ListVibeWriteKOLs returns the user's tracked KOLs.
+func ListVibeWriteKOLs(walletAddr string) ([]models.VibeWriteKOL, error) {
 	sub, err := GetActiveSubscription(walletAddr)
 	if err != nil {
 		return nil, err
 	}
 
-	var kols []models.SniperKOL
+	var kols []models.VibeWriteKOL
 	if err := database.DB.Where("subscription_id = ?", sub.ID).
 		Preload("Shell").Find(&kols).Error; err != nil {
 		return nil, err
@@ -240,7 +240,7 @@ func CheckDailyReplyLimit(walletAddr string, sub *models.Subscription) (bool, in
 
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
 	var count int64
-	database.DB.Model(&models.SniperReply{}).
+	database.DB.Model(&models.VibeWriteReply{}).
 		Where("wallet_addr = ? AND created_at >= ?", walletAddr, todayStart).
 		Count(&count)
 

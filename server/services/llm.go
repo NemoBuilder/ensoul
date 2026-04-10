@@ -1,4 +1,4 @@
-package services
+﻿package services
 
 import (
 	"bufio"
@@ -390,15 +390,15 @@ func CallLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, res
 }
 
 // ────────────────────────────────────────────────────────────────
-// Sniper-specific LLM calls (uses SNIPER_LLM_* config, falls back to LLM_*)
+// Vibe Write-specific LLM calls (uses VIBE_WRITE_LLM_* config, falls back to LLM_*)
 // ────────────────────────────────────────────────────────────────
 
-// CallSniperLLM sends a non-streaming chat completion request using the Sniper LLM config.
-func CallSniperLLM(messages []ChatMessage, maxTokens int, temperature float64) (string, error) {
-	provider, apiKey, model, baseURL := config.Cfg.SniperLLM()
+// CallVibeWriteLLM sends a non-streaming chat completion request using the Vibe Write LLM config.
+func CallVibeWriteLLM(messages []ChatMessage, maxTokens int, temperature float64) (string, error) {
+	provider, apiKey, model, baseURL := config.Cfg.VibeWriteLLM()
 
 	if apiKey == "" {
-		return "", fmt.Errorf("SNIPER_LLM_API_KEY (or LLM_API_KEY) not configured")
+		return "", fmt.Errorf("VIBE_WRITE_LLM_API_KEY (or LLM_API_KEY) not configured")
 	}
 
 	provider = strings.ToLower(provider)
@@ -408,9 +408,9 @@ func CallSniperLLM(messages []ChatMessage, maxTokens int, temperature float64) (
 	return callOpenAIWith(apiKey, model, baseURL, provider, messages, maxTokens, temperature)
 }
 
-// CallSniperLLMJSON calls the Sniper LLM and parses JSON from the response.
-func CallSniperLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, result interface{}) error {
-	raw, err := CallSniperLLM(messages, maxTokens, temperature)
+// CallVibeWriteLLMJSON calls the Vibe Write LLM and parses JSON from the response.
+func CallVibeWriteLLMJSON(messages []ChatMessage, maxTokens int, temperature float64, result interface{}) error {
+	raw, err := CallVibeWriteLLM(messages, maxTokens, temperature)
 	if err != nil {
 		return err
 	}

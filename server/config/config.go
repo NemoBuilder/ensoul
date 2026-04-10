@@ -1,9 +1,10 @@
-package config
+﻿package config
 
 import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -36,11 +37,11 @@ type Config struct {
 	LLMModel    string
 	LLMBaseURL  string // Custom base URL for OpenAI-compatible APIs
 
-	// Sniper LLM (separate config for sniper feature; falls back to LLM_* if empty)
-	SniperLLMProvider string
-	SniperLLMAPIKey   string
-	SniperLLMModel    string
-	SniperLLMBaseURL  string
+	// Vibe Write LLM (separate config for vibe-write feature; falls back to LLM_* if empty)
+	VibeWriteLLMProvider string
+	VibeWriteLLMAPIKey   string
+	VibeWriteLLMModel    string
+	VibeWriteLLMBaseURL  string
 
 	// Twitter (for seed extraction)
 	TwitterBearerToken string
@@ -68,6 +69,14 @@ type Config struct {
 	BuybackPrivateKey     string // Buyback Wallet — executes PancakeSwap swaps
 	MiningPoolPrivateKey  string // Mining Pool Wallet — holds & distributes mining rewards
 	RevenuePoolPrivateKey string // Revenue Pool Wallet — holds holder revenue for claim
+
+	// Mint
+	FreeMintEnabled bool // Global free mint switch — when true, all mints are free (0 BNB)
+
+	// Vibe Write External API Keys
+	PushAPIKey              string // API key for external tweet push endpoint
+	VibeWriteAPIKey            string // API key for external snipe endpoint
+	ExternalSnipeDailyLimit int    // Daily limit for external snipe calls (default: 200)
 }
 
 // Global config instance
@@ -97,10 +106,10 @@ func Load() *Config {
 		LLMAPIKey:              getEnv("LLM_API_KEY", ""),
 		LLMModel:               getEnv("LLM_MODEL", "gpt-4o"),
 		LLMBaseURL:             getEnv("LLM_BASE_URL", ""),
-		SniperLLMProvider:      getEnv("SNIPER_LLM_PROVIDER", ""), // fallback to LLM_PROVIDER
-		SniperLLMAPIKey:        getEnv("SNIPER_LLM_API_KEY", ""),  // fallback to LLM_API_KEY
-		SniperLLMModel:         getEnv("SNIPER_LLM_MODEL", ""),    // fallback to LLM_MODEL
-		SniperLLMBaseURL:       getEnv("SNIPER_LLM_BASE_URL", ""), // fallback to LLM_BASE_URL
+		VibeWriteLLMProvider:      getEnv("VIBE_WRITE_LLM_PROVIDER", ""), // fallback to LLM_PROVIDER
+		VibeWriteLLMAPIKey:        getEnv("VIBE_WRITE_LLM_API_KEY", ""),  // fallback to LLM_API_KEY
+		VibeWriteLLMModel:         getEnv("VIBE_WRITE_LLM_MODEL", ""),    // fallback to LLM_MODEL
+		VibeWriteLLMBaseURL:       getEnv("VIBE_WRITE_LLM_BASE_URL", ""), // fallback to LLM_BASE_URL
 		TwitterBearerToken:     getEnv("TWITTER_BEARER_TOKEN", ""),
 		SocialDataAPIKey:       getEnv("SOCIALDATA_API_KEY", ""),
 		SocialDataBaseURL:      getEnv("SOCIALDATA_BASE_URL", ""),
@@ -125,6 +134,12 @@ func Load() *Config {
 		BuybackPrivateKey:     getEnv("BUYBACK_PRIVATE_KEY", ""),
 		MiningPoolPrivateKey:  getEnv("MINING_POOL_PRIVATE_KEY", ""),
 		RevenuePoolPrivateKey: getEnv("REVENUE_POOL_PRIVATE_KEY", ""),
+
+		FreeMintEnabled: strings.EqualFold(getEnv("FREE_MINT_ENABLED", ""), "true"),
+
+		PushAPIKey:              getEnv("PUSH_API_KEY", ""),
+		VibeWriteAPIKey:            getEnv("VIBE_WRITE_API_KEY", ""),
+		ExternalSnipeDailyLimit: parseIntEnv("EXTERNAL_SNIPE_DAILY_LIMIT", 200),
 	}
 
 	// Auto-set log level based on environment if not explicitly configured
@@ -159,21 +174,21 @@ func (c *Config) IsProduction() bool {
 	return c.Env == "production" || c.Env == "prod"
 }
 
-// SniperLLM returns the effective Sniper LLM config, falling back to global LLM_* values.
-func (c *Config) SniperLLM() (provider, apiKey, model, baseURL string) {
-	provider = c.SniperLLMProvider
+// VibeWriteLLM returns the effective Vibe Write LLM config, falling back to global LLM_* values.
+func (c *Config) VibeWriteLLM() (provider, apiKey, model, baseURL string) {
+	provider = c.VibeWriteLLMProvider
 	if provider == "" {
 		provider = c.LLMProvider
 	}
-	apiKey = c.SniperLLMAPIKey
+	apiKey = c.VibeWriteLLMAPIKey
 	if apiKey == "" {
 		apiKey = c.LLMAPIKey
 	}
-	model = c.SniperLLMModel
+	model = c.VibeWriteLLMModel
 	if model == "" {
 		model = c.LLMModel
 	}
-	baseURL = c.SniperLLMBaseURL
+	baseURL = c.VibeWriteLLMBaseURL
 	if baseURL == "" {
 		baseURL = c.LLMBaseURL
 	}
@@ -186,4 +201,17 @@ func getEnv(key, fallback string) string {
 		return value
 	}
 	return fallback
+}
+
+// parseIntEnv reads an integer environment variable with a fallback default.
+func parseIntEnv(key string, fallback int) int {
+	s := getEnv(key, "")
+	if s == "" {
+		return fallback
+	}
+	var v int
+	if _, err := fmt.Sscanf(s, "%d", &v); err != nil {
+		return fallback
+	}
+	return v
 }

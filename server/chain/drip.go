@@ -56,11 +56,13 @@ func DripGas(ctx context.Context, clawAddr string) (string, error) {
 
 	toAddr := common.HexToAddress(clawAddr)
 
-	// Get the platform wallet nonce
-	nonce, err := C.ethClient.PendingNonceAt(ctx, C.platformAddr)
+	// Serialize platform wallet transactions to prevent nonce conflicts
+	nonce, err := AcquireNonce(ctx, C.platformAddr)
 	if err != nil {
-		return "", fmt.Errorf("failed to get nonce: %w", err)
+		return "", fmt.Errorf("failed to acquire nonce: %w", err)
 	}
+	var txSent bool
+	defer func() { ReleaseNonce(C.platformAddr, txSent) }()
 
 	// Get suggested gas price
 	gasPrice, err := C.ethClient.SuggestGasPrice(ctx)
@@ -84,6 +86,7 @@ func DripGas(ctx context.Context, clawAddr string) (string, error) {
 	if err := C.ethClient.SendTransaction(ctx, signedTx); err != nil {
 		return "", fmt.Errorf("failed to send drip tx: %w", err)
 	}
+	txSent = true // nonce was consumed — advance local counter
 
 	txHash := signedTx.Hash().Hex()
 	util.Log.Debug("[chain] Gas drip sent to %s: %s BNB, tx=%s",

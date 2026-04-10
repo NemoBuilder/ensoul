@@ -491,6 +491,29 @@ func ListShells(stage, sort, search, pageStr, limitStr string) (map[string]inter
 	}, nil
 }
 
+// GetShellsByOwner returns all confirmed shells owned by a wallet address.
+func GetShellsByOwner(addr string) ([]models.Shell, error) {
+	addr = strings.ToLower(strings.TrimSpace(addr))
+	if addr == "" {
+		return nil, fmt.Errorf("address is required")
+	}
+
+	var shells []models.Shell
+	if err := database.DB.
+		Where("LOWER(owner_addr) = ? AND stage != ? AND mint_tx_hash != ''", addr, models.StagePending).
+		Order("created_at DESC").
+		Find(&shells).Error; err != nil {
+		return nil, err
+	}
+
+	// Strip soul_prompt from public listings
+	for i := range shells {
+		shells[i].SoulPrompt = ""
+	}
+
+	return shells, nil
+}
+
 // GetShellByHandle returns a single shell by its Twitter handle.
 func GetShellByHandle(handle string) (*models.Shell, error) {
 	var shell models.Shell

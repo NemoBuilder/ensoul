@@ -291,6 +291,99 @@ func (c *socialDataClient) SearchTweets(query string, maxTweets int) ([]sdTweet,
 	return allTweets, nil
 }
 
+// sdFollowingResponse is the response from GET /twitter/user/{id}/following.
+type sdFollowingResponse struct {
+	NextCursor string          `json:"next_cursor"`
+	Users      []sdUserProfile `json:"users"`
+}
+
+// FetchFollowing retrieves the list of accounts a user follows.
+// Uses the numeric user_id. Returns up to maxUsers profiles (paginated).
+func (c *socialDataClient) FetchFollowing(userID string, maxUsers int) ([]sdUserProfile, error) {
+	if maxUsers <= 0 {
+		maxUsers = 200
+	}
+
+	var allUsers []sdUserProfile
+	cursor := ""
+	pagesLoaded := 0
+	maxPages := maxUsers/20 + 1
+
+	for pagesLoaded < maxPages {
+		endpoint := fmt.Sprintf("/twitter/user/%s/following", userID)
+		if cursor != "" {
+			endpoint += "?cursor=" + urlEncode(cursor)
+		}
+
+		body, status, err := c.doRequest(endpoint)
+		if err != nil {
+			return allUsers, err
+		}
+
+		if status != http.StatusOK {
+			if len(allUsers) > 0 {
+				util.Log.Warn("[socialdata] following page %d returned status %d, returning %d users collected so far",
+					pagesLoaded+1, status, len(allUsers))
+				break
+			}
+			return nil, fmt.Errorf("socialdata: following request failed (status %d): %s", status, string(body))
+		}
+
+		var resp sdFollowingResponse
+		if err := json.Unmarshal(body, &resp); err != nil {
+			return allUsers, fmt.Errorf("socialdata: failed to decode following response: %w", err)
+		}
+
+		allUsers = append(allUsers, resp.Users...)
+		pagesLoaded++
+
+		if len(allUsers) >= maxUsers || resp.NextCursor == "" {
+			break
+		}
+		cursor = resp.NextCursor
+	}
+
+	// Trim to maxUsers
+	if len(allUsers) > maxUsers {
+		allUsers = allUsers[:maxUsers]
+	}
+
+	util.Log.Debug("[socialdata] collected %d following for user %s across %d pages", len(allUsers), userID, pagesLoaded)
+	return allUsers, nil
+}
+
+// FetchKOLFollowingHandles fetches a KOL's following list and returns their screen names.
+// This is a high-level helper for admin import workflows.
+func FetchKOLFollowingHandles(handle string, maxUsers int) ([]string, int, error) {
+	client := newSocialDataClient()
+	handle = strings.TrimPrefix(handle, "@")
+
+	// Step 1: Get user profile (for numeric ID)
+	user, err := client.FetchUser(handle)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to fetch profile for @%s: %w", handle, err)
+	}
+
+	followingCount := user.FriendsCount
+	util.Log.Info("[socialdata] @%s follows %d accounts, importing up to %d", handle, followingCount, maxUsers)
+
+	// Step 2: Fetch following list
+	following, err := client.FetchFollowing(user.IDStr, maxUsers)
+	if err != nil {
+		return nil, followingCount, fmt.Errorf("failed to fetch following list: %w", err)
+	}
+
+	// Step 3: Extract handles
+	handles := make([]string, 0, len(following))
+	for _, u := range following {
+		if u.ScreenName != "" {
+			handles = append(handles, strings.ToLower(u.ScreenName))
+		}
+	}
+
+	return handles, followingCount, nil
+}
+
 // urlEncode performs simple URL encoding for query parameters.
 func urlEncode(s string) string {
 	var result strings.Builder

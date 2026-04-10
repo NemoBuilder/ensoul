@@ -1,4 +1,4 @@
-package models
+﻿package models
 
 import (
 	"time"
@@ -274,7 +274,7 @@ type BuybackRecord struct {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Soul Sniper Models (Phase 3)
+// Vibe Write Models (Phase 3)
 // ═══════════════════════════════════════════════════════════════════════
 
 // Subscription tier constants
@@ -290,7 +290,7 @@ const (
 	SubStatusCancelled = "cancelled"
 )
 
-// Subscription represents a user's Soul Sniper subscription.
+// Subscription represents a user's Vibe Write subscription.
 type Subscription struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	WalletAddr    string         `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
@@ -306,8 +306,8 @@ type Subscription struct {
 	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
-// SniperKOL represents a KOL that a subscriber is tracking.
-type SniperKOL struct {
+// VibeWriteKOL represents a KOL that a subscriber is tracking.
+type VibeWriteKOL struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	SubscriptionID uuid.UUID      `gorm:"type:uuid;not null;index" json:"subscription_id"`
 	ShellID        uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
@@ -320,8 +320,8 @@ type SniperKOL struct {
 	Shell        Shell        `gorm:"foreignKey:ShellID" json:"shell,omitempty"`
 }
 
-// SniperReply represents a generated reply for a tweet (Sniper 2.0).
-type SniperReply struct {
+// VibeWriteReply represents a generated reply for a tweet (Vibe Write 2.0).
+type VibeWriteReply struct {
 	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	ShellID      *uuid.UUID `gorm:"type:uuid;index" json:"shell_id"` // nullable: Soul is optional
 	WalletAddr   string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
@@ -350,11 +350,11 @@ type UserPersona struct {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// Sniper 2.0: Tag-based Feed + Snipe Models
+// Vibe Write 2.0: Tag-based Feed + Snipe Models
 // ═══════════════════════════════════════════════════════════════════════
 
-// SniperTag defines a content tag (maintained by Admin).
-type SniperTag struct {
+// VibeWriteTag defines a content tag (maintained by Admin).
+type VibeWriteTag struct {
 	ID          string    `gorm:"type:varchar(50);primaryKey" json:"id"` // e.g. "bnb_official"
 	Name        string    `gorm:"type:varchar(100)" json:"name"`         // Chinese name
 	NameEN      string    `gorm:"type:varchar(100)" json:"name_en"`      // English name
@@ -368,8 +368,8 @@ type SniperTag struct {
 	UpdatedAt   time.Time `json:"updated_at"`
 }
 
-// SniperTagAccount links a Twitter account to a tag (many-to-many, Admin maintained).
-type SniperTagAccount struct {
+// VibeWriteTagAccount links a Twitter account to a tag (many-to-many, Admin maintained).
+type VibeWriteTagAccount struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	TagID            string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_account" json:"tag_id"`
 	Handle           string    `gorm:"type:varchar(30);not null;uniqueIndex:idx_tag_account" json:"handle"`
@@ -422,6 +422,51 @@ type UserMutedAccount struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// Vibe Write 2.0+: Multi-Dimensional Tagging
+// ═══════════════════════════════════════════════════════════════════════
+
+// TagDimension defines a tagging axis (e.g. "chain", "track", "role").
+type TagDimension struct {
+	ID        string    `gorm:"type:varchar(30);primaryKey" json:"id"` // e.g. "chain"
+	Name      string    `gorm:"type:varchar(50)" json:"name"`          // Chinese name
+	NameEN    string    `gorm:"type:varchar(50)" json:"name_en"`       // English name
+	SortOrder int       `gorm:"default:0" json:"sort_order"`
+	Active    bool      `gorm:"default:true" json:"active"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// TagDimensionValue is a specific value within a dimension (e.g. "chain:bnb").
+type TagDimensionValue struct {
+	ID          string    `gorm:"type:varchar(50);primaryKey" json:"id"` // e.g. "chain:bnb"
+	DimensionID string    `gorm:"type:varchar(30);not null;index" json:"dimension_id"`
+	Label       string    `gorm:"type:varchar(50)" json:"label"`    // Chinese label
+	LabelEN     string    `gorm:"type:varchar(50)" json:"label_en"` // English label
+	Icon        string    `gorm:"type:varchar(10)" json:"icon"`     // Emoji icon
+	SortOrder   int       `gorm:"default:0" json:"sort_order"`
+	Active      bool      `gorm:"default:true" json:"active"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// VibeWriteTagDimension links a VibeWriteTag to one or more dimension values (many-to-many).
+type VibeWriteTagDimension struct {
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TagID            string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_dim_val" json:"tag_id"`
+	DimensionValueID string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_dim_val" json:"dimension_value_id"`
+	CreatedAt        time.Time `json:"created_at"`
+}
+
+// ExternalSnipeUsage tracks daily usage for external snipe API callers.
+type ExternalSnipeUsage struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	CallerID  string    `gorm:"type:varchar(100);not null;index" json:"caller_id"`
+	Date      string    `gorm:"type:varchar(10);not null;index" json:"date"` // YYYY-MM-DD
+	Count     int       `gorm:"default:0" json:"count"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 // SubscriptionTierConfig holds the limits for each subscription tier.
 type SubscriptionTierConfig struct {
 	DailyReplies     int // 0 = not available, 50 = daily snipe limit
@@ -472,7 +517,8 @@ type MintCandidate struct {
 
 // MintCandidate status constants
 const (
-	CandidateStatusPending = "pending"
+	CandidateStatusPending = "pending" // auto-mint scheduler picks these up
+	CandidateStatusQueued  = "queued"  // waiting for manual mint (batch/import)
 	CandidateStatusMinted  = "minted"
 	CandidateStatusSkipped = "skipped"
 	CandidateStatusFailed  = "failed"

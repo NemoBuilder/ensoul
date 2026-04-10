@@ -9,6 +9,7 @@ import (
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/crypto"
 
 	"github.com/ensoul-labs/ensoul-server/util"
 )
@@ -33,11 +34,21 @@ func SubmitFeedback(
 		return "", fmt.Errorf("chain client not initialized")
 	}
 
+	// Serialize transactions per claw wallet to prevent nonce conflicts
+	clawAddr := crypto.PubkeyToAddress(clawKey.PublicKey)
+	nonce, err := AcquireNonce(ctx, clawAddr)
+	if err != nil {
+		return "", fmt.Errorf("failed to acquire nonce: %w", err)
+	}
+	var txSent bool
+	defer func() { ReleaseNonce(clawAddr, txSent) }()
+
 	// Create transaction opts from the Claw's key
 	opts, err := C.TransactOptsFromKey(ctx, clawKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to create transactor: %w", err)
 	}
+	opts.Nonce = new(big.Int).SetUint64(nonce)
 
 	// Prepare feedback parameters
 	feedbackValue := big.NewInt(value)
@@ -56,6 +67,7 @@ func SubmitFeedback(
 	if err != nil {
 		return "", fmt.Errorf("giveFeedback() call failed: %w", err)
 	}
+	txSent = true // nonce was consumed — advance local counter
 
 	util.Log.Debug("[chain] Reputation feedback tx sent: %s (agentId=%s, value=%d, tag1=%s)",
 		tx.Hash().Hex(), agentId.String(), value, tag1)

@@ -1,4 +1,4 @@
-package services
+﻿package services
 
 import (
 	"fmt"
@@ -173,7 +173,7 @@ func AdminListUsers(params AdminUserListParams) ([]AdminUserListItem, int64, err
 	if len(wallets) > 0 {
 		database.DB.Raw(`
 			SELECT wallet_addr, COUNT(*) as count
-			FROM sniper_replies
+			FROM vibe_write_replies
 			WHERE wallet_addr IN ?
 			GROUP BY wallet_addr
 		`, wallets).Scan(&snipes)
@@ -278,8 +278,8 @@ func AdminGetUserDetail(walletAddr string) (*AdminUserDetail, error) {
 	todayStart := time.Now().UTC().Truncate(24 * time.Hour)
 
 	var totalSnipes, todaySnipes, totalChats, shellsOwned, clawsBound int64
-	database.DB.Model(&models.SniperReply{}).Where("wallet_addr = ?", walletAddr).Count(&totalSnipes)
-	database.DB.Model(&models.SniperReply{}).Where("wallet_addr = ? AND created_at >= ?", walletAddr, todayStart).Count(&todaySnipes)
+	database.DB.Model(&models.VibeWriteReply{}).Where("wallet_addr = ?", walletAddr).Count(&totalSnipes)
+	database.DB.Model(&models.VibeWriteReply{}).Where("wallet_addr = ? AND created_at >= ?", walletAddr, todayStart).Count(&todaySnipes)
 	database.DB.Model(&models.ChatSession{}).Where("wallet_addr = ?", walletAddr).Count(&totalChats)
 	database.DB.Model(&models.Shell{}).Where("owner_addr = ? AND deleted_at IS NULL", walletAddr).Count(&shellsOwned)
 	database.DB.Model(&models.ClawBinding{}).Where("wallet_addr = ?", walletAddr).Count(&clawsBound)

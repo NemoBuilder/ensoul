@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"fmt"
 	"math/big"
+	"time"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
@@ -122,6 +123,44 @@ func Init() error {
 	}
 
 	return nil
+}
+
+// InitWithRetry attempts chain.Init() immediately. If it fails, it spawns a
+// background goroutine that retries with exponential backoff (5s → 10s → 20s
+// … capped at 2 min) until the chain client is successfully initialized.
+// The server can start serving non-chain requests in the meantime.
+func InitWithRetry(maxRetries int) {
+	log := util.Log.WithPrefix("[chain]")
+
+	// First attempt (synchronous)
+	if err := Init(); err == nil {
+		return // success
+	} else {
+		log.Warn("Chain init failed (will retry in background): %v", err)
+	}
+
+	go func() {
+		backoff := 5 * time.Second
+		const maxBackoff = 2 * time.Minute
+
+		for attempt := 1; attempt <= maxRetries; attempt++ {
+			log.Info("Chain init retry %d/%d in %v …", attempt, maxRetries, backoff)
+			time.Sleep(backoff)
+
+			if err := Init(); err == nil {
+				log.Info("Chain init succeeded on retry %d", attempt)
+				return
+			} else {
+				log.Warn("Chain init retry %d failed: %v", attempt, err)
+			}
+
+			backoff *= 2
+			if backoff > maxBackoff {
+				backoff = maxBackoff
+			}
+		}
+		log.Error("Chain init failed after %d retries — on-chain features remain disabled", maxRetries)
+	}()
 }
 
 // EthClient returns the underlying ethclient for direct use.

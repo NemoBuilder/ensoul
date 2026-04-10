@@ -366,10 +366,10 @@ export default function AdminUserDetailPage() {
         )}
       </div>
 
-      {/* ── Sniper Settings ────────────────────────────── */}
+      {/* ── Vibe Write Settings ────────────────────────────── */}}
       <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
-          <span>🎯</span> Sniper Settings
+          <span>🎯</span> Vibe Write Settings
         </h2>
         {persona ? (
           <div className="space-y-2 text-xs text-[#94a3b8]">

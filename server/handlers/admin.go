@@ -137,9 +137,9 @@ func AdminAddCandidatesBatch(c *gin.Context) {
 			continue
 		}
 
-		// Skip if already pending
+		// Skip if already pending or queued
 		var existing models.MintCandidate
-		if err := database.DB.Where("LOWER(handle) = ? AND status = ?", handle, models.CandidateStatusPending).First(&existing).Error; err == nil {
+		if err := database.DB.Where("LOWER(handle) = ? AND status IN ?", handle, []string{models.CandidateStatusPending, models.CandidateStatusQueued}).First(&existing).Error; err == nil {
 			skipped++
 			continue
 		}
@@ -158,7 +158,7 @@ func AdminAddCandidatesBatch(c *gin.Context) {
 			Tier:      tier,
 			Priority:  req.Priority,
 			Reason:    req.Reason,
-			Status:    models.CandidateStatusPending,
+			Status:    models.CandidateStatusQueued,
 		}
 		if err := database.DB.Create(candidate).Error; err != nil {
 			errors = append(errors, handle+": "+err.Error())
@@ -220,7 +220,7 @@ func AdminRefreshCandidate(c *gin.Context) {
 // Re-fetches Twitter profiles for all pending candidates.
 func AdminRefreshAllCandidates(c *gin.Context) {
 	var candidates []models.MintCandidate
-	database.DB.Where("status = ?", models.CandidateStatusPending).Find(&candidates)
+	database.DB.Where("status IN ?", []string{models.CandidateStatusPending, models.CandidateStatusQueued}).Find(&candidates)
 
 	if len(candidates) == 0 {
 		c.JSON(http.StatusOK, gin.H{"updated": 0, "errors": []string{}})
@@ -276,8 +276,9 @@ func AdminTaxWalletStatus(c *gin.Context) {
 	}
 
 	// Count candidates by status
-	var pendingCount, mintedCount, failedCount int64
+	var pendingCount, queuedCount, mintedCount, failedCount int64
 	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusPending).Count(&pendingCount)
+	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusQueued).Count(&queuedCount)
 	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusMinted).Count(&mintedCount)
 	database.DB.Model(&models.MintCandidate{}).Where("status = ?", models.CandidateStatusFailed).Count(&failedCount)
 
@@ -285,6 +286,7 @@ func AdminTaxWalletStatus(c *gin.Context) {
 		"balance_wei": balanceStr,
 		"candidates": gin.H{
 			"pending": pendingCount,
+			"queued":  queuedCount,
 			"minted":  mintedCount,
 			"failed":  failedCount,
 		},
@@ -294,6 +296,148 @@ func AdminTaxWalletStatus(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, resp)
+}
+
+// AdminImportKOLFollowing handles POST /api/admin/candidates/import-following
+// Body: { "handle": "elonmusk", "max_users": 500, "min_followers": 10000, "priority": 5, "reason": "following @elonmusk" }
+// Fetches the KOL's following list via SocialData, filters by min_followers, and adds as candidates.
+func AdminImportKOLFollowing(c *gin.Context) {
+	var req struct {
+		Handle       string `json:"handle" binding:"required"`
+		MaxUsers     int    `json:"max_users"`
+		MinFollowers int    `json:"min_followers"`
+		Priority     int    `json:"priority"`
+		Reason       string `json:"reason"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle is required"})
+		return
+	}
+
+	handle := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(req.Handle), "@"))
+	if handle == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "handle cannot be empty"})
+		return
+	}
+
+	maxUsers := req.MaxUsers
+	if maxUsers <= 0 {
+		maxUsers = 500
+	}
+	if maxUsers > 2000 {
+		maxUsers = 2000
+	}
+
+	minFollowers := req.MinFollowers
+	if minFollowers < 0 {
+		minFollowers = 0
+	}
+
+	reason := req.Reason
+	if reason == "" {
+		reason = "following @" + handle
+	}
+
+	// Step 1: Fetch following list via SocialData
+	followingHandles, totalFollowing, err := services.FetchKOLFollowingHandles(handle, maxUsers)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "Failed to fetch following list for @" + handle + ": " + err.Error()})
+		return
+	}
+
+	if len(followingHandles) == 0 {
+		c.JSON(http.StatusOK, gin.H{
+			"source_handle":   handle,
+			"total_following": totalFollowing,
+			"fetched":         0,
+			"added":           0,
+			"skipped":         0,
+			"filtered_out":    0,
+			"errors":          []string{},
+			"api_calls_used":  1,
+		})
+		return
+	}
+
+	// Step 2: For each handle, check existing + fetch profile + filter by min_followers
+	added := 0
+	skipped := 0
+	filteredOut := 0
+	errors := []string{}
+	apiCalls := 1 + len(followingHandles)/20 + 1 // 1 for profile, rest for following pages
+
+	for _, h := range followingHandles {
+		h = strings.ToLower(h)
+
+		// Skip if already a Shell
+		var shell models.Shell
+		if err := database.DB.Where("LOWER(handle) = ?", h).First(&shell).Error; err == nil {
+			skipped++
+			continue
+		}
+
+		// Skip if already pending or queued candidate
+		var existing models.MintCandidate
+		if err := database.DB.Where("LOWER(handle) = ? AND status IN ?", h, []string{models.CandidateStatusPending, models.CandidateStatusQueued}).First(&existing).Error; err == nil {
+			skipped++
+			continue
+		}
+
+		// Fetch Twitter profile for follower count and price
+		priceWei, followers, tier, err := services.GetMintPriceForHandle(h)
+		if err != nil {
+			errors = append(errors, h+": "+err.Error())
+			continue
+		}
+		apiCalls++ // each GetMintPriceForHandle = 1 API call
+
+		// Filter by min_followers
+		if minFollowers > 0 && followers < minFollowers {
+			filteredOut++
+			continue
+		}
+
+		// Re-activate if previously skipped/failed (queued — needs manual mint)
+		var existingAny models.MintCandidate
+		if err := database.DB.Where("LOWER(handle) = ?", h).First(&existingAny).Error; err == nil {
+			existingAny.Status = models.CandidateStatusQueued
+			existingAny.Priority = req.Priority
+			existingAny.Reason = reason
+			existingAny.Followers = followers
+			existingAny.PriceWei = priceWei.String()
+			existingAny.Tier = tier
+			existingAny.ErrorMsg = ""
+			database.DB.Save(&existingAny)
+			added++
+			continue
+		}
+
+		candidate := &models.MintCandidate{
+			Handle:    h,
+			Followers: followers,
+			PriceWei:  priceWei.String(),
+			Tier:      tier,
+			Priority:  req.Priority,
+			Reason:    reason,
+			Status:    models.CandidateStatusQueued,
+		}
+		if err := database.DB.Create(candidate).Error; err != nil {
+			errors = append(errors, h+": "+err.Error())
+			continue
+		}
+		added++
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"source_handle":   handle,
+		"total_following": totalFollowing,
+		"fetched":         len(followingHandles),
+		"added":           added,
+		"skipped":         skipped,
+		"filtered_out":    filteredOut,
+		"errors":          errors,
+		"api_calls_used":  apiCalls,
+	})
 }
 
 // AdminMintSingle handles POST /api/admin/tax-wallet/mint/:handle
@@ -306,9 +450,9 @@ func AdminMintSingle(c *gin.Context) {
 		return
 	}
 
-	// Reset status to pending if previously failed/skipped, so the mint flow starts clean
+	// Reset status to pending if queued/failed/skipped, so the mint flow starts clean
 	database.DB.Model(&models.MintCandidate{}).
-		Where("LOWER(handle) = ? AND status IN ?", handle, []string{models.CandidateStatusFailed, models.CandidateStatusSkipped}).
+		Where("LOWER(handle) = ? AND status IN ?", handle, []string{models.CandidateStatusQueued, models.CandidateStatusFailed, models.CandidateStatusSkipped}).
 		Updates(map[string]interface{}{"status": models.CandidateStatusPending, "error_msg": ""})
 
 	go services.MintSinglePublicSoul(handle)

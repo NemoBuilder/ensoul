@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
 
 // Admin-specific fetch wrapper — always sends cookies
 async function adminFetch<T>(
@@ -41,7 +41,7 @@ export interface MintCandidate {
   tier: string;
   priority: number;
   reason: string;
-  status: "pending" | "minted" | "skipped" | "failed";
+  status: "pending" | "queued" | "minted" | "skipped" | "failed";
   error_msg?: string;
   added_by: string;
   created_at: string;
@@ -154,6 +154,21 @@ export const adminCandidatesApi = {
       "/api/admin/candidates/refresh-all",
       { method: "POST" }
     ),
+
+  importFollowing: (handle: string, maxUsers = 500, minFollowers = 10000, priority = 0, reason = "") =>
+    adminFetch<{
+      source_handle: string;
+      total_following: number;
+      fetched: number;
+      added: number;
+      skipped: number;
+      filtered_out: number;
+      errors: string[];
+      api_calls_used: number;
+    }>("/api/admin/candidates/import-following", {
+      method: "POST",
+      body: JSON.stringify({ handle, max_users: maxUsers, min_followers: minFollowers, priority, reason }),
+    }),
 };
 
 // ── Tax Wallet API ─────────────────────────────────────────────
@@ -203,9 +218,9 @@ export const adminMiningApi = {
     ),
 };
 
-// ── Sniper Tag Types ───────────────────────────────────────────
+// ── Vibe Write Tag Types ───────────────────────────────────────────
 
-export interface SniperTagAccount {
+export interface VibeWriteTagAccount {
   id: string;
   tag_id: string;
   handle: string;
@@ -215,7 +230,7 @@ export interface SniperTagAccount {
   created_at: string;
 }
 
-export interface SniperTag {
+export interface VibeWriteTag {
   id: string;
   name: string;
   name_en: string;
@@ -230,12 +245,12 @@ export interface SniperTag {
   accounts: { handle: string; name: string; realtime_priority: boolean }[];
 }
 
-// ── Sniper Tags Admin API ──────────────────────────────────────
+// ── Vibe Write Tags Admin API ──────────────────────────────────────
 
-export const adminSniperApi = {
+export const adminvibeWriteApi = {
   // Tag CRUD
   listTags: () =>
-    adminFetch<{ tags: SniperTag[] }>("/api/admin/sniper/tags"),
+    adminFetch<{ tags: VibeWriteTag[] }>("/api/admin/vibe-write/tags"),
 
   createTag: (tag: {
     id: string;
@@ -247,14 +262,14 @@ export const adminSniperApi = {
     is_default?: boolean;
     sort_order?: number;
   }) =>
-    adminFetch<{ tag: SniperTag }>("/api/admin/sniper/tags", {
+    adminFetch<{ tag: VibeWriteTag }>("/api/admin/vibe-write/tags", {
       method: "POST",
       body: JSON.stringify(tag),
     }),
 
-  updateTag: (tagId: string, updates: Partial<Omit<SniperTag, "id" | "accounts" | "created_at" | "updated_at">>) =>
+  updateTag: (tagId: string, updates: Partial<Omit<VibeWriteTag, "id" | "accounts" | "created_at" | "updated_at">>) =>
     adminFetch<{ status: string; tag_id: string }>(
-      `/api/admin/sniper/tags/${tagId}`,
+      `/api/admin/vibe-write/tags/${tagId}`,
       {
         method: "PUT",
         body: JSON.stringify(updates),
@@ -263,19 +278,19 @@ export const adminSniperApi = {
 
   deleteTag: (tagId: string) =>
     adminFetch<{ status: string; tag_id: string }>(
-      `/api/admin/sniper/tags/${tagId}`,
+      `/api/admin/vibe-write/tags/${tagId}`,
       { method: "DELETE" }
     ),
 
   // Tag Account CRUD
   listTagAccounts: (tagId: string) =>
-    adminFetch<{ accounts: SniperTagAccount[]; tag_id: string }>(
-      `/api/admin/sniper/tags/${tagId}/accounts`
+    adminFetch<{ accounts: VibeWriteTagAccount[]; tag_id: string }>(
+      `/api/admin/vibe-write/tags/${tagId}/accounts`
     ),
 
   addTagAccount: (tagId: string, handle: string, displayName?: string, realtimePriority?: boolean) =>
     adminFetch<{ status: string; tag_id: string; handle: string }>(
-      `/api/admin/sniper/tags/${tagId}/accounts`,
+      `/api/admin/vibe-write/tags/${tagId}/accounts`,
       {
         method: "POST",
         body: JSON.stringify({
@@ -288,7 +303,7 @@ export const adminSniperApi = {
 
   removeTagAccount: (tagId: string, handle: string) =>
     adminFetch<{ status: string; tag_id: string; handle: string }>(
-      `/api/admin/sniper/tags/${tagId}/accounts/${handle}`,
+      `/api/admin/vibe-write/tags/${tagId}/accounts/${handle}`,
       { method: "DELETE" }
     ),
 };

@@ -1,4 +1,4 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
+﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
 
 // Generic fetch wrapper with error handling
 async function apiFetch<T>(
@@ -265,6 +265,9 @@ export const shellApi = {
   },
 
   get: (handle: string) => apiFetch<Shell>(`/api/shell/${handle}`),
+
+  byOwner: (address: string) =>
+    apiFetch<{ shells: Shell[]; total: number }>(`/api/shell/by-owner/${address}`),
 
   getDimensions: (handle: string) =>
     apiFetch<Record<string, DimensionData>>(`/api/shell/${handle}/dimensions`),
@@ -687,7 +690,7 @@ export const mintV2Api = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Soul Sniper API (Phase 3 → V2)
+// Vibe Write API (Phase 3 → V2)
 // ═══════════════════════════════════════════════════════════════
 
 export interface Subscription {
@@ -720,7 +723,7 @@ export interface SubscribePrice {
   price_bnb?: string;
 }
 
-export interface SniperKOL {
+export interface VibeWriteKOL {
   id: string;
   subscription_id: string;
   shell_id: string;
@@ -734,7 +737,7 @@ export interface ReplyVariant {
   model: string;
 }
 
-export interface SniperReply {
+export interface VibeWriteReply {
   id: string;
   shell_id: string;
   wallet_addr: string;
@@ -758,14 +761,14 @@ export interface UserPersona {
   language: string;
 }
 
-// Sniper V2 — Tag & Feed types
-export interface SniperTagAccount {
+// Vibe Write V2 — Tag & Feed types
+export interface VibeWriteTagAccount {
   handle: string;
   display_name: string;
   realtime_priority: boolean;
 }
 
-export interface SniperTag {
+export interface VibeWriteTag {
   id: string;
   name: string;
   name_en: string;
@@ -774,7 +777,7 @@ export interface SniperTag {
   description: string;
   is_default: boolean;
   sort_order: number;
-  accounts: SniperTagAccount[];
+  accounts: VibeWriteTagAccount[];
 }
 
 export interface TweetCardAuthor {
@@ -813,82 +816,82 @@ export interface FeedResult {
   cache_age_seconds: number;
 }
 
-export const sniperApi = {
+export const vibeWriteApi = {
   // Tags
-  getTags: () => apiFetch<{ tags: SniperTag[]; defaults: string[] }>("/api/sniper/tags"),
+  getTags: () => apiFetch<{ tags: VibeWriteTag[]; defaults: string[] }>("/api/vibe-write/tags"),
 
   // Feed
   getFeed: (tagIds: string[], cursor?: string, count = 20) => {
     const params = new URLSearchParams({ tag_ids: tagIds.join(","), count: String(count) });
     if (cursor) params.set("cursor", cursor);
-    return apiFetch<FeedResult>(`/api/sniper/feed?${params.toString()}`);
+    return apiFetch<FeedResult>(`/api/vibe-write/feed?${params.toString()}`);
   },
 
   feedRefresh: (tagIds: string[]) =>
-    apiFetch<{ status: string }>(`/api/sniper/feed/refresh?tag_ids=${tagIds.join(",")}`),
+    apiFetch<{ status: string }>(`/api/vibe-write/feed/refresh?tag_ids=${tagIds.join(",")}`),
 
   // User tag preferences
-  getUserTags: () => apiFetch<{ tag_ids: string[] }>("/api/sniper/user/tags"),
+  getUserTags: () => apiFetch<{ tag_ids: string[] }>("/api/vibe-write/user/tags"),
 
   updateUserTags: (tagIds: string[]) =>
-    apiFetch<{ tag_ids: string[] }>("/api/sniper/user/tags", {
+    apiFetch<{ tag_ids: string[] }>("/api/vibe-write/user/tags", {
       method: "PUT",
       body: JSON.stringify({ tag_ids: tagIds }),
     }),
 
   // Mute
-  getMuted: () => apiFetch<{ handles: string[] }>("/api/sniper/user/muted"),
+  getMuted: () => apiFetch<{ handles: string[] }>("/api/vibe-write/user/muted"),
 
   muteAccount: (handle: string) =>
-    apiFetch<{ status: string }>("/api/sniper/user/muted", {
+    apiFetch<{ status: string }>("/api/vibe-write/user/muted", {
       method: "POST",
       body: JSON.stringify({ handle }),
     }),
 
   unmuteAccount: (handle: string) =>
-    apiFetch<{ status: string }>(`/api/sniper/user/muted/${handle}`, { method: "DELETE" }),
+    apiFetch<{ status: string }>(`/api/vibe-write/user/muted/${handle}`, { method: "DELETE" }),
 
   // Snipe
   snipe: (tweetId: string, tweetText: string, authorHandle: string, tagId: string, language = "en") =>
-    apiFetch<SniperReply>("/api/sniper/snipe", {
+    apiFetch<VibeWriteReply>("/api/vibe-write/snipe", {
       method: "POST",
       body: JSON.stringify({ tweet_id: tweetId, tweet_text: tweetText, author_handle: authorHandle, tag_id: tagId, language }),
     }),
 
   // Subscription (kept)
   getSubscribePrice: (tier = "pro") =>
-    apiFetch<SubscribePrice>(`/api/sniper/subscribe-price?tier=${tier}`),
+    apiFetch<SubscribePrice>(`/api/vibe-write/subscribe-price?tier=${tier}`),
 
   subscribe: (tier: string, paymentTxHash: string, paymentToken = "USDT", paymentAmount = 0) =>
-    apiFetch<Subscription>("/api/sniper/subscribe", {
+    apiFetch<Subscription>("/api/vibe-write/subscribe", {
       method: "POST",
       body: JSON.stringify({ tier, payment_tx_hash: paymentTxHash, payment_token: paymentToken, payment_amount: paymentAmount }),
     }),
 
-  getSubscription: () => apiFetch<SubscriptionStatus>("/api/sniper/subscription"),
+  getSubscription: () => apiFetch<SubscriptionStatus>("/api/vibe-write/subscription"),
 
-  getReplies: () => apiFetch<{ replies: SniperReply[] }>("/api/sniper/replies"),
+  getReplies: () => apiFetch<{ replies: VibeWriteReply[] }>("/api/vibe-write/replies"),
 
   // Persona (kept)
   setPersona: (bio: string, style: string, materials: string, language: string) =>
-    apiFetch<UserPersona>("/api/sniper/persona", {
+    apiFetch<UserPersona>("/api/vibe-write/persona", {
       method: "POST",
       body: JSON.stringify({ bio, style, materials, language }),
     }),
 
-  getPersona: () => apiFetch<{ configured: boolean; persona?: UserPersona }>("/api/sniper/persona"),
+  getPersona: () => apiFetch<{ configured: boolean; persona?: UserPersona }>("/api/vibe-write/persona"),
 
   // Legacy (deprecated)
   addKOL: (handle: string) =>
-    apiFetch<SniperKOL>("/api/sniper/kols", {
+    apiFetch<VibeWriteKOL>("/api/vibe-write/kols", {
       method: "POST",
       body: JSON.stringify({ handle }),
     }),
-  listKOLs: () => apiFetch<{ kols: SniperKOL[] }>("/api/sniper/kols"),
+  listKOLs: () => apiFetch<{ kols: VibeWriteKOL[] }>("/api/vibe-write/kols"),
   removeKOL: (id: string) =>
-    apiFetch<{ status: string }>(`/api/sniper/kols/${id}`, { method: "DELETE" }),
+    apiFetch<{ status: string }>(`/api/vibe-write/kols/${id}`, { method: "DELETE" }),
   generateReply: (handle: string, tweetId: string, tweetText: string) =>
-    apiFetch<SniperReply>("/api/sniper/reply", {
+    apiFetch<VibeWriteReply>("/api/vibe-write/reply", {
       method: "POST",
       body: JSON.stringify({ handle, tweet_id: tweetId, tweet_text: tweetText }),
     }),

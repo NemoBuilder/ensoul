@@ -1,4 +1,4 @@
-package router
+﻿package router
 
 import (
 	"net/http"
@@ -53,6 +53,7 @@ func Setup() *gin.Engine {
 			shell.POST("/confirm", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellConfirmMint)
 			shell.POST("/cancel", middleware.RateLimit(middleware.GeneralLimiter), handlers.ShellCancelMint)
 			shell.GET("/list", handlers.ShellList)
+			shell.GET("/by-owner/:address", handlers.ShellByOwner)
 			shell.GET("/:handle", handlers.ShellGetByHandle)
 			shell.GET("/:handle/dimensions", handlers.ShellGetDimensions)
 			shell.GET("/:handle/history", handlers.ShellGetHistory)
@@ -163,42 +164,51 @@ func Setup() *gin.Engine {
 			mining.GET("/rewards/:claw_id", handlers.MiningRewards)
 		}
 
-		// Soul Sniper endpoints (Phase 3 → Sniper 2.0)
-		sniper := api.Group("/sniper")
+		// Vibe Write endpoints (Phase 3 → Vibe Write 2.0)
+		vibeWrite := api.Group("/vibe-write")
 		{
 			// === Public endpoints (no auth) ===
-			sniper.GET("/tags", handlers.SniperGetTags)
-			sniper.GET("/feed", handlers.SniperGetFeed)
-			sniper.GET("/feed/stream", handlers.SniperFeedStream)
-			sniper.GET("/feed/refresh", handlers.SniperFeedRefresh)
+			vibeWrite.GET("/tags", handlers.VibeWriteGetTags)
+			vibeWrite.GET("/feed", handlers.VibeWriteGetFeed)
+			vibeWrite.GET("/feed/stream", handlers.VibeWriteFeedStream)
+			vibeWrite.GET("/feed/refresh", handlers.VibeWriteFeedRefresh)
+
+			// Dimensions (multi-dimensional tagging — public)
+			vibeWrite.GET("/dimensions", handlers.VibeWriteGetDimensions)
+			vibeWrite.POST("/dimensions/filter", handlers.VibeWriteFilterByDimensions)
+			vibeWrite.GET("/tags/:id/dimensions", handlers.VibeWriteGetTagDimensions)
+
+			// === External API endpoints (API key auth) ===
+			vibeWrite.POST("/feed/push", middleware.AuthPushAPIKey(), handlers.VibeWritePushTweets)
+			vibeWrite.POST("/external/snipe", middleware.AuthVibeWriteAPIKey(), handlers.VibeWriteExternalSnipe)
 
 			// === Session-required endpoints ===
-			sniper.GET("/user/tags", middleware.AuthSession(), handlers.SniperGetUserTags)
-			sniper.PUT("/user/tags", middleware.AuthSession(), handlers.SniperUpdateUserTags)
-			sniper.GET("/user/muted", middleware.AuthSession(), handlers.SniperGetMuted)
-			sniper.POST("/user/muted", middleware.AuthSession(), handlers.SniperMuteAccount)
-			sniper.DELETE("/user/muted/:handle", middleware.AuthSession(), handlers.SniperUnmuteAccount)
+			vibeWrite.GET("/user/tags", middleware.AuthSession(), handlers.VibeWriteGetUserTags)
+			vibeWrite.PUT("/user/tags", middleware.AuthSession(), handlers.VibeWriteUpdateUserTags)
+			vibeWrite.GET("/user/muted", middleware.AuthSession(), handlers.VibeWriteGetMuted)
+			vibeWrite.POST("/user/muted", middleware.AuthSession(), handlers.VibeWriteMuteAccount)
+			vibeWrite.DELETE("/user/muted/:handle", middleware.AuthSession(), handlers.VibeWriteUnmuteAccount)
 
 			// Snipe: generate reply (Pro only)
-			sniper.POST("/snipe", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperSnipe)
+			vibeWrite.POST("/snipe", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.VibeWriteSnipe)
 
 			// Subscription management (kept from v1)
-			sniper.GET("/subscribe-price", handlers.SniperSubscribePrice)
-			sniper.POST("/subscribe", middleware.AuthSession(), handlers.SniperSubscribe)
-			sniper.GET("/subscription", middleware.AuthSession(), handlers.SniperGetSubscription)
+			vibeWrite.GET("/subscribe-price", handlers.VibeWriteSubscribePrice)
+			vibeWrite.POST("/subscribe", middleware.AuthSession(), handlers.VibeWriteSubscribe)
+			vibeWrite.GET("/subscription", middleware.AuthSession(), handlers.VibeWriteGetSubscription)
 
 			// Reply history (kept from v1)
-			sniper.GET("/replies", middleware.AuthSession(), handlers.SniperGetReplies)
+			vibeWrite.GET("/replies", middleware.AuthSession(), handlers.VibeWriteGetReplies)
 
 			// Persona management (kept from v1)
-			sniper.POST("/persona", middleware.AuthSession(), handlers.SniperSetPersona)
-			sniper.GET("/persona", middleware.AuthSession(), handlers.SniperGetPersona)
+			vibeWrite.POST("/persona", middleware.AuthSession(), handlers.VibeWriteSetPersona)
+			vibeWrite.GET("/persona", middleware.AuthSession(), handlers.VibeWriteGetPersona)
 
 			// Legacy v1 endpoints (deprecated but kept for compatibility)
-			sniper.POST("/kols", middleware.AuthSession(), handlers.SniperAddKOL)
-			sniper.GET("/kols", middleware.AuthSession(), handlers.SniperListKOLs)
-			sniper.DELETE("/kols/:id", middleware.AuthSession(), handlers.SniperRemoveKOL)
-			sniper.POST("/reply", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.SniperGenerateReply)
+			vibeWrite.POST("/kols", middleware.AuthSession(), handlers.VibeWriteAddKOL)
+			vibeWrite.GET("/kols", middleware.AuthSession(), handlers.VibeWriteListKOLs)
+			vibeWrite.DELETE("/kols/:id", middleware.AuthSession(), handlers.VibeWriteRemoveKOL)
+			vibeWrite.POST("/reply", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.VibeWriteGenerateReply)
 		}
 
 		// Holder revenue endpoints (Phase 4)
@@ -235,6 +245,7 @@ func Setup() *gin.Engine {
 			admin.GET("/candidates", handlers.AdminListCandidates)
 			admin.POST("/candidates", handlers.AdminAddCandidate)
 			admin.POST("/candidates/batch", handlers.AdminAddCandidatesBatch)
+			admin.POST("/candidates/import-following", handlers.AdminImportKOLFollowing)
 			admin.DELETE("/candidates/:handle", handlers.AdminRemoveCandidate)
 			admin.POST("/candidates/refresh-all", handlers.AdminRefreshAllCandidates)
 			admin.POST("/candidates/:handle/refresh", handlers.AdminRefreshCandidate)
@@ -252,21 +263,29 @@ func Setup() *gin.Engine {
 			admin.POST("/mining/rewards/:id/retry", handlers.MiningRetryReward)
 			admin.POST("/mining/rewards/retry-all", handlers.MiningRetryAll)
 
-			// Sniper 2.0: Tag management
-			admin.GET("/sniper/tags", handlers.AdminSniperListTags)
-			admin.POST("/sniper/tags", handlers.AdminSniperCreateTag)
-			admin.PUT("/sniper/tags/:id", handlers.AdminSniperUpdateTag)
-			admin.DELETE("/sniper/tags/:id", handlers.AdminSniperDeleteTag)
-			admin.GET("/sniper/tags/:id/accounts", handlers.AdminSniperListTagAccounts)
-			admin.POST("/sniper/tags/:id/accounts", handlers.AdminSniperAddTagAccount)
-			admin.DELETE("/sniper/tags/:id/accounts/:handle", handlers.AdminSniperRemoveTagAccount)
+			// Vibe Write 2.0: Tag management
+			admin.GET("/vibe-write/tags", handlers.AdminVibeWriteListTags)
+			admin.POST("/vibe-write/tags", handlers.AdminVibeWriteCreateTag)
+			admin.PUT("/vibe-write/tags/:id", handlers.AdminVibeWriteUpdateTag)
+			admin.DELETE("/vibe-write/tags/:id", handlers.AdminVibeWriteDeleteTag)
+			admin.GET("/vibe-write/tags/:id/accounts", handlers.AdminVibeWriteListTagAccounts)
+			admin.POST("/vibe-write/tags/:id/accounts", handlers.AdminVibeWriteAddTagAccount)
+			admin.DELETE("/vibe-write/tags/:id/accounts/:handle", handlers.AdminVibeWriteRemoveTagAccount)
 
-			// Sniper 2.0: Tag candidate management
-			admin.POST("/sniper/candidates/import", handlers.AdminSniperImportCandidates)
-			admin.GET("/sniper/candidates", handlers.AdminSniperListCandidates)
-			admin.POST("/sniper/candidates/:id/approve", handlers.AdminSniperApproveCandidate)
-			admin.POST("/sniper/candidates/:id/reject", handlers.AdminSniperRejectCandidate)
-			admin.POST("/sniper/candidates/batch", handlers.AdminSniperBatchReview)
+			// Vibe Write 2.0: Tag candidate management
+			admin.POST("/vibe-write/candidates/import", handlers.AdminVibeWriteImportCandidates)
+			admin.GET("/vibe-write/candidates", handlers.AdminVibeWriteListCandidates)
+			admin.POST("/vibe-write/candidates/:id/approve", handlers.AdminVibeWriteApproveCandidate)
+			admin.POST("/vibe-write/candidates/:id/reject", handlers.AdminVibeWriteRejectCandidate)
+			admin.POST("/vibe-write/candidates/batch", handlers.AdminVibeWriteBatchReview)
+
+			// Vibe Write 2.0+: Multi-dimensional tag management
+			admin.GET("/vibe-write/dimensions", handlers.AdminVibeWriteListDimensions)
+			admin.POST("/vibe-write/dimensions", handlers.AdminVibeWriteCreateDimension)
+			admin.PUT("/vibe-write/dimensions/:id", handlers.AdminVibeWriteUpdateDimension)
+			admin.POST("/vibe-write/dimensions/:id/values", handlers.AdminVibeWriteCreateDimensionValue)
+			admin.PUT("/vibe-write/dimensions/values/:id", handlers.AdminVibeWriteUpdateDimensionValue)
+			admin.PUT("/vibe-write/tags/:id/dimensions", handlers.AdminVibeWriteSetTagDimensions)
 
 			// User management
 			admin.GET("/users/stats", handlers.AdminUserStats)

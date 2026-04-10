@@ -1,4 +1,4 @@
-package database
+﻿package database
 
 import (
 	"crypto/sha256"
@@ -57,17 +57,22 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.BuybackRecord{},
 		&models.PublicSoul{},
 		&models.MintCandidate{},
-		// Soul Sniper models
+		// Vibe Write models
 		&models.Subscription{},
-		&models.SniperKOL{},
-		&models.SniperReply{},
+		&models.VibeWriteKOL{},
+		&models.VibeWriteReply{},
 		&models.UserPersona{},
-		// Sniper 2.0 tag-based models
-		&models.SniperTag{},
-		&models.SniperTagAccount{},
+		// Vibe Write 2.0 tag-based models
+		&models.VibeWriteTag{},
+		&models.VibeWriteTagAccount{},
 		&models.TagCandidate{},
 		&models.UserSelectedTag{},
 		&models.UserMutedAccount{},
+		// Vibe Write 2.0+: Multi-dimensional tagging
+		&models.TagDimension{},
+		&models.TagDimensionValue{},
+		&models.VibeWriteTagDimension{},
+		&models.ExternalSnipeUsage{},
 		// Holder Revenue & KOL Claim models
 		&models.HolderRevenue{},
 		&models.RevenuePool{},
@@ -105,9 +110,9 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Idempotent: only creates if no admin user exists yet.
 	seedAdminUser(cfg)
 
-	// Step 5: Seed Sniper 2.0 default tags and accounts.
+	// Step 5: Seed Vibe Write 2.0 default tags and accounts.
 	// Idempotent: only creates if no tags exist yet.
-	seedSniperTags()
+	seedVibeWriteTags()
 
 	// Step 6: Backfill User records from existing wallet_sessions.
 	// Idempotent: only inserts users that don't exist yet.
@@ -245,16 +250,16 @@ func seedAdminUser(cfg *config.Config) {
 	util.Log.Info("Seeded initial admin user: %s (role=%s)", username, models.AdminRoleSuperAdmin)
 }
 
-// seedSniperTags creates the default Sniper 2.0 tags and their associated accounts.
-// Idempotent: only runs if no SniperTag records exist.
-func seedSniperTags() {
+// seedVibeWriteTags creates the default Vibe Write 2.0 tags and their associated accounts.
+// Idempotent: only runs if no VibeWriteTag records exist.
+func seedVibeWriteTags() {
 	var count int64
-	DB.Model(&models.SniperTag{}).Count(&count)
+	DB.Model(&models.VibeWriteTag{}).Count(&count)
 	if count > 0 {
 		return // Tags already seeded
 	}
 
-	util.Log.Info("Seeding Sniper 2.0 default tags and accounts...")
+	util.Log.Info("Seeding Vibe Write 2.0 default tags and accounts...")
 
 	// Tag definitions: {id, name, name_en, icon, category, description, is_default, sort_order}
 	type tagDef struct {
@@ -284,7 +289,7 @@ func seedSniperTags() {
 	}
 
 	for _, t := range tags {
-		tag := models.SniperTag{
+		tag := models.VibeWriteTag{
 			ID:          t.ID,
 			Name:        t.Name,
 			NameEN:      t.NameEN,
@@ -365,7 +370,7 @@ func seedSniperTags() {
 	}
 
 	for _, a := range accounts {
-		acct := models.SniperTagAccount{
+		acct := models.VibeWriteTagAccount{
 			TagID:            a.TagID,
 			Handle:           a.Handle,
 			DisplayName:      a.DisplayName,
@@ -374,7 +379,7 @@ func seedSniperTags() {
 		DB.Create(&acct)
 	}
 
-	util.Log.Info("Seeded %d tags and %d accounts for Sniper 2.0", len(tags), len(accounts))
+	util.Log.Info("Seeded %d tags and %d accounts for Vibe Write 2.0", len(tags), len(accounts))
 }
 
 // backfillUsers creates User records from existing wallet_sessions and subscriptions.
