@@ -8,6 +8,11 @@
 # Test
 *.test
 
+# Prevent test/debug scripts with potential secrets
+cmd/test_*/
+cmd/debug_*/
+cmd/check_*/
+
 # Output
 *.out
 
