@@ -496,6 +496,55 @@ export const sessionApi = {
     apiFetch<{ address: string }>("/api/auth/session"),
 };
 
+// --- Email Auth API (email + verification code, HttpOnly cookie) ---
+
+export interface EmailSessionInfo {
+  user_id: string;
+  email: string;
+  twitter_handle?: string;
+  wallet_addr?: string;
+  is_pro: boolean;
+  credits: number;
+  has_password: boolean;
+}
+
+export const emailAuthApi = {
+  sendCode: (email: string) =>
+    apiFetch<{ message: string }>("/api/auth/email/send-code", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  verify: (email: string, code: string) =>
+    apiFetch<{ email: string; user_id: string; is_new: boolean; message: string }>("/api/auth/email/verify", {
+      method: "POST",
+      body: JSON.stringify({ email, code }),
+    }),
+
+  logout: () =>
+    apiFetch<{ message: string }>("/api/auth/email/logout", {
+      method: "POST",
+    }),
+
+  session: () =>
+    apiFetch<EmailSessionInfo>("/api/auth/email/session"),
+
+  passwordLogin: (email: string, password: string) =>
+    apiFetch<{ email: string; user_id: string; message: string }>("/api/auth/email/password-login", {
+      method: "POST",
+      body: JSON.stringify({ email, password }),
+    }),
+
+  setPassword: (password: string) =>
+    apiFetch<{ message: string }>("/api/auth/email/set-password", {
+      method: "POST",
+      body: JSON.stringify({ password }),
+    }),
+
+  hasPassword: (email: string) =>
+    apiFetch<{ has_password: boolean }>(`/api/auth/email/has-password?email=${encodeURIComponent(email)}`),
+};
+
 // --- Claw Key Management API (session-based, no API key in frontend) ---
 
 export interface ClawBindingInfo {
@@ -690,214 +739,6 @@ export const mintV2Api = {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// Vibe Write API (Phase 3 → V2)
-// ═══════════════════════════════════════════════════════════════
-
-export interface Subscription {
-  id: string;
-  wallet_addr: string;
-  tier: string;
-  llm_model: string;
-  status: string;
-  expires_at: string;
-  payment_tx_hash: string;
-  payment_token: string;
-  payment_amount: number;
-}
-
-export interface SubscriptionStatus {
-  active: boolean;
-  tier?: string;
-  llm_model?: string;
-  expires_at?: string;
-  daily_snipes?: number;
-  daily_limit?: number;
-  payment_token?: string;
-}
-
-export interface SubscribePrice {
-  tier: string;
-  price_usdt: number;
-  treasury: string;
-  bnb_price?: number;
-  price_bnb?: string;
-}
-
-export interface VibeWriteKOL {
-  id: string;
-  subscription_id: string;
-  shell_id: string;
-  handle: string;
-  shell?: Shell;
-}
-
-export interface ReplyVariant {
-  style: string;
-  content: string;
-  model: string;
-}
-
-export interface VibeWriteReply {
-  id: string;
-  shell_id: string;
-  wallet_addr: string;
-  tweet_id: string;
-  tweet_text: string;
-  author_handle: string;
-  tag_id: string;
-  tweet_url: string;
-  used_soul: boolean;
-  replies: ReplyVariant[];
-  created_at: string;
-  shell?: Shell;
-}
-
-export interface UserPersona {
-  id: string;
-  wallet_addr: string;
-  bio: string;
-  style: string;
-  materials: string;
-  language: string;
-}
-
-// Vibe Write V2 — Tag & Feed types
-export interface VibeWriteTagAccount {
-  handle: string;
-  display_name: string;
-  realtime_priority: boolean;
-}
-
-export interface VibeWriteTag {
-  id: string;
-  name: string;
-  name_en: string;
-  icon: string;
-  category: string;
-  description: string;
-  is_default: boolean;
-  sort_order: number;
-  accounts: VibeWriteTagAccount[];
-}
-
-export interface TweetCardAuthor {
-  handle: string;
-  name: string;
-  avatar: string;
-  verified: boolean;
-  followers_count: number;
-}
-
-export interface TweetCardStats {
-  replies: number;
-  retweets: number;
-  likes: number;
-  views: number;
-}
-
-export interface TweetCard {
-  id: string;
-  text: string;
-  author: TweetCardAuthor;
-  tags: string[];
-  created_at: string;
-  stats: TweetCardStats;
-  has_media: boolean;
-  tweet_url: string;
-  has_soul: boolean;
-  soul_handle?: string;
-}
-
-export interface FeedResult {
-  tag_ids: string[];
-  tweets: TweetCard[];
-  next_cursor: string;
-  cached: boolean;
-  cache_age_seconds: number;
-}
-
-export const vibeWriteApi = {
-  // Tags
-  getTags: () => apiFetch<{ tags: VibeWriteTag[]; defaults: string[] }>("/api/vibe-write/tags"),
-
-  // Feed
-  getFeed: (tagIds: string[], cursor?: string, count = 20) => {
-    const params = new URLSearchParams({ tag_ids: tagIds.join(","), count: String(count) });
-    if (cursor) params.set("cursor", cursor);
-    return apiFetch<FeedResult>(`/api/vibe-write/feed?${params.toString()}`);
-  },
-
-  feedRefresh: (tagIds: string[]) =>
-    apiFetch<{ status: string }>(`/api/vibe-write/feed/refresh?tag_ids=${tagIds.join(",")}`),
-
-  // User tag preferences
-  getUserTags: () => apiFetch<{ tag_ids: string[] }>("/api/vibe-write/user/tags"),
-
-  updateUserTags: (tagIds: string[]) =>
-    apiFetch<{ tag_ids: string[] }>("/api/vibe-write/user/tags", {
-      method: "PUT",
-      body: JSON.stringify({ tag_ids: tagIds }),
-    }),
-
-  // Mute
-  getMuted: () => apiFetch<{ handles: string[] }>("/api/vibe-write/user/muted"),
-
-  muteAccount: (handle: string) =>
-    apiFetch<{ status: string }>("/api/vibe-write/user/muted", {
-      method: "POST",
-      body: JSON.stringify({ handle }),
-    }),
-
-  unmuteAccount: (handle: string) =>
-    apiFetch<{ status: string }>(`/api/vibe-write/user/muted/${handle}`, { method: "DELETE" }),
-
-  // Snipe
-  snipe: (tweetId: string, tweetText: string, authorHandle: string, tagId: string, language = "en") =>
-    apiFetch<VibeWriteReply>("/api/vibe-write/snipe", {
-      method: "POST",
-      body: JSON.stringify({ tweet_id: tweetId, tweet_text: tweetText, author_handle: authorHandle, tag_id: tagId, language }),
-    }),
-
-  // Subscription (kept)
-  getSubscribePrice: (tier = "pro") =>
-    apiFetch<SubscribePrice>(`/api/vibe-write/subscribe-price?tier=${tier}`),
-
-  subscribe: (tier: string, paymentTxHash: string, paymentToken = "USDT", paymentAmount = 0) =>
-    apiFetch<Subscription>("/api/vibe-write/subscribe", {
-      method: "POST",
-      body: JSON.stringify({ tier, payment_tx_hash: paymentTxHash, payment_token: paymentToken, payment_amount: paymentAmount }),
-    }),
-
-  getSubscription: () => apiFetch<SubscriptionStatus>("/api/vibe-write/subscription"),
-
-  getReplies: () => apiFetch<{ replies: VibeWriteReply[] }>("/api/vibe-write/replies"),
-
-  // Persona (kept)
-  setPersona: (bio: string, style: string, materials: string, language: string) =>
-    apiFetch<UserPersona>("/api/vibe-write/persona", {
-      method: "POST",
-      body: JSON.stringify({ bio, style, materials, language }),
-    }),
-
-  getPersona: () => apiFetch<{ configured: boolean; persona?: UserPersona }>("/api/vibe-write/persona"),
-
-  // Legacy (deprecated)
-  addKOL: (handle: string) =>
-    apiFetch<VibeWriteKOL>("/api/vibe-write/kols", {
-      method: "POST",
-      body: JSON.stringify({ handle }),
-    }),
-  listKOLs: () => apiFetch<{ kols: VibeWriteKOL[] }>("/api/vibe-write/kols"),
-  removeKOL: (id: string) =>
-    apiFetch<{ status: string }>(`/api/vibe-write/kols/${id}`, { method: "DELETE" }),
-  generateReply: (handle: string, tweetId: string, tweetText: string) =>
-    apiFetch<VibeWriteReply>("/api/vibe-write/reply", {
-      method: "POST",
-      body: JSON.stringify({ handle, tweet_id: tweetId, tweet_text: tweetText }),
-    }),
-};
-
-// ═══════════════════════════════════════════════════════════════
 // Holder Revenue API (Phase 4)
 // ═══════════════════════════════════════════════════════════════
 
@@ -1047,4 +888,128 @@ export interface EconomyOverview {
 
 export const economyApi = {
   overview: () => apiFetch<EconomyOverview>("/api/economy/overview"),
+};
+
+// --- Billing API (LemonSqueezy) ---
+
+export interface BillingStatus {
+  is_pro: boolean;
+  credits: number;
+  credits_reset: string;
+  plan: "free" | "pro";
+  pro_expires_at?: string;
+}
+
+export const billingApi = {
+  checkout: () =>
+    apiFetch<{ url: string }>("/api/billing/checkout", { method: "POST" }),
+  status: () =>
+    apiFetch<BillingStatus>("/api/billing/status"),
+};
+
+// --- Vibe Write 2.0 Workspace API ---
+
+export interface Workspace {
+  id: string;
+  name: string;
+  twitter_handle?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VibeMemory {
+  id: string;
+  workspace_id: string;
+  category: "profile" | "knowledge" | "network" | "archive" | "rules";
+  content: string;
+  source: "user" | "ai" | "import";
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VibeChatItem {
+  id: string;
+  workspace_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface VibeChatMsg {
+  id: string;
+  chat_id: string;
+  role: "user" | "assistant";
+  content: string;
+  credits_cost: number;
+  created_at: string;
+}
+
+export const workspaceApi = {
+  list: () =>
+    apiFetch<{ workspaces: Workspace[] }>("/api/vibe-write/workspaces"),
+
+  create: (name: string, twitterHandle?: string) =>
+    apiFetch<Workspace>("/api/vibe-write/workspaces", {
+      method: "POST",
+      body: JSON.stringify({ name, twitter_handle: twitterHandle }),
+    }),
+
+  update: (id: string, data: { name?: string; twitter_handle?: string }) =>
+    apiFetch<Workspace>(`/api/vibe-write/workspaces/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+
+  delete: (id: string) =>
+    apiFetch<{ message: string }>(`/api/vibe-write/workspaces/${id}`, {
+      method: "DELETE",
+    }),
+
+  // Memories
+  listMemories: (wsId: string) =>
+    apiFetch<{ memories: VibeMemory[] }>(`/api/vibe-write/workspaces/${wsId}/memories`),
+
+  createMemory: (wsId: string, category: string, content: string) =>
+    apiFetch<VibeMemory>(`/api/vibe-write/workspaces/${wsId}/memories`, {
+      method: "POST",
+      body: JSON.stringify({ category, content }),
+    }),
+
+  updateMemory: (memId: string, content: string) =>
+    apiFetch<VibeMemory>(`/api/vibe-write/memories/${memId}`, {
+      method: "PUT",
+      body: JSON.stringify({ content }),
+    }),
+
+  deleteMemory: (memId: string) =>
+    apiFetch<{ message: string }>(`/api/vibe-write/memories/${memId}`, {
+      method: "DELETE",
+    }),
+
+  // Chats
+  listChats: (wsId: string) =>
+    apiFetch<{ chats: VibeChatItem[] }>(`/api/vibe-write/workspaces/${wsId}/chats`),
+
+  createChat: (wsId: string) =>
+    apiFetch<VibeChatItem>(`/api/vibe-write/workspaces/${wsId}/chats`, {
+      method: "POST",
+    }),
+
+  deleteChat: (chatId: string) =>
+    apiFetch<{ message: string }>(`/api/vibe-write/chats/${chatId}`, {
+      method: "DELETE",
+    }),
+
+  getMessages: (chatId: string) =>
+    apiFetch<{ messages: VibeChatMsg[] }>(`/api/vibe-write/chats/${chatId}/messages`),
+
+  sendMessage: (chatId: string, content: string) =>
+    apiFetch<{
+      user_message: VibeChatMsg;
+      assistant_message: VibeChatMsg;
+      credits_used: number;
+    }>(`/api/vibe-write/chats/${chatId}/messages`, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
 };

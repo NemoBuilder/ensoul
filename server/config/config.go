@@ -77,6 +77,19 @@ type Config struct {
 	PushAPIKey              string // API key for external tweet push endpoint
 	VibeWriteAPIKey            string // API key for external snipe endpoint
 	ExternalSnipeDailyLimit int    // Daily limit for external snipe calls (default: 200)
+
+	// SMTP (email verification)
+	SMTPHost     string // e.g. smtp.protonmail.ch
+	SMTPPort     string // e.g. 587
+	SMTPUser     string // e.g. noreply@ensoul.ac
+	SMTPPassword string
+	SMTPFrom     string // e.g. Ensoul <noreply@ensoul.ac>
+
+	// LemonSqueezy (payment)
+	LemonSqueezyAPIKey        string // API key from LemonSqueezy dashboard
+	LemonSqueezyStoreID       string // Store ID
+	LemonSqueezyVariantID     string // Pro plan variant ID
+	LemonSqueezyWebhookSecret string // Webhook signing secret
 }
 
 // Global config instance
@@ -140,6 +153,17 @@ func Load() *Config {
 		PushAPIKey:              getEnv("PUSH_API_KEY", ""),
 		VibeWriteAPIKey:            getEnv("VIBE_WRITE_API_KEY", ""),
 		ExternalSnipeDailyLimit: parseIntEnv("EXTERNAL_SNIPE_DAILY_LIMIT", 200),
+
+		SMTPHost:     getEnv("SMTP_HOST", "smtp.protonmail.ch"),
+		SMTPPort:     getEnv("SMTP_PORT", "587"),
+		SMTPUser:     getEnv("SMTP_USER", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", "Ensoul <noreply@ensoul.ac>"),
+
+		LemonSqueezyAPIKey:        getEnv("LEMONSQUEEZY_API_KEY", ""),
+		LemonSqueezyStoreID:       getEnv("LEMONSQUEEZY_STORE_ID", ""),
+		LemonSqueezyVariantID:     getEnv("LEMONSQUEEZY_VARIANT_ID", ""),
+		LemonSqueezyWebhookSecret: getEnv("LEMONSQUEEZY_WEBHOOK_SECRET", ""),
 	}
 
 	// Auto-set log level based on environment if not explicitly configured

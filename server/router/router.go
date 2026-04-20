@@ -126,6 +126,25 @@ func Setup() *gin.Engine {
 			auth.POST("/login", middleware.RateLimit(middleware.GeneralLimiter), handlers.AuthLogin)
 			auth.POST("/logout", handlers.AuthLogout)
 			auth.GET("/session", handlers.AuthSession)
+
+			// Email auth endpoints
+			auth.POST("/email/send-code", middleware.RateLimit(middleware.RegisterLimiter), handlers.EmailSendCode)
+			auth.POST("/email/verify", middleware.RateLimit(middleware.GeneralLimiter), handlers.EmailVerify)
+			auth.POST("/email/logout", handlers.EmailLogout)
+			auth.GET("/email/session", handlers.EmailSessionInfo)
+
+			// Password auth endpoints
+			auth.POST("/email/password-login", middleware.RateLimit(middleware.GeneralLimiter), handlers.PasswordLogin)
+			auth.POST("/email/set-password", handlers.PasswordSet)
+			auth.GET("/email/has-password", middleware.RateLimit(middleware.GeneralLimiter), handlers.PasswordCheck)
+		}
+
+		// Billing endpoints (LemonSqueezy)
+		billing := api.Group("/billing")
+		{
+			billing.POST("/checkout", middleware.RateLimit(middleware.GeneralLimiter), handlers.BillingCheckout)
+			billing.POST("/webhook", handlers.BillingWebhook) // No auth — verified via signature
+			billing.GET("/status", handlers.BillingStatus)
 		}
 
 		// Chat endpoints
@@ -145,6 +164,29 @@ func Setup() *gin.Engine {
 			chat.POST("/share", middleware.RateLimit(middleware.GeneralLimiter), handlers.ChatCreateShare)
 			// Share: get a public share by code (no auth)
 			chat.GET("/share/:code", handlers.ChatGetShare)
+		}
+
+		// Vibe Write 2.0 workspace endpoints (email auth required)
+		vw := api.Group("/vibe-write")
+		{
+			// Workspaces
+			vw.GET("/workspaces", handlers.VibeWorkspaceList)
+			vw.POST("/workspaces", handlers.VibeWorkspaceCreate)
+			vw.PUT("/workspaces/:id", handlers.VibeWorkspaceUpdate)
+			vw.DELETE("/workspaces/:id", handlers.VibeWorkspaceDelete)
+
+			// Memories (per workspace)
+			vw.GET("/workspaces/:id/memories", handlers.VibeMemoryList)
+			vw.POST("/workspaces/:id/memories", handlers.VibeMemoryCreate)
+			vw.PUT("/memories/:memId", handlers.VibeMemoryUpdate)
+			vw.DELETE("/memories/:memId", handlers.VibeMemoryDelete)
+
+			// Chats (per workspace)
+			vw.GET("/workspaces/:id/chats", handlers.VibeChatList)
+			vw.POST("/workspaces/:id/chats", handlers.VibeChatCreate)
+			vw.DELETE("/chats/:chatId", handlers.VibeChatDelete)
+			vw.GET("/chats/:chatId/messages", handlers.VibeChatMessages)
+			vw.POST("/chats/:chatId/messages", middleware.RateLimit(middleware.ChatLimiter), handlers.VibeChatSendMessage)
 		}
 
 		// Stats endpoint — public

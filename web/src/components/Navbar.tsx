@@ -1,17 +1,47 @@
 ﻿"use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { useTranslations } from "next-intl";
 import { Link, usePathname } from "@/i18n/navigation";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import LanguageSwitcher from "@/components/LanguageSwitcher";
+import LoginModal from "@/components/LoginModal";
+import { emailAuthApi, type EmailSessionInfo } from "@/lib/api";
 
 export default function Navbar() {
   const t = useTranslations("Navbar");
   const pathname = usePathname();
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  // Email auth state
+  const [loginOpen, setLoginOpen] = useState(false);
+  const [emailUser, setEmailUser] = useState<EmailSessionInfo | null>(null);
+  const [checkingEmail, setCheckingEmail] = useState(true);
+
+  // Check email session on mount
+  useEffect(() => {
+    emailAuthApi
+      .session()
+      .then((user) => setEmailUser(user))
+      .catch(() => setEmailUser(null))
+      .finally(() => setCheckingEmail(false));
+  }, []);
+
+  const handleEmailLogin = useCallback((user: EmailSessionInfo) => {
+    setEmailUser(user);
+  }, []);
+
+  const handleEmailLogout = useCallback(async () => {
+    setMenuOpen(false);
+    try {
+      await emailAuthApi.logout();
+    } catch {
+      // ignore
+    }
+    setEmailUser(null);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -30,6 +60,7 @@ export default function Navbar() {
   }, [pathname]);
 
   return (
+    <>
     <nav className="fixed top-0 left-0 right-0 z-50 border-b border-[#1e1e2e] bg-[#0a0a0f]/80 backdrop-blur-md">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
         <div className="flex h-16 items-center justify-between">
@@ -42,13 +73,9 @@ export default function Navbar() {
           {/* Navigation links */}
           <div className="flex items-center gap-6">
             {[
-              { href: "/explore" as const, label: t("explore") },
-              { href: "/mint" as const, label: t("mint") },
-              { href: "/claw" as const, label: t("claws") },
-              { href: "/mining" as const, label: t("mining") },
-              { href: "/economy" as const, label: t("economy") },
               { href: "/vibe-write" as const, label: t("vibe-write") },
-              { href: "/leaderboard" as const, label: t("leaderboard") },
+              { href: "/explore" as const, label: t("souls") },
+              { href: "/protocol" as const, label: t("protocol") },
             ].map((item) => (
               <Link
                 key={item.href}
@@ -65,7 +92,77 @@ export default function Navbar() {
 
             <LanguageSwitcher />
 
-            {/* Wallet button with user menu */}
+            {/* Email login — primary auth method */}
+            {!checkingEmail && !emailUser && (
+              <button
+                onClick={() => setLoginOpen(true)}
+                className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+              >
+                {t("login")}
+              </button>
+            )}
+
+            {/* Logged-in email user menu */}
+            {emailUser && (
+              <div className="relative" ref={menuRef}>
+                <button
+                  onClick={() => setMenuOpen(!menuOpen)}
+                  className="flex items-center gap-2 rounded-lg border border-[#1e1e2e] bg-[#14141f] px-3 py-2 text-sm text-[#e2e8f0] transition-colors hover:border-[#8b5cf6]"
+                >
+                  <span className="text-base">👤</span>
+                  <span className="max-w-[120px] truncate">
+                    {emailUser.email.split("@")[0]}
+                  </span>
+                  {emailUser.is_pro && (
+                    <span className="rounded bg-[#8b5cf6] px-1.5 py-0.5 text-[10px] font-bold text-white">PRO</span>
+                  )}
+                  <svg
+                    className={`h-3 w-3 text-[#94a3b8] transition-transform ${menuOpen ? "rotate-180" : ""}`}
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+
+                {menuOpen && (
+                  <div className="absolute right-0 mt-2 w-56 overflow-hidden rounded-lg border border-[#1e1e2e] bg-[#14141f] shadow-xl">
+                    <div className="border-b border-[#1e1e2e] px-4 py-3">
+                      <p className="truncate text-sm text-[#e2e8f0]">{emailUser.email}</p>
+                      <p className="text-xs text-[#94a3b8]">
+                        {emailUser.is_pro ? "Pro" : "Free"} · {emailUser.credits} {t("credits")}
+                      </p>
+                    </div>
+                    <Link
+                      href="/my-souls"
+                      className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                    >
+                      <span>🧬</span>
+                      <span>{t("mySouls")}</span>
+                    </Link>
+                    <Link
+                      href="/protocol"
+                      className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                    >
+                      <span>📊</span>
+                      <span>{t("protocol")}</span>
+                    </Link>
+                    <div className="border-t border-[#1e1e2e]" />
+                    <button
+                      onClick={handleEmailLogout}
+                      className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-[#1e1e2e]"
+                    >
+                      <span>🚪</span>
+                      <span>{t("logout")}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Wallet connect — secondary, for Protocol features */}
             <ConnectButton.Custom>
               {({
                 account,
@@ -76,116 +173,36 @@ export default function Navbar() {
                 mounted,
               }) => {
                 const connected = mounted && account && chain;
-
-                if (!mounted) {
-                  return (
-                    <div
-                      aria-hidden="true"
-                      style={{ opacity: 0, pointerEvents: "none", userSelect: "none" }}
-                    />
-                  );
-                }
-
+                if (!mounted) return <div aria-hidden="true" style={{ opacity: 0, pointerEvents: "none", userSelect: "none" }} />;
                 if (!connected) {
                   return (
                     <button
                       onClick={openConnectModal}
-                      className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+                      className="rounded-lg border border-[#1e1e2e] bg-[#14141f] px-3 py-2 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#e2e8f0]"
+                      title={t("connectWallet")}
                     >
-                      {t("connectWallet")}
+                      🔗
                     </button>
                   );
                 }
-
                 if (chain.unsupported) {
                   return (
-                    <button
-                      onClick={openChainModal}
-                      className="rounded-lg bg-red-500 px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-red-400"
-                    >
+                    <button onClick={openChainModal} className="rounded-lg bg-red-500 px-3 py-2 text-sm font-semibold text-white">
                       {t("wrongNetwork")}
                     </button>
                   );
                 }
-
                 return (
-                  <div className="relative" ref={menuRef}>
-                    <button
-                      onClick={() => setMenuOpen(!menuOpen)}
-                      className="flex items-center gap-2 rounded-lg border border-[#1e1e2e] bg-[#14141f] px-3 py-2 text-sm text-[#e2e8f0] transition-colors hover:border-[#8b5cf6]"
-                    >
-                      {chain.hasIcon && chain.iconUrl && (
-                        <Image
-                          src={chain.iconUrl}
-                          alt={chain.name ?? "Chain"}
-                          width={16}
-                          height={16}
-                          className="rounded-full"
-                        />
-                      )}
-                      <span className="font-mono">
-                        {account.displayName}
-                      </span>
-                      <svg
-                        className={`h-3 w-3 text-[#94a3b8] transition-transform ${menuOpen ? "rotate-180" : ""}`}
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                      </svg>
-                    </button>
-
-                    {/* Dropdown menu */}
-                    {menuOpen && (
-                      <div className="absolute right-0 mt-2 w-52 overflow-hidden rounded-lg border border-[#1e1e2e] bg-[#14141f] shadow-xl">
-                        <Link
-                          href="/my-souls"
-                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>🧬</span>
-                          <span>{t("mySouls")}</span>
-                        </Link>
-                        <Link
-                          href="/claw/dashboard"
-                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>🦞</span>
-                          <span>{t("clawDashboard")}</span>
-                        </Link>
-                        <Link
-                          href="/vibe-write/settings"
-                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>🎯</span>
-                          <span>{t("vibeWriteSettings")}</span>
-                        </Link>
-                        <Link
-                          href="/holder"
-                          className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>💰</span>
-                          <span>{t("holderRevenue")}</span>
-                        </Link>
-                        <button
-                          onClick={() => { setMenuOpen(false); openChainModal(); }}
-                          className="flex w-full items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>🔗</span>
-                          <span>{t("switchNetwork")}</span>
-                        </button>
-                        <div className="border-t border-[#1e1e2e]" />
-                        <button
-                          onClick={() => { setMenuOpen(false); openAccountModal(); }}
-                          className="flex w-full items-center gap-2 px-4 py-3 text-sm text-red-400 transition-colors hover:bg-[#1e1e2e]"
-                        >
-                          <span>🚪</span>
-                          <span>{t("disconnect")}</span>
-                        </button>
-                      </div>
+                  <button
+                    onClick={openAccountModal}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#1e1e2e] bg-[#14141f] px-3 py-2 text-sm text-[#94a3b8] transition-colors hover:border-[#8b5cf6] hover:text-[#e2e8f0]"
+                    title={account.displayName}
+                  >
+                    {chain.hasIcon && chain.iconUrl && (
+                      <Image src={chain.iconUrl} alt={chain.name ?? "Chain"} width={14} height={14} className="rounded-full" />
                     )}
-                  </div>
+                    <span className="font-mono text-xs">{account.displayName}</span>
+                  </button>
                 );
               }}
             </ConnectButton.Custom>
@@ -193,5 +210,9 @@ export default function Navbar() {
         </div>
       </div>
     </nav>
+
+    {/* Login modal — rendered outside nav to avoid stacking context issues */}
+    <LoginModal open={loginOpen} onClose={() => setLoginOpen(false)} onLogin={handleEmailLogin} />
+    </>
   );
 }

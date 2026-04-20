@@ -3,8 +3,6 @@ import { getMessages, setRequestLocale } from "next-intl/server";
 import { notFound } from "next/navigation";
 import { routing } from "@/i18n/routing";
 import { Inter, JetBrains_Mono } from "next/font/google";
-import Navbar from "@/components/Navbar";
-import Footer from "@/components/Footer";
 import { Web3Provider } from "@/lib/providers";
 import "../globals.css";
 
@@ -45,9 +43,7 @@ export default async function LocaleLayout({
       >
         <NextIntlClientProvider locale={locale} messages={messages}>
           <Web3Provider>
-            <Navbar />
-            <main className="min-h-screen">{children}</main>
-            <Footer />
+            {children}
           </Web3Provider>
         </NextIntlClientProvider>
       </body>

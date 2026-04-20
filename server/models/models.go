@@ -133,6 +133,16 @@ type WalletSession struct {
 	CreatedAt  time.Time `json:"created_at"`
 }
 
+// EmailSession stores email-based login sessions (HttpOnly cookie).
+type EmailSession struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TokenHash string    `gorm:"column:token_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
+	UserID    uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	Email     string    `gorm:"type:varchar(255);not null;index" json:"email"`
+	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 // ClawBinding binds a Claw API key to a wallet address.
 type ClawBinding struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
@@ -673,22 +683,45 @@ const (
 	UserStatusBanned = "banned"
 )
 
-// User represents a registered user account (one per wallet address).
-// Created automatically on first wallet login (SIWE).
+// User represents a registered user account.
+// Can be created via email signup or wallet login.
 type User struct {
-	ID          uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	WalletAddr  string         `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
-	Status      string         `gorm:"type:varchar(20);default:'active'" json:"status"`
-	BanReason   string         `gorm:"type:text" json:"ban_reason,omitempty"`
-	BannedAt    *time.Time     `json:"banned_at,omitempty"`
-	BannedBy    string         `gorm:"type:varchar(50)" json:"banned_by,omitempty"`
-	Note        string         `gorm:"type:text" json:"note,omitempty"`
-	FirstSeenAt time.Time      `json:"first_seen_at"`
-	LastSeenAt  time.Time      `json:"last_seen_at"`
-	LoginCount  int            `gorm:"default:0" json:"login_count"`
-	CreatedAt   time.Time      `json:"created_at"`
-	UpdatedAt   time.Time      `json:"updated_at"`
-	DeletedAt   gorm.DeletedAt `gorm:"index" json:"-"`
+	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Email         string         `gorm:"type:varchar(255);uniqueIndex" json:"email,omitempty"`
+	EmailVerified bool           `gorm:"default:false" json:"email_verified"`
+	PasswordHash  string         `gorm:"type:varchar(255)" json:"-"`
+	WalletAddr    string         `gorm:"type:varchar(42);uniqueIndex" json:"wallet_addr,omitempty"`
+	TwitterHandle string         `gorm:"type:varchar(30)" json:"twitter_handle,omitempty"`
+	Status        string         `gorm:"type:varchar(20);default:'active'" json:"status"`
+	BanReason     string         `gorm:"type:text" json:"ban_reason,omitempty"`
+	BannedAt      *time.Time     `json:"banned_at,omitempty"`
+	BannedBy      string         `gorm:"type:varchar(50)" json:"banned_by,omitempty"`
+	Note          string         `gorm:"type:text" json:"note,omitempty"`
+	ProExpiresAt        *time.Time     `json:"pro_expires_at,omitempty"`
+	LemonSubscriptionID string         `gorm:"type:varchar(100)" json:"lemon_subscription_id,omitempty"`
+	Credits             int            `gorm:"default:50" json:"credits"`
+	CreditsReset  time.Time      `json:"credits_reset"`
+	FirstSeenAt   time.Time      `json:"first_seen_at"`
+	LastSeenAt    time.Time      `json:"last_seen_at"`
+	LoginCount    int            `gorm:"default:0" json:"login_count"`
+	CreatedAt     time.Time      `json:"created_at"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+	DeletedAt     gorm.DeletedAt `gorm:"index" json:"-"`
+}
+
+// IsPro returns whether the user currently has an active Pro subscription.
+func (u *User) IsPro() bool {
+	return u.ProExpiresAt != nil && u.ProExpiresAt.After(time.Now())
+}
+
+// EmailCode stores email verification codes with expiry.
+type EmailCode struct {
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Email     string    `gorm:"type:varchar(255);not null;index" json:"email"`
+	Code      string    `gorm:"type:varchar(6);not null" json:"-"`
+	Used      bool      `gorm:"default:false" json:"used"`
+	ExpiresAt time.Time `gorm:"not null" json:"expires_at"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
 // AdminAuditLog records admin operations for auditing.

@@ -21,22 +21,43 @@ export default function Home() {
         </p>
         <div className="flex gap-4">
           <Link
-            href="/explore"
+            href="/vibe-write"
             className="rounded-lg bg-[#8b5cf6] px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
           >
-            {t("exploreSouls")}
+            {t("startWriting")}
           </Link>
           <Link
-            href="/mint"
+            href="/explore"
             className="rounded-lg border border-[#1e1e2e] px-6 py-3 text-sm font-semibold text-[#e2e8f0] transition-colors hover:border-[#8b5cf6] hover:text-[#8b5cf6]"
           >
-            {t("mintShell")}
+            {t("exploreSouls")}
           </Link>
         </div>
       </section>
 
-      {/* Stats Bar */}
-      <StatsBar />
+      {/* Product Highlights */}
+      <section className="mx-auto max-w-5xl px-4 py-20">
+        <div className="grid gap-6 md:grid-cols-3">
+          {[
+            { icon: "🧠", titleKey: "feat01Title" as const, descKey: "feat01Desc" as const },
+            { icon: "🌍", titleKey: "feat02Title" as const, descKey: "feat02Desc" as const },
+            { icon: "🧬", titleKey: "feat03Title" as const, descKey: "feat03Desc" as const },
+          ].map((item) => (
+            <div
+              key={item.titleKey}
+              className="rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6 text-center"
+            >
+              <div className="mb-3 text-4xl">{item.icon}</div>
+              <h3 className="mb-2 text-lg font-semibold text-[#e2e8f0]">
+                {t(item.titleKey)}
+              </h3>
+              <p className="text-sm leading-relaxed text-[#94a3b8]">
+                {t(item.descKey)}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
 
       {/* How It Works */}
       <section className="mx-auto max-w-5xl px-4 py-20">
@@ -50,21 +71,21 @@ export default function Home() {
               titleKey: "step01Title" as const,
               descKey: "step01Desc" as const,
               stepKey: "step01" as const,
-              icon: "🥚",
+              icon: "✍️",
             },
             {
               step: "02",
               titleKey: "step02Title" as const,
               descKey: "step02Desc" as const,
               stepKey: "step02" as const,
-              icon: "🦞",
+              icon: "💬",
             },
             {
               step: "03",
               titleKey: "step03Title" as const,
               descKey: "step03Desc" as const,
               stepKey: "step03" as const,
-              icon: "✨",
+              icon: "🚀",
             },
           ].map((item) => (
             <div
@@ -85,6 +106,9 @@ export default function Home() {
           ))}
         </div>
       </section>
+
+      {/* Stats Bar */}
+      <StatsBar />
 
       {/* Featured Souls */}
       <section className="mx-auto max-w-5xl px-4 py-10 pb-20">

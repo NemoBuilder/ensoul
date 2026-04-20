@@ -46,6 +46,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.Claw{},
 		&models.Ensouling{},
 		&models.WalletSession{},
+		&models.EmailSession{},
 		&models.ClawBinding{},
 		&models.ChatSession{},
 		&models.ChatMessage{},
@@ -86,7 +87,13 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.AdminSession{},
 		// User management models
 		&models.User{},
+		&models.EmailCode{},
 		&models.AdminAuditLog{},
+		// Vibe Write 2.0 workspace models
+		&models.VibeWorkspace{},
+		&models.VibeMemory{},
+		&models.VibeChat{},
+		&models.VibeChatMessage{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}

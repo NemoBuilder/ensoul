@@ -19,7 +19,7 @@ import (
 
 const (
 	sessionCookieName = "ensoul_session"
-	sessionDuration   = 7 * 24 * time.Hour // 7 days
+	sessionDuration   = 180 * 24 * time.Hour // 6 months
 )
 
 // AuthLogin handles POST /api/auth/login
