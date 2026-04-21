@@ -15,6 +15,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 const (
@@ -62,6 +63,14 @@ func AuthLogin(c *gin.Context) {
 	}
 	token := hex.EncodeToString(tokenBytes)
 
+	// Create or update User record (for admin user management)
+	usr := services.EnsureUser(claimed.Hex())
+	var userID *uuid.UUID
+	if usr != nil {
+		id := usr.ID
+		userID = &id
+	}
+
 	// Delete any existing sessions for this wallet
 	database.DB.Where("wallet_addr = ?", claimed.Hex()).Delete(&models.WalletSession{})
 
@@ -69,15 +78,13 @@ func AuthLogin(c *gin.Context) {
 	session := &models.WalletSession{
 		TokenHash:  util.HashToken(token),
 		WalletAddr: claimed.Hex(),
+		UserID:     userID,
 		ExpiresAt:  time.Now().Add(sessionDuration),
 	}
 	if err := database.DB.Create(session).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
 		return
 	}
-
-	// Create or update User record (for admin user management)
-	services.EnsureUser(claimed.Hex())
 
 	// Check if user is banned
 	if banned, reason := services.IsUserBanned(claimed.Hex()); banned {

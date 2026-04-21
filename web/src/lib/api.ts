@@ -1,5 +1,20 @@
 ﻿const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8990";
 
+// ApiError carries the structured error code from the backend (e.g.
+// "INSUFFICIENT_CREDITS", "PRO_REQUIRED", "WORKSPACE_LIMIT") so the UI can
+// gate behaviour reliably without string-matching the human-readable message.
+export class ApiError extends Error {
+  status: number;
+  code?: string;
+  body?: Record<string, unknown>;
+  constructor(message: string, status: number, code?: string, body?: Record<string, unknown>) {
+    super(message);
+    this.status = status;
+    this.code = code;
+    this.body = body;
+  }
+}
+
 // Generic fetch wrapper with error handling
 async function apiFetch<T>(
   path: string,
@@ -16,8 +31,10 @@ async function apiFetch<T>(
   });
 
   if (!res.ok) {
-    const error = await res.json().catch(() => ({ error: "Request failed" }));
-    throw new Error(error.error || `HTTP ${res.status}`);
+    const body = (await res.json().catch(() => ({ error: "Request failed" }))) as Record<string, unknown>;
+    const message = (body.error as string) || `HTTP ${res.status}`;
+    const code = body.code as string | undefined;
+    throw new ApiError(message, res.status, code, body);
   }
 
   return res.json();
@@ -545,6 +562,31 @@ export const emailAuthApi = {
     apiFetch<{ has_password: boolean }>(`/api/auth/email/has-password?email=${encodeURIComponent(email)}`),
 };
 
+// --- Account Binding API (cross-link email ↔ wallet on the same User) ---
+
+export const bindApi = {
+  // Email user → bind a wallet (requires wallet signature on `ensoul:bind:<ts>`)
+  wallet: (address: string, signature: string, message: string) =>
+    apiFetch<{ wallet_addr: string; bound?: boolean; already_bound?: boolean }>(
+      "/api/auth/bind/wallet",
+      { method: "POST", body: JSON.stringify({ address, signature, message }) },
+    ),
+
+  // Wallet user → request email verification code for binding
+  emailSend: (email: string) =>
+    apiFetch<{ message: string }>("/api/auth/bind/email/send", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    }),
+
+  // Wallet user → verify code and bind email
+  email: (email: string, code: string) =>
+    apiFetch<{ email: string; bound?: boolean; already_bound?: boolean }>(
+      "/api/auth/bind/email",
+      { method: "POST", body: JSON.stringify({ email, code }) },
+    ),
+};
+
 // --- Claw Key Management API (session-based, no API key in frontend) ---
 
 export interface ClawBindingInfo {
@@ -923,6 +965,8 @@ export interface VibeMemory {
   category: "profile" | "knowledge" | "network" | "archive" | "rules";
   content: string;
   source: "user" | "ai" | "import";
+  status: "pending" | "accepted" | "rejected";
+  reason?: string;
   created_at: string;
   updated_at: string;
 }
@@ -943,6 +987,8 @@ export interface VibeChatMsg {
   credits_cost: number;
   soul_handles?: string[];
   memory_cats?: string[];
+  scenario?: string;
+  feedback?: number; // -1, 0, 1
   created_at: string;
 }
 
@@ -967,9 +1013,24 @@ export const workspaceApi = {
       method: "DELETE",
     }),
 
+  // Twitter-handle setup wizard: fetches recent tweets and distills seed memories.
+  setup: (id: string, twitterHandle: string, autoAccept = false) =>
+    apiFetch<{
+      workspace: Workspace;
+      profile_source: string;
+      tweets_analyzed: number;
+      pending_memories: VibeMemory[];
+      status: string;
+    }>(`/api/vibe-write/workspaces/${id}/setup`, {
+      method: "POST",
+      body: JSON.stringify({ twitter_handle: twitterHandle, auto_accept: autoAccept }),
+    }),
+
   // Memories
-  listMemories: (wsId: string) =>
-    apiFetch<{ memories: VibeMemory[] }>(`/api/vibe-write/workspaces/${wsId}/memories`),
+  listMemories: (wsId: string, status?: "pending" | "accepted" | "rejected") => {
+    const qs = status ? `?status=${status}` : "";
+    return apiFetch<{ memories: VibeMemory[] }>(`/api/vibe-write/workspaces/${wsId}/memories${qs}`);
+  },
 
   createMemory: (wsId: string, category: string, content: string) =>
     apiFetch<VibeMemory>(`/api/vibe-write/workspaces/${wsId}/memories`, {
@@ -987,6 +1048,25 @@ export const workspaceApi = {
     apiFetch<{ message: string }>(`/api/vibe-write/memories/${memId}`, {
       method: "DELETE",
     }),
+
+  reviewMemory: (
+    memId: string,
+    action: "accept" | "reject",
+    content?: string
+  ) =>
+    apiFetch<VibeMemory>(`/api/vibe-write/memories/${memId}/review`, {
+      method: "POST",
+      body: JSON.stringify({ action, content }),
+    }),
+
+  feedbackMessage: (msgId: string, value: -1 | 0 | 1) =>
+    apiFetch<{ ok: boolean; feedback: number }>(
+      `/api/vibe-write/messages/${msgId}/feedback`,
+      {
+        method: "POST",
+        body: JSON.stringify({ value }),
+      }
+    ),
 
   // Chats
   listChats: (wsId: string) =>
@@ -1024,4 +1104,133 @@ export const workspaceApi = {
       method: "POST",
       body: JSON.stringify({ content }),
     }),
+
+  /**
+   * Stream a chat reply via Server-Sent Events.
+   * Calls handlers as events arrive. Returns a promise that resolves when the
+   * stream ends (done) or rejects on error event / network failure.
+   *
+   * Events:
+   *  - meta:  { user_message_id, scenario, used_memory_cats, soul_handles }
+   *  - chunk: token text (string)
+   *  - done:  { assistant_message_id, credits_used, total_chars, model }
+   *  - error: error message string (terminal)
+   */
+  sendMessageStream: async (
+    chatId: string,
+    payload: {
+      content: string;
+      attached_tweet?: { url?: string; author_handle?: string; text?: string };
+      variant_count?: number;
+      output_langs?: string[];
+    } | string,
+    handlers: {
+      onMeta?: (meta: {
+        user_message_id: string;
+        scenario: string;
+        mode?: "chat" | "reply" | "translate";
+      }) => void;
+      onContext?: (ctx: {
+        used_memory_cats?: string[];
+        soul_handles?: string[];
+        soul_enhanced?: boolean;
+        methodology_slugs?: string[];
+        output_langs?: string[];
+        variant_count?: number;
+      }) => void;
+      onChunk?: (text: string) => void;
+      onVariant?: (v: {
+        idx: number;
+        content: string;
+        recommended?: boolean;
+        reason?: string;
+        lang?: string;
+      }) => void;
+      onMemorySuggest?: (m: {
+        id: string;
+        category: string;
+        content: string;
+        reason?: string;
+      }) => void;
+      onSoulLock?: (info: { handle: string; upgrade?: boolean }) => void;
+      onDone?: (info: {
+        assistant_message_id: string;
+        credits_used: number;
+        total_chars: number;
+        model: string;
+        cleaned_content?: string;
+        pending_memories?: VibeMemory[];
+        mode?: "chat" | "reply" | "translate";
+      }) => void;
+      signal?: AbortSignal;
+    }
+  ): Promise<void> => {
+    const body = typeof payload === "string" ? { content: payload } : payload;
+    const res = await fetch(
+      `${API_BASE}/api/vibe-write/chats/${chatId}/messages/stream`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+        signal: handlers.signal,
+      }
+    );
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+      throw new Error(err.error || `HTTP ${res.status}`);
+    }
+    if (!res.body) throw new Error("response body missing");
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+
+      // SSE messages are separated by \n\n
+      let idx;
+      while ((idx = buffer.indexOf("\n\n")) >= 0) {
+        const raw = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 2);
+
+        let event = "message";
+        let dataStr = "";
+        for (const line of raw.split("\n")) {
+          if (line.startsWith("event:")) event = line.slice(6).trim();
+          else if (line.startsWith("data:")) dataStr += line.slice(5).trim();
+        }
+        if (!dataStr) continue;
+        let data: unknown;
+        try {
+          data = JSON.parse(dataStr);
+        } catch {
+          data = dataStr;
+        }
+
+        if (event === "meta" && handlers.onMeta) {
+          handlers.onMeta(data as Parameters<NonNullable<typeof handlers.onMeta>>[0]);
+        } else if (event === "context" && handlers.onContext) {
+          handlers.onContext(data as Parameters<NonNullable<typeof handlers.onContext>>[0]);
+        } else if (event === "chunk" && handlers.onChunk) {
+          handlers.onChunk(typeof data === "string" ? data : String(data));
+        } else if (event === "variant" && handlers.onVariant) {
+          handlers.onVariant(data as Parameters<NonNullable<typeof handlers.onVariant>>[0]);
+        } else if (event === "memory_suggest" && handlers.onMemorySuggest) {
+          handlers.onMemorySuggest(data as Parameters<NonNullable<typeof handlers.onMemorySuggest>>[0]);
+        } else if (event === "soul_lock" && handlers.onSoulLock) {
+          handlers.onSoulLock(data as Parameters<NonNullable<typeof handlers.onSoulLock>>[0]);
+        } else if (event === "done" && handlers.onDone) {
+          handlers.onDone(data as Parameters<NonNullable<typeof handlers.onDone>>[0]);
+          return;
+        } else if (event === "error") {
+          const msg = typeof data === "string" ? data : "stream error";
+          throw new Error(msg);
+        }
+      }
+    }
+  },
 };

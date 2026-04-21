@@ -21,6 +21,7 @@ RUN apk add --no-cache ca-certificates tzdata
 WORKDIR /app
 
 COPY --from=builder /ensoul-server /app/ensoul-server
+COPY --from=builder /app/data /app/data
 
 EXPOSE 8990
 

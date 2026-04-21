@@ -16,7 +16,8 @@ import (
 // ═══════════════════════════════════════════════════════════════════════
 
 // EnsureUser creates or updates a User record on login. Called from auth handler.
-func EnsureUser(walletAddr string) {
+// Returns the persisted user (nil only on DB failure).
+func EnsureUser(walletAddr string) *models.User {
 	now := time.Now()
 	var user models.User
 	result := database.DB.Where("wallet_addr = ?", walletAddr).First(&user)
@@ -29,7 +30,10 @@ func EnsureUser(walletAddr string) {
 			LastSeenAt:  now,
 			LoginCount:  1,
 		}
-		database.DB.Create(&user)
+		if err := database.DB.Create(&user).Error; err != nil {
+			util.Log.Error("[user] failed to create user %s: %v", walletAddr, err)
+			return nil
+		}
 		util.Log.Info("[user] Created new user: %s", walletAddr)
 	} else {
 		// Existing user — update last_seen and login_count
@@ -38,6 +42,7 @@ func EnsureUser(walletAddr string) {
 			"login_count":  gorm.Expr("login_count + 1"),
 		})
 	}
+	return &user
 }
 
 // IsUserBanned checks if a wallet address is banned. Returns (banned, reason).
@@ -555,4 +560,10 @@ func writeAuditLog(admin *models.AdminUser, action, targetType, targetID string,
 		log.Detail = models.JSON(detail)
 	}
 	database.DB.Create(&log)
+}
+
+// WriteAuditLog is the public wrapper around writeAuditLog so other packages
+// (e.g. admin handlers in different files) can record audit entries.
+func WriteAuditLog(admin *models.AdminUser, action, targetType, targetID string, detail map[string]interface{}, ip string) {
+	writeAuditLog(admin, action, targetType, targetID, detail, ip)
 }

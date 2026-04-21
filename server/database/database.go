@@ -6,6 +6,7 @@ import (
 
 	"github.com/ensoul-labs/ensoul-server/config"
 	"github.com/ensoul-labs/ensoul-server/models"
+	"github.com/ensoul-labs/ensoul-server/services/methodology"
 	"github.com/ensoul-labs/ensoul-server/util"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/postgres"
@@ -94,6 +95,8 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.VibeMemory{},
 		&models.VibeChat{},
 		&models.VibeChatMessage{},
+		// Vibe Write 2.0 mentor methodology
+		&models.MentorMethodology{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}
@@ -124,6 +127,11 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Step 6: Backfill User records from existing wallet_sessions.
 	// Idempotent: only inserts users that don't exist yet.
 	backfillUsers()
+
+	// Step 7: Auto-seed mentor methodology pack if not yet present.
+	// Idempotent: skips when records of same source already exist.
+	// Override pack location with METHODOLOGY_DIR env var.
+	seedMentorMethodology()
 
 	return DB
 }
@@ -431,4 +439,23 @@ func backfillUsers() {
 	if result2.RowsAffected > 0 {
 		util.Log.Info("Backfilled %d additional User records from subscriptions", result2.RowsAffected)
 	}
+}
+
+// seedMentorMethodology auto-seeds the default methodology pack on startup.
+// Idempotent: skips if records of same source already exist. To force-update
+// after editing markdown sources, use:
+//
+//	go run ./cmd/seed_methodology --force
+func seedMentorMethodology() {
+	spec := methodology.DefaultPack()
+	res, err := methodology.SeedPack(DB, spec, false)
+	if err != nil {
+		util.Log.Warn("Mentor methodology auto-seed skipped: %v (use cmd/seed_methodology to bootstrap manually)", err)
+		return
+	}
+	if res.Skipped {
+		util.Log.Debug("Mentor methodology already seeded: %s", res.Reason)
+		return
+	}
+	util.Log.Info("Seeded mentor methodology pack %s: inserted=%d updated=%d", spec.Source, res.Inserted, res.Updated)
 }

@@ -137,6 +137,11 @@ func Setup() *gin.Engine {
 			auth.POST("/email/password-login", middleware.RateLimit(middleware.GeneralLimiter), handlers.PasswordLogin)
 			auth.POST("/email/set-password", handlers.PasswordSet)
 			auth.GET("/email/has-password", middleware.RateLimit(middleware.GeneralLimiter), handlers.PasswordCheck)
+
+			// Account binding endpoints (cross-link email ↔ wallet on the same User)
+			auth.POST("/bind/wallet", middleware.RateLimit(middleware.GeneralLimiter), handlers.AuthBindWallet)
+			auth.POST("/bind/email/send", middleware.RateLimit(middleware.RegisterLimiter), handlers.AuthBindEmailSend)
+			auth.POST("/bind/email", middleware.RateLimit(middleware.GeneralLimiter), handlers.AuthBindEmail)
 		}
 
 		// Billing endpoints (LemonSqueezy)
@@ -174,12 +179,14 @@ func Setup() *gin.Engine {
 			vw.POST("/workspaces", handlers.VibeWorkspaceCreate)
 			vw.PUT("/workspaces/:id", handlers.VibeWorkspaceUpdate)
 			vw.DELETE("/workspaces/:id", handlers.VibeWorkspaceDelete)
+			vw.POST("/workspaces/:id/setup", middleware.RateLimit(middleware.GeneralLimiter), handlers.VibeWorkspaceSetup)
 
 			// Memories (per workspace)
 			vw.GET("/workspaces/:id/memories", handlers.VibeMemoryList)
 			vw.POST("/workspaces/:id/memories", handlers.VibeMemoryCreate)
 			vw.PUT("/memories/:memId", handlers.VibeMemoryUpdate)
 			vw.DELETE("/memories/:memId", handlers.VibeMemoryDelete)
+			vw.POST("/memories/:memId/review", handlers.VibeMemoryReview)
 
 			// Chats (per workspace)
 			vw.GET("/workspaces/:id/chats", handlers.VibeChatList)
@@ -187,6 +194,8 @@ func Setup() *gin.Engine {
 			vw.DELETE("/chats/:chatId", handlers.VibeChatDelete)
 			vw.GET("/chats/:chatId/messages", handlers.VibeChatMessages)
 			vw.POST("/chats/:chatId/messages", middleware.RateLimit(middleware.ChatLimiter), handlers.VibeChatSendMessage)
+			vw.POST("/chats/:chatId/messages/stream", middleware.RateLimit(middleware.ChatLimiter), handlers.VibeChatStreamMessage)
+			vw.POST("/messages/:msgId/feedback", handlers.VibeMessageFeedback)
 		}
 
 		// Stats endpoint — public
@@ -207,51 +216,9 @@ func Setup() *gin.Engine {
 		}
 
 		// Vibe Write endpoints (Phase 3 → Vibe Write 2.0)
-		vibeWrite := api.Group("/vibe-write")
-		{
-			// === Public endpoints (no auth) ===
-			vibeWrite.GET("/tags", handlers.VibeWriteGetTags)
-			vibeWrite.GET("/feed", handlers.VibeWriteGetFeed)
-			vibeWrite.GET("/feed/stream", handlers.VibeWriteFeedStream)
-			vibeWrite.GET("/feed/refresh", handlers.VibeWriteFeedRefresh)
-
-			// Dimensions (multi-dimensional tagging — public)
-			vibeWrite.GET("/dimensions", handlers.VibeWriteGetDimensions)
-			vibeWrite.POST("/dimensions/filter", handlers.VibeWriteFilterByDimensions)
-			vibeWrite.GET("/tags/:id/dimensions", handlers.VibeWriteGetTagDimensions)
-
-			// === External API endpoints (API key auth) ===
-			vibeWrite.POST("/feed/push", middleware.AuthPushAPIKey(), handlers.VibeWritePushTweets)
-			vibeWrite.POST("/external/snipe", middleware.AuthVibeWriteAPIKey(), handlers.VibeWriteExternalSnipe)
-
-			// === Session-required endpoints ===
-			vibeWrite.GET("/user/tags", middleware.AuthSession(), handlers.VibeWriteGetUserTags)
-			vibeWrite.PUT("/user/tags", middleware.AuthSession(), handlers.VibeWriteUpdateUserTags)
-			vibeWrite.GET("/user/muted", middleware.AuthSession(), handlers.VibeWriteGetMuted)
-			vibeWrite.POST("/user/muted", middleware.AuthSession(), handlers.VibeWriteMuteAccount)
-			vibeWrite.DELETE("/user/muted/:handle", middleware.AuthSession(), handlers.VibeWriteUnmuteAccount)
-
-			// Snipe: generate reply (Pro only)
-			vibeWrite.POST("/snipe", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.VibeWriteSnipe)
-
-			// Subscription management (kept from v1)
-			vibeWrite.GET("/subscribe-price", handlers.VibeWriteSubscribePrice)
-			vibeWrite.POST("/subscribe", middleware.AuthSession(), handlers.VibeWriteSubscribe)
-			vibeWrite.GET("/subscription", middleware.AuthSession(), handlers.VibeWriteGetSubscription)
-
-			// Reply history (kept from v1)
-			vibeWrite.GET("/replies", middleware.AuthSession(), handlers.VibeWriteGetReplies)
-
-			// Persona management (kept from v1)
-			vibeWrite.POST("/persona", middleware.AuthSession(), handlers.VibeWriteSetPersona)
-			vibeWrite.GET("/persona", middleware.AuthSession(), handlers.VibeWriteGetPersona)
-
-			// Legacy v1 endpoints (deprecated but kept for compatibility)
-			vibeWrite.POST("/kols", middleware.AuthSession(), handlers.VibeWriteAddKOL)
-			vibeWrite.GET("/kols", middleware.AuthSession(), handlers.VibeWriteListKOLs)
-			vibeWrite.DELETE("/kols/:id", middleware.AuthSession(), handlers.VibeWriteRemoveKOL)
-			vibeWrite.POST("/reply", middleware.RateLimit(middleware.GeneralLimiter), middleware.AuthSession(), handlers.VibeWriteGenerateReply)
-		}
+		// Legacy v1 routes (feed/tags/dimensions/snipe/subscribe/persona/kols)
+		// removed in Sprint D cleanup. Active routes are in the
+		// vw := api.Group("/vibe-write") block above.
 
 		// Holder revenue endpoints (Phase 4)
 		holder := api.Group("/holder")
@@ -305,29 +272,8 @@ func Setup() *gin.Engine {
 			admin.POST("/mining/rewards/:id/retry", handlers.MiningRetryReward)
 			admin.POST("/mining/rewards/retry-all", handlers.MiningRetryAll)
 
-			// Vibe Write 2.0: Tag management
-			admin.GET("/vibe-write/tags", handlers.AdminVibeWriteListTags)
-			admin.POST("/vibe-write/tags", handlers.AdminVibeWriteCreateTag)
-			admin.PUT("/vibe-write/tags/:id", handlers.AdminVibeWriteUpdateTag)
-			admin.DELETE("/vibe-write/tags/:id", handlers.AdminVibeWriteDeleteTag)
-			admin.GET("/vibe-write/tags/:id/accounts", handlers.AdminVibeWriteListTagAccounts)
-			admin.POST("/vibe-write/tags/:id/accounts", handlers.AdminVibeWriteAddTagAccount)
-			admin.DELETE("/vibe-write/tags/:id/accounts/:handle", handlers.AdminVibeWriteRemoveTagAccount)
-
-			// Vibe Write 2.0: Tag candidate management
-			admin.POST("/vibe-write/candidates/import", handlers.AdminVibeWriteImportCandidates)
-			admin.GET("/vibe-write/candidates", handlers.AdminVibeWriteListCandidates)
-			admin.POST("/vibe-write/candidates/:id/approve", handlers.AdminVibeWriteApproveCandidate)
-			admin.POST("/vibe-write/candidates/:id/reject", handlers.AdminVibeWriteRejectCandidate)
-			admin.POST("/vibe-write/candidates/batch", handlers.AdminVibeWriteBatchReview)
-
-			// Vibe Write 2.0+: Multi-dimensional tag management
-			admin.GET("/vibe-write/dimensions", handlers.AdminVibeWriteListDimensions)
-			admin.POST("/vibe-write/dimensions", handlers.AdminVibeWriteCreateDimension)
-			admin.PUT("/vibe-write/dimensions/:id", handlers.AdminVibeWriteUpdateDimension)
-			admin.POST("/vibe-write/dimensions/:id/values", handlers.AdminVibeWriteCreateDimensionValue)
-			admin.PUT("/vibe-write/dimensions/values/:id", handlers.AdminVibeWriteUpdateDimensionValue)
-			admin.PUT("/vibe-write/tags/:id/dimensions", handlers.AdminVibeWriteSetTagDimensions)
+			// Vibe Write 2.0: legacy admin tag/dimension endpoints removed in Sprint D.
+			// Methodology admin replaces this surface — see admin.GET("/methodology") below.
 
 			// User management
 			admin.GET("/users/stats", handlers.AdminUserStats)
@@ -349,6 +295,15 @@ func Setup() *gin.Engine {
 
 			// Audit log
 			admin.GET("/audit-log", handlers.AdminAuditLog)
+
+			// Mentor methodology CRUD (Vibe Write 2.0 brain)
+			admin.GET("/methodology", handlers.AdminListMethodology)
+			admin.GET("/methodology/:id", handlers.AdminGetMethodology)
+			admin.POST("/methodology", handlers.AdminCreateMethodology)
+			admin.PUT("/methodology/:id", handlers.AdminUpdateMethodology)
+			admin.DELETE("/methodology/:id", handlers.AdminDeleteMethodology)
+			admin.POST("/methodology/preview", handlers.AdminPreviewMethodology)
+			admin.GET("/methodology/feedback", handlers.AdminMethodologyFeedback)
 		}
 	}
 

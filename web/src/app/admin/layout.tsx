@@ -13,7 +13,7 @@ const navItems = [
   { href: "/admin/users", label: "Users", icon: "👥" },
   { href: "/admin/claws", label: "Claws", icon: "🦞" },
   { href: "/admin/candidates", label: "Candidates", icon: "🎯" },
-  { href: "/admin/vibe-write-tags", label: "Vibe Write Tags", icon: "🏷️" },
+  { href: "/admin/methodology", label: "Methodology", icon: "🧠" },
   { href: "/admin/tax-wallet", label: "Tax Wallet", icon: "💰" },
   { href: "/admin/mining", label: "Mining Pool", icon: "⛏️" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },

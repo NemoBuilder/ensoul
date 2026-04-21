@@ -49,15 +49,10 @@ func main() {
 	// Start tax wallet auto-mint scheduler (weekly, Monday 00:00 UTC)
 	services.StartTaxWalletScheduler()
 
-	// Start Vibe Write KOL tweet monitor (DEPRECATED — replaced by feed refresher)
-	// services.StartVibeWriteMonitor(1 * time.Minute)
-
-	// Vibe Write 2.0: Initialize SSE hub and start tag-based feed refresher
-	services.InitSSEHub()
-	services.StartFeedRefresher(10 * time.Minute) // refresh all tag feeds every 10 minutes
-
-	// Start subscription expiry checker (every 1 hour)
-	services.StartSubscriptionCleanup(1 * time.Hour)
+	// Vibe Write v1 background workers removed in V3 cleanup (D Stage 2):
+	//   - StartVibeWriteMonitor (KOL tweet monitor)
+	//   - InitSSEHub / StartFeedRefresher (tag-based feed)
+	//   - StartSubscriptionCleanup (legacy Subscription model superseded by User.ProExpiresAt)
 
 	// Start monthly revenue settlement (1st of each month, 00:00 UTC)
 	services.StartMonthlySettlement()

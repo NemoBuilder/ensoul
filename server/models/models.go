@@ -126,11 +126,12 @@ type Ensouling struct {
 
 // WalletSession represents an authenticated wallet session (HttpOnly cookie).
 type WalletSession struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	TokenHash  string    `gorm:"column:token_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
-	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
-	ExpiresAt  time.Time `gorm:"not null" json:"expires_at"`
-	CreatedAt  time.Time `json:"created_at"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TokenHash  string     `gorm:"column:token_hash;type:varchar(64);uniqueIndex;not null" json:"-"`
+	WalletAddr string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	ExpiresAt  time.Time  `gorm:"not null" json:"expires_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 // EmailSession stores email-based login sessions (HttpOnly cookie).
@@ -172,6 +173,7 @@ type ChatSession struct {
 	ID         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	ShellID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"shell_id"`
 	WalletAddr string         `gorm:"type:varchar(42);index" json:"wallet_addr,omitempty"` // empty = guest
+	UserID     *uuid.UUID     `gorm:"type:uuid;index" json:"user_id,omitempty"`
 	Tier       string         `gorm:"type:varchar(20);default:'guest'" json:"tier"`
 	Rounds     int            `gorm:"default:0" json:"rounds"` // number of user messages sent
 	Title      string         `gorm:"type:varchar(255)" json:"title,omitempty"`
@@ -301,6 +303,10 @@ const (
 )
 
 // Subscription represents a user's Vibe Write subscription.
+//
+// Deprecated: removed in vN+1, do not use. Subscription state now lives on
+// User (ProExpiresAt + LemonSubscriptionID). Table is kept for one release
+// to allow rollback; AutoMigrate still runs but no code path writes here.
 type Subscription struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	WalletAddr    string         `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
@@ -317,6 +323,8 @@ type Subscription struct {
 }
 
 // VibeWriteKOL represents a KOL that a subscriber is tracking.
+//
+// Deprecated: removed in vN+1, do not use. Replaced by VibeMemory (network category).
 type VibeWriteKOL struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	SubscriptionID uuid.UUID      `gorm:"type:uuid;not null;index" json:"subscription_id"`
@@ -331,6 +339,9 @@ type VibeWriteKOL struct {
 }
 
 // VibeWriteReply represents a generated reply for a tweet (Vibe Write 2.0).
+//
+// Deprecated: removed in vN+1, do not use. Replaced by VibeChatMessage with
+// reply variants stored as JSON in Content.
 type VibeWriteReply struct {
 	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	ShellID      *uuid.UUID `gorm:"type:uuid;index" json:"shell_id"` // nullable: Soul is optional
@@ -349,6 +360,8 @@ type VibeWriteReply struct {
 }
 
 // UserPersona represents a user's custom persona for reply generation.
+//
+// Deprecated: removed in vN+1, do not use. Replaced by VibeMemory (profile + rules categories).
 type UserPersona struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	WalletAddr string    `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
@@ -364,6 +377,8 @@ type UserPersona struct {
 // ═══════════════════════════════════════════════════════════════════════
 
 // VibeWriteTag defines a content tag (maintained by Admin).
+//
+// Deprecated: removed in vN+1, do not use. Tag-based feed was removed in V3.
 type VibeWriteTag struct {
 	ID          string    `gorm:"type:varchar(50);primaryKey" json:"id"` // e.g. "bnb_official"
 	Name        string    `gorm:"type:varchar(100)" json:"name"`         // Chinese name
@@ -379,6 +394,8 @@ type VibeWriteTag struct {
 }
 
 // VibeWriteTagAccount links a Twitter account to a tag (many-to-many, Admin maintained).
+//
+// Deprecated: removed in vN+1, do not use. Tag-based feed was removed in V3.
 type VibeWriteTagAccount struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	TagID            string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_account" json:"tag_id"`
@@ -390,6 +407,8 @@ type VibeWriteTagAccount struct {
 }
 
 // TagCandidate represents an AI-recommended account pending admin review.
+//
+// Deprecated: removed in vN+1, do not use. Tag-based feed was removed in V3.
 type TagCandidate struct {
 	ID               uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	Handle           string         `gorm:"type:varchar(30);not null;index" json:"handle"`
@@ -417,6 +436,8 @@ const (
 )
 
 // UserSelectedTag records which tags a user has selected for their feed.
+//
+// Deprecated: removed in vN+1, do not use. Tag-based feed was removed in V3.
 type UserSelectedTag struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	WalletAddr string    `gorm:"type:varchar(42);not null;uniqueIndex:idx_user_tags" json:"wallet_addr"`
@@ -425,6 +446,8 @@ type UserSelectedTag struct {
 }
 
 // UserMutedAccount records accounts a user has muted from their feed.
+//
+// Deprecated: removed in vN+1, do not use. Tag-based feed was removed in V3.
 type UserMutedAccount struct {
 	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	WalletAddr string    `gorm:"type:varchar(42);not null;uniqueIndex:idx_user_muted" json:"wallet_addr"`
@@ -437,6 +460,8 @@ type UserMutedAccount struct {
 // ═══════════════════════════════════════════════════════════════════════
 
 // TagDimension defines a tagging axis (e.g. "chain", "track", "role").
+//
+// Deprecated: removed in vN+1, do not use. Multi-dimensional tagging was removed in V3.
 type TagDimension struct {
 	ID        string    `gorm:"type:varchar(30);primaryKey" json:"id"` // e.g. "chain"
 	Name      string    `gorm:"type:varchar(50)" json:"name"`          // Chinese name
@@ -448,6 +473,8 @@ type TagDimension struct {
 }
 
 // TagDimensionValue is a specific value within a dimension (e.g. "chain:bnb").
+//
+// Deprecated: removed in vN+1, do not use. Multi-dimensional tagging was removed in V3.
 type TagDimensionValue struct {
 	ID          string    `gorm:"type:varchar(50);primaryKey" json:"id"` // e.g. "chain:bnb"
 	DimensionID string    `gorm:"type:varchar(30);not null;index" json:"dimension_id"`
@@ -460,6 +487,8 @@ type TagDimensionValue struct {
 }
 
 // VibeWriteTagDimension links a VibeWriteTag to one or more dimension values (many-to-many).
+//
+// Deprecated: removed in vN+1, do not use. Multi-dimensional tagging was removed in V3.
 type VibeWriteTagDimension struct {
 	ID               uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	TagID            string    `gorm:"type:varchar(50);not null;uniqueIndex:idx_tag_dim_val" json:"tag_id"`
@@ -468,6 +497,8 @@ type VibeWriteTagDimension struct {
 }
 
 // ExternalSnipeUsage tracks daily usage for external snipe API callers.
+//
+// Deprecated: removed in vN+1, do not use. /snipe endpoint was removed in V3.
 type ExternalSnipeUsage struct {
 	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	CallerID  string    `gorm:"type:varchar(100);not null;index" json:"caller_id"`

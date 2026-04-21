@@ -45,9 +45,20 @@ func CreateChatSession(shellHandle, walletAddr string) (*models.ChatSession, err
 		tier = models.ChatTierFree
 	}
 
+	// Look up associated user (if any) to back-fill UserID for analytics/binding.
+	var userID *uuid.UUID
+	if walletAddr != "" {
+		var u models.User
+		if err := database.DB.Select("id").Where("wallet_addr = ?", walletAddr).First(&u).Error; err == nil {
+			id := u.ID
+			userID = &id
+		}
+	}
+
 	session := &models.ChatSession{
 		ShellID:    shell.ID,
 		WalletAddr: walletAddr,
+		UserID:     userID,
 		Tier:       tier,
 		Rounds:     0,
 	}

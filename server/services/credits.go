@@ -18,6 +18,7 @@ const (
 	CreditCostVariant5     = 5
 	CreditCostSoulContext  = 1 // additional
 	CreditCostBatchGenerate = 15
+	CreditCostSetup        = 5 // Twitter handle distillation (1 LLM call over many tweets)
 
 	FreeCreditsPerMonth = 50
 	ProCreditsPerMonth  = 5000

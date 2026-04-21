@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import {
   workspaceApi,
   emailAuthApi,
+  ApiError,
   type Workspace,
   type VibeMemory,
   type VibeChatItem,
@@ -82,6 +83,12 @@ export default function VibeWritePage() {
   const [currentView, setCurrentView] = useState<"chat" | "memory">("chat");
   const [soulEnhancedByMsg, setSoulEnhancedByMsg] = useState<Record<string, string[]>>({});
   const [memoryCatsByMsg, setMemoryCatsByMsg] = useState<Record<string, string[]>>({});
+  const [methodologySlugsByMsg, setMethodologySlugsByMsg] = useState<Record<string, string[]>>({});
+  const [outputLangsByMsg, setOutputLangsByMsg] = useState<Record<string, string[]>>({});
+  type VariantItem = { idx: number; content: string; recommended?: boolean; reason?: string; lang?: string };
+  const [variantsByMsg, setVariantsByMsg] = useState<Record<string, VariantItem[]>>({});
+  const [archivedMsgs, setArchivedMsgs] = useState<Set<string>>(new Set());
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [setupName, setSetupName] = useState("");
   const [setupHandle, setSetupHandle] = useState("");
   const [setupCreating, setSetupCreating] = useState(false);
@@ -260,34 +267,143 @@ export default function VibeWritePage() {
       if (!prefill) setInput("");
       setCurrentView("chat");
 
+      // ---- Parse [Tweet]...[/Tweet] markers into structured attached_tweet ----
+      let cleanText = text;
+      let attachedTweet: { url?: string; author_handle?: string; text?: string } | undefined;
+      const tweetMatch = text.match(/\[Tweet\]([\s\S]*?)\[\/Tweet\]/i);
+      if (tweetMatch) {
+        const block = tweetMatch[1].trim();
+        // Optional URL line + body
+        const urlMatch = block.match(/(https?:\/\/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,15})\/status\/\d+)/);
+        attachedTweet = {
+          url: urlMatch?.[1],
+          author_handle: urlMatch?.[2],
+          text: block.replace(/^https?:\/\/\S+\s*/, "").trim() || block,
+        };
+        cleanText = text.replace(tweetMatch[0], "").trim();
+        if (!cleanText) cleanText = "Help me reply";
+      }
+
       const tempUserMsg: VibeChatMsg = {
         id: `temp-${Date.now()}`, chat_id: chatId, role: "user",
         content: text, credits_cost: 0, created_at: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, tempUserMsg]);
 
-      const result = await workspaceApi.sendMessage(chatId, text);
-      setMessages((prev) => [
-        ...prev.filter((m) => m.id !== tempUserMsg.id),
-        result.user_message, result.assistant_message,
-      ]);
+      // Streaming placeholder for assistant
+      const tempAsstId = `temp-asst-${Date.now()}`;
+      const tempAsstMsg: VibeChatMsg = {
+        id: tempAsstId, chat_id: chatId, role: "assistant",
+        content: "", credits_cost: 0, created_at: new Date().toISOString(),
+      };
+      setMessages((prev) => [...prev, tempAsstMsg]);
 
-      if (result.soul_enhanced && result.soul_handles && result.soul_handles.length > 0) {
-        setSoulEnhancedByMsg((prev) => ({
-          ...prev,
-          [result.assistant_message.id]: result.soul_handles || [],
-        }));
-      }
-      if (result.memory_cats && result.memory_cats.length > 0) {
-        setMemoryCatsByMsg((prev) => ({
-          ...prev,
-          [result.assistant_message.id]: result.memory_cats || [],
-        }));
-      }
+      let metaSoulHandles: string[] = [];
+      let metaMemoryCats: string[] = [];
+      let metaMethodologySlugs: string[] = [];
+      let metaOutputLangs: string[] = [];
+      let metaScenario = "";
+      const collectedVariants: VariantItem[] = [];
 
-      setUser((prev) => {
-        if (!prev) return prev;
-        return { ...prev, credits: prev.credits - result.credits_used };
+      await workspaceApi.sendMessageStream(
+        chatId,
+        attachedTweet
+          ? { content: cleanText, attached_tweet: attachedTweet, variant_count: user?.is_pro ? 3 : 1 }
+          : cleanText,
+        {
+        onMeta: (m) => {
+          metaScenario = m.scenario || "";
+        },
+        onContext: (ctx) => {
+          metaSoulHandles = ctx.soul_handles || [];
+          metaMemoryCats = ctx.used_memory_cats || [];
+          metaMethodologySlugs = ctx.methodology_slugs || [];
+          metaOutputLangs = (ctx.output_langs || []).filter((l) => !!l);
+        },
+        onSoulLock: (info) => {
+          // Free user pasted a tweet from a Soul-owning author — prompt upgrade
+          showUpgrade("feature");
+          console.info("[vibe-write] soul lock for @" + info.handle);
+        },
+        onVariant: (v) => {
+          collectedVariants.push(v);
+          // Stash structured variants under the temp message id; rendering
+          // logic checks variantsByMsg first and renders cards instead of markdown.
+          setVariantsByMsg((prev) => ({
+            ...prev,
+            [tempAsstId]: [...collectedVariants].sort((a, b) => a.idx - b.idx),
+          }));
+        },
+        onMemorySuggest: (m) => {
+          setMemories((prev) => {
+            // Append if not already present
+            if (prev.some((x) => x.id === m.id)) return prev;
+            return [...prev, m as VibeMemory];
+          });
+        },
+        onChunk: (token) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempAsstId ? { ...msg, content: msg.content + token } : msg
+            )
+          );
+        },
+        onDone: (info) => {
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempAsstId
+                ? {
+                    ...msg,
+                    id: info.assistant_message_id,
+                    credits_cost: info.credits_used,
+                    content: info.cleaned_content ?? msg.content,
+                    scenario: metaScenario || msg.scenario,
+                  }
+                : msg.id === tempUserMsg.id
+                ? { ...msg, id: msg.id.replace("temp-", "saved-") }
+                : msg
+            )
+          );
+          if (info.pending_memories && info.pending_memories.length > 0) {
+            setMemories((prev) => [...prev, ...info.pending_memories!]);
+          }
+          if (metaSoulHandles.length > 0) {
+            setSoulEnhancedByMsg((prev) => ({
+              ...prev,
+              [info.assistant_message_id]: metaSoulHandles,
+            }));
+          }
+          if (metaMemoryCats.length > 0) {
+            setMemoryCatsByMsg((prev) => ({
+              ...prev,
+              [info.assistant_message_id]: metaMemoryCats,
+            }));
+          }
+          if (metaMethodologySlugs.length > 0) {
+            setMethodologySlugsByMsg((prev) => ({
+              ...prev,
+              [info.assistant_message_id]: metaMethodologySlugs,
+            }));
+          }
+          if (metaOutputLangs.length > 0) {
+            setOutputLangsByMsg((prev) => ({
+              ...prev,
+              [info.assistant_message_id]: metaOutputLangs,
+            }));
+          }
+          // Migrate variants under temp id → real assistant id
+          if (collectedVariants.length > 0) {
+            setVariantsByMsg((prev) => {
+              const next = { ...prev };
+              delete next[tempAsstId];
+              next[info.assistant_message_id] = [...collectedVariants].sort((a, b) => a.idx - b.idx);
+              return next;
+            });
+          }
+          setUser((prev) =>
+            prev ? { ...prev, credits: prev.credits - info.credits_used } : prev
+          );
+        },
       });
 
       setChats((prev) =>
@@ -299,10 +415,13 @@ export default function VibeWritePage() {
       );
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to send";
-      if (msg.includes("credits") || msg.includes("insufficient")) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      if (code === "INSUFFICIENT_CREDITS" || msg.includes("credits") || msg.includes("insufficient")) {
         showUpgrade("credits");
-      } else if (msg.includes("workspace limit")) {
+      } else if (code === "WORKSPACE_LIMIT" || msg.includes("workspace limit")) {
         showUpgrade("workspace");
+      } else if (code === "PRO_REQUIRED") {
+        showUpgrade("memory");
       } else {
         setMessages((prev) => [...prev, {
           id: `error-${Date.now()}`, chat_id: activeChatId || "", role: "assistant",
@@ -502,12 +621,85 @@ export default function VibeWritePage() {
     );
   }
 
-  // Helper: group memories by category
+  // Helper: group memories by category (accepted + legacy without status)
   const memoriesByCategory = MEMORY_CATEGORIES.map((cat) => ({
     ...cat,
     label: t(`cat${cat.key.charAt(0).toUpperCase()}${cat.key.slice(1)}` as Parameters<typeof t>[0]),
-    items: memories.filter((m) => m.category === cat.key),
+    items: memories.filter(
+      (m) => m.category === cat.key && (m.status === "accepted" || !m.status)
+    ),
   }));
+
+  // AI-suggested memories awaiting user review
+  const pendingMemories = memories.filter((m) => m.status === "pending");
+
+  async function reviewPending(memId: string, action: "accept" | "reject") {
+    try {
+      const updated = await workspaceApi.reviewMemory(memId, action);
+      setMemories((prev) => prev.map((m) => (m.id === memId ? updated : m)));
+    } catch {
+      // ignore
+    }
+  }
+
+  async function handleFeedback(msgId: string, value: -1 | 0 | 1) {
+    // Optimistic update
+    setMessages((prev) =>
+      prev.map((m) => (m.id === msgId ? { ...m, feedback: value } : m))
+    );
+    try {
+      await workspaceApi.feedbackMessage(msgId, value);
+    } catch {
+      // Revert on failure
+      setMessages((prev) =>
+        prev.map((m) => (m.id === msgId ? { ...m, feedback: 0 } : m))
+      );
+    }
+  }
+
+  // Copy a string to clipboard, flashing a "copied" indicator under `key`.
+  async function copyToClipboard(text: string, key: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey((cur) => (cur === key ? null : cur)), 1500);
+    } catch {
+      // Fallback: best-effort no-op (clipboard blocked in some browsers/contexts)
+    }
+  }
+
+  function openOnTwitter(text: string) {
+    const url = `https://twitter.com/intent/tweet?text=${encodeURIComponent(text)}`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
+
+  function refineVariant(text: string) {
+    setInput((prev) => {
+      const prefix = prev.trim() ? prev.trim() + "\n\n" : "";
+      return prefix + t("refinePrefix") + "\n" + text;
+    });
+    inputRef.current?.focus();
+  }
+
+  // Save an assistant message into the Archive memory category. If the user
+  // is Free (no archive access), surface the upgrade modal.
+  async function handleSaveToArchive(msg: VibeChatMsg, contentOverride?: string) {
+    if (!activeWsId) return;
+    if (archivedMsgs.has(msg.id)) return;
+    const content = (contentOverride ?? msg.content).trim();
+    if (!content) return;
+    try {
+      const mem = await workspaceApi.createMemory(activeWsId, "archive", content);
+      setMemories((prev) => [...prev, mem]);
+      setArchivedMsgs((prev) => new Set(prev).add(msg.id));
+    } catch (err: unknown) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      const text = err instanceof Error ? err.message : "";
+      if (code === "PRO_REQUIRED" || text.includes("Pro") || text.includes("category")) {
+        showUpgrade("memory");
+      }
+    }
+  }
 
   async function handleSetupCreate() {
     if (!setupName.trim()) return;
@@ -517,9 +709,24 @@ export default function VibeWritePage() {
       const ws = await workspaceApi.create(setupName.trim(), handle || undefined);
       setWorkspaces([ws]);
       setActiveWsId(ws.id);
+
+      // If a Twitter handle was provided, kick off the seed-memory distillation.
+      // Best-effort: failures here do NOT break workspace creation.
+      if (handle) {
+        try {
+          const seed = await workspaceApi.setup(ws.id, handle, false);
+          if (seed.pending_memories?.length) {
+            setMemories((prev) => [...prev, ...seed.pending_memories]);
+          }
+        } catch (seedErr) {
+          // Surface as a non-blocking warning in the console; user can re-run later.
+          console.warn("[vibe-write] setup distillation failed:", seedErr);
+        }
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("workspace limit")) showUpgrade("workspace");
+      const code = err instanceof ApiError ? err.code : undefined;
+      if (code === "WORKSPACE_LIMIT" || msg.includes("workspace limit")) showUpgrade("workspace");
     } finally {
       setSetupCreating(false);
     }
@@ -738,6 +945,41 @@ export default function VibeWritePage() {
                 </div>
               </div>
 
+              {pendingMemories.length > 0 && (
+                <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/5 p-4">
+                  <div className="mb-3 flex items-center gap-2 text-sm font-medium text-amber-300">
+                    ✨ AI suggested {pendingMemories.length} memor{pendingMemories.length === 1 ? "y" : "ies"} for review
+                  </div>
+                  <div className="space-y-2">
+                    {pendingMemories.map((m) => (
+                      <div key={m.id} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-[#0d0d14] p-3">
+                        <div className="flex-1">
+                          <div className="mb-1 flex items-center gap-2 text-[10px] uppercase text-[#64748b]">
+                            <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-400">{m.category}</span>
+                            {m.reason && <span className="italic">— {m.reason}</span>}
+                          </div>
+                          <div className="text-sm text-[#e2e8f0]">{m.content}</div>
+                        </div>
+                        <div className="flex shrink-0 gap-1">
+                          <button
+                            onClick={() => reviewPending(m.id, "accept")}
+                            className="rounded bg-emerald-600 px-2 py-1 text-xs font-medium text-white hover:bg-emerald-500"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => reviewPending(m.id, "reject")}
+                            className="rounded border border-[#2a2a3a] px-2 py-1 text-xs text-[#94a3b8] hover:bg-[#1e1e2e]"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* 5-column grid */}
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
                 {memoriesByCategory.map((cat) => (
@@ -931,9 +1173,133 @@ export default function VibeWritePage() {
                           msg.role === "user" ? "bg-[#8b5cf6] text-white" : "bg-[#1e1e2e] text-[#e2e8f0]"
                         }`}>
                           {msg.role === "assistant" ? (
-                            <div className="chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown></div>
+                            (() => {
+                              const variants = variantsByMsg[msg.id];
+                              if (variants && variants.length > 0) {
+                                return (
+                                  <div className="space-y-3">
+                                    {variants.map((v, i) => {
+                                      const variantKey = `${msg.id}:${v.idx}`;
+                                      return (
+                                        <div
+                                          key={variantKey}
+                                          className={`rounded-xl border p-3 ${
+                                            v.recommended
+                                              ? "border-[#8b5cf6]/50 bg-[#8b5cf6]/5"
+                                              : "border-[#2a2a3a] bg-[#0d0d14]"
+                                          }`}
+                                        >
+                                          <div className="mb-1.5 flex items-center gap-2 text-[11px]">
+                                            <span className={`font-semibold ${v.recommended ? "text-[#a78bfa]" : "text-[#94a3b8]"}`}>
+                                              {v.recommended ? "✦ " : ""}{t("variantLabel", { letter: String.fromCharCode(65 + i) })}
+                                            </span>
+                                            {v.lang && (
+                                              <span className="rounded bg-[#1e1e2e] px-1.5 py-0.5 text-[9px] uppercase tracking-wider text-[#64748b]">
+                                                {v.lang}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <div className="chat-markdown">
+                                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{v.content}</ReactMarkdown>
+                                          </div>
+                                          {v.reason && (
+                                            <p className="mt-1.5 border-t border-[#2a2a3a] pt-1.5 text-[10px] italic text-[#64748b]">
+                                              → {v.reason}
+                                            </p>
+                                          )}
+                                          {!msg.id.startsWith("temp-") && (
+                                            <div className="mt-2 flex flex-wrap gap-1.5">
+                                              <button
+                                                onClick={() => copyToClipboard(v.content, variantKey)}
+                                                className="rounded-md bg-[#1e1e2e] px-2 py-1 text-[10px] text-[#94a3b8] transition-colors hover:bg-[#2a2a3a] hover:text-[#e2e8f0]"
+                                                title={t("copy")}
+                                              >
+                                                {copiedKey === variantKey ? `✓ ${t("copied")}` : `📋 ${t("copy")}`}
+                                              </button>
+                                              <button
+                                                onClick={() => openOnTwitter(v.content)}
+                                                className="rounded-md bg-[#1e1e2e] px-2 py-1 text-[10px] text-[#94a3b8] transition-colors hover:bg-[#2a2a3a] hover:text-[#1d9bf0]"
+                                                title={t("openTwitter")}
+                                              >
+                                                🐦 {t("openTwitter")}
+                                              </button>
+                                              <button
+                                                onClick={() => refineVariant(v.content)}
+                                                className="rounded-md bg-[#1e1e2e] px-2 py-1 text-[10px] text-[#94a3b8] transition-colors hover:bg-[#2a2a3a] hover:text-[#a78bfa]"
+                                                title={t("refine")}
+                                              >
+                                                ✨ {t("refine")}
+                                              </button>
+                                              <button
+                                                onClick={() => handleSaveToArchive(msg, v.content)}
+                                                disabled={archivedMsgs.has(msg.id)}
+                                                className="rounded-md bg-[#1e1e2e] px-2 py-1 text-[10px] text-[#94a3b8] transition-colors hover:bg-[#2a2a3a] hover:text-[#f59e0b] disabled:opacity-50"
+                                                title={t("saveToArchive")}
+                                              >
+                                                {archivedMsgs.has(msg.id) ? `✓ ${t("archived")}` : `📂 ${t("saveToArchive")}`}
+                                              </button>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                );
+                              }
+                              return (
+                                <div className="chat-markdown"><ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown></div>
+                              );
+                            })()
                           ) : (
                             <p className="whitespace-pre-wrap">{msg.content}</p>
+                          )}
+                          {msg.role === "assistant" && !msg.id.startsWith("temp-") && !msg.id.startsWith("error-") && (
+                            <div className="mt-2 flex items-center gap-1 border-t border-[#2a2a3a] pt-2 text-[#64748b]">
+                              <button
+                                onClick={() => handleFeedback(msg.id, msg.feedback === 1 ? 0 : 1)}
+                                className={`rounded px-1.5 py-0.5 text-xs transition-colors ${
+                                  msg.feedback === 1 ? "bg-emerald-500/20 text-emerald-400" : "hover:bg-[#2a2a3a]"
+                                }`}
+                                title="Helpful"
+                              >
+                                👍
+                              </button>
+                              <button
+                                onClick={() => handleFeedback(msg.id, msg.feedback === -1 ? 0 : -1)}
+                                className={`rounded px-1.5 py-0.5 text-xs transition-colors ${
+                                  msg.feedback === -1 ? "bg-red-500/20 text-red-400" : "hover:bg-[#2a2a3a]"
+                                }`}
+                                title="Not helpful"
+                              >
+                                👎
+                              </button>
+                              {!variantsByMsg[msg.id] && (
+                                <>
+                                  <button
+                                    onClick={() => copyToClipboard(displayContent, `msg:${msg.id}`)}
+                                    className="rounded px-1.5 py-0.5 text-xs transition-colors hover:bg-[#2a2a3a]"
+                                    title={t("copy")}
+                                  >
+                                    {copiedKey === `msg:${msg.id}` ? "✓" : "📋"}
+                                  </button>
+                                  <button
+                                    onClick={() => handleSaveToArchive(msg)}
+                                    disabled={archivedMsgs.has(msg.id)}
+                                    className={`rounded px-1.5 py-0.5 text-xs transition-colors disabled:opacity-50 ${
+                                      archivedMsgs.has(msg.id) ? "text-[#f59e0b]" : "hover:bg-[#2a2a3a]"
+                                    }`}
+                                    title={t("saveToArchive")}
+                                  >
+                                    {archivedMsgs.has(msg.id) ? "✓ 📂" : "📂"}
+                                  </button>
+                                </>
+                              )}
+                              {msg.scenario && msg.scenario !== "general" && (
+                                <span className="ml-auto text-[10px] uppercase text-[#475569]">
+                                  {msg.scenario}
+                                </span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </div>
@@ -1223,8 +1589,14 @@ export default function VibeWritePage() {
                 const usedSouls = Array.from(new Set(Object.values(soulEnhancedByMsg).flat()));
                 const usedCatKeys = Array.from(new Set(Object.values(memoryCatsByMsg).flat()));
                 const usedCats = MEMORY_CATEGORIES.filter((c) => usedCatKeys.includes(c.key));
+                const usedMethodologies = Array.from(new Set(Object.values(methodologySlugsByMsg).flat()));
+                const usedLangs = Array.from(new Set(Object.values(outputLangsByMsg).flat()));
                 const totalCredits = messages.reduce((sum, m) => sum + (m.credits_cost ?? 0), 0);
-                const hasContext = usedSouls.length > 0 || usedCats.length > 0;
+                const hasContext =
+                  usedSouls.length > 0 ||
+                  usedCats.length > 0 ||
+                  usedMethodologies.length > 0 ||
+                  usedLangs.length > 0;
                 return (
                   <div className="space-y-4">
                     {/* Stats row */}
@@ -1273,6 +1645,41 @@ export default function VibeWritePage() {
                                   style={{ backgroundColor: `${cat.color}15`, color: cat.color }}
                                 >
                                   {cat.icon} {t(`cat${cat.key.charAt(0).toUpperCase()}${cat.key.slice(1)}` as Parameters<typeof t>[0])}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Methodology slugs */}
+                        {usedMethodologies.length > 0 && (
+                          <div>
+                            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">{t("ctxMethodology")}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {usedMethodologies.map((slug) => (
+                                <span
+                                  key={slug}
+                                  className="inline-flex items-center gap-1 rounded-full bg-[#a78bfa]/15 px-2.5 py-1 text-[11px] text-[#a78bfa]"
+                                  title={slug}
+                                >
+                                  📚 {slug}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Output languages */}
+                        {usedLangs.length > 0 && (
+                          <div>
+                            <div className="mb-2 text-[10px] font-semibold uppercase tracking-wider text-[#64748b]">{t("ctxOutputLangs")}</div>
+                            <div className="flex flex-wrap gap-1.5">
+                              {usedLangs.map((lang) => (
+                                <span
+                                  key={lang}
+                                  className="inline-flex items-center gap-1 rounded-full bg-[#10b981]/15 px-2.5 py-1 text-[11px] uppercase text-[#10b981]"
+                                >
+                                  🌐 {lang}
                                 </span>
                               ))}
                             </div>

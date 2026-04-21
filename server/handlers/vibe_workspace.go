@@ -12,6 +12,7 @@ import (
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
+	"github.com/ensoul-labs/ensoul-server/services/methodology"
 	"github.com/ensoul-labs/ensoul-server/util"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
@@ -66,8 +67,9 @@ func VibeWorkspaceCreate(c *gin.Context) {
 	}
 	if int(count) >= maxWs {
 		c.JSON(http.StatusForbidden, gin.H{
-			"error": "workspace limit reached",
-			"limit": maxWs,
+			"error":  "workspace limit reached",
+			"code":   "WORKSPACE_LIMIT",
+			"limit":  maxWs,
 			"is_pro": user.IsPro(),
 		})
 		return
@@ -190,7 +192,11 @@ func VibeMemoryList(c *gin.Context) {
 	}
 
 	var memories []models.VibeMemory
-	database.DB.Where("workspace_id = ?", wsID).Order("category ASC, sort_order ASC").Find(&memories)
+	q := database.DB.Where("workspace_id = ?", wsID)
+	if status := c.Query("status"); status != "" {
+		q = q.Where("status = ?", status)
+	}
+	q.Order("status ASC, category ASC, sort_order ASC").Find(&memories)
 
 	c.JSON(http.StatusOK, gin.H{"memories": memories})
 }
@@ -235,6 +241,7 @@ func VibeMemoryCreate(c *gin.Context) {
 	if !user.IsPro() && !freeMemoryCategories[req.Category] {
 		c.JSON(http.StatusForbidden, gin.H{
 			"error":    "Pro required for this memory category",
+			"code":     "PRO_REQUIRED",
 			"category": req.Category,
 		})
 		return
@@ -321,6 +328,64 @@ func VibeMemoryDelete(c *gin.Context) {
 
 	database.DB.Delete(&mem)
 	c.JSON(http.StatusOK, gin.H{"message": "memory deleted"})
+}
+
+// VibeMemoryReview handles POST /api/vibe-write/memories/:memId/review
+// Body: { "action": "accept" | "reject" }. Used to triage AI-suggested
+// pending memories. Accept makes them eligible for prompt injection;
+// reject keeps them in DB (for analytics) but excludes them.
+func VibeMemoryReview(c *gin.Context) {
+	userID, _, ok := getEmailSessionUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "login required"})
+		return
+	}
+	memID, err := uuid.Parse(c.Param("memId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid memory ID"})
+		return
+	}
+	var mem models.VibeMemory
+	if err := database.DB.First(&mem, "id = ?", memID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "memory not found"})
+		return
+	}
+	var ws models.VibeWorkspace
+	if err := database.DB.Where("id = ? AND user_id = ?", mem.WorkspaceID, userID).First(&ws).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not your memory"})
+		return
+	}
+
+	var req struct {
+		Action  string `json:"action" binding:"required"`
+		Content string `json:"content"` // optional edited content on accept
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action required"})
+		return
+	}
+
+	var newStatus string
+	switch req.Action {
+	case "accept":
+		newStatus = models.MemoryStatusAccepted
+	case "reject":
+		newStatus = models.MemoryStatusRejected
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "action must be accept or reject"})
+		return
+	}
+
+	updates := map[string]interface{}{"status": newStatus}
+	if newStatus == models.MemoryStatusAccepted && strings.TrimSpace(req.Content) != "" {
+		updates["content"] = req.Content
+	}
+	if err := database.DB.Model(&mem).Updates(updates).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	database.DB.First(&mem, "id = ?", memID)
+	c.JSON(http.StatusOK, mem)
 }
 
 // ── Chat endpoints ────────────────────────────────────────────
@@ -497,7 +562,11 @@ func VibeChatSendMessage(c *gin.Context) {
 	// Deduct credits
 	creditCost := services.CreditCostMessage
 	if err := services.DeductCredits(userID, creditCost); err != nil {
-		c.JSON(http.StatusPaymentRequired, gin.H{"error": err.Error(), "upgrade": true})
+		c.JSON(http.StatusPaymentRequired, gin.H{
+			"error":   err.Error(),
+			"code":    "INSUFFICIENT_CREDITS",
+			"upgrade": true,
+		})
 		return
 	}
 
@@ -534,11 +603,24 @@ func VibeChatSendMessage(c *gin.Context) {
 
 	// --- Build LLM context ---
 
-	// 1. Load workspace memories as system context
+	// 1. Load workspace memories as system context (only accepted ones)
 	var memories []models.VibeMemory
-	database.DB.Where("workspace_id = ?", chat.WorkspaceID).Order("category ASC, sort_order ASC").Find(&memories)
+	database.DB.Where("workspace_id = ? AND status = ?", chat.WorkspaceID, models.MemoryStatusAccepted).
+		Order("category ASC, sort_order ASC").Find(&memories)
 
 	systemPrompt, usedMemoryCats := buildVibeWriteSystemPrompt(memories)
+
+	scenario := methodology.ScenarioGeneral
+	// 1a. Mentor methodology: scenario-routed injection (heuristics always; refs/models on hit)
+	if mLoad, mErr := methodology.Load(database.DB, req.Content, methodology.LoadOptions{MaxBodyChars: 12000}); mErr == nil && mLoad != nil {
+		if section := mLoad.RenderPromptSection(); section != "" {
+			systemPrompt += section
+			util.Log.Debug("[vibe-write] mentor methodology injected user=%s scenario=%s slugs=%d", userID, mLoad.Scenario, len(mLoad.UsedSlugs))
+		}
+		scenario = mLoad.Scenario
+	} else if mErr != nil {
+		util.Log.Warn("[vibe-write] mentor methodology load failed (non-fatal): %v", mErr)
+	}
 
 	// 1b. Soul integration: extract @handles from user message, load Soul data if available
 	soulContext, soulHandles := extractSoulContext(req.Content)
@@ -576,15 +658,18 @@ func VibeChatSendMessage(c *gin.Context) {
 		return
 	}
 
+	cleanedContent, suggestions := services.ExtractMemorySuggestions(assistantContent)
+
 	assistantMsg := models.VibeChatMessage{
 		ChatID:      chatID,
 		Role:        "assistant",
-		Content:     assistantContent,
+		Content:     cleanedContent,
 		CreditsCost: creditCost,
 		UsedSoul:    len(soulHandles) > 0,
 		SoulHandles: soulHandles,
 		MemoryCats:  usedMemoryCats,
 		Model:       llmModel,
+		Scenario:    string(scenario),
 	}
 	if err := database.DB.Create(&assistantMsg).Error; err != nil {
 		if refundErr := refundVibeWriteCredits(userID, creditCost); refundErr != nil {
@@ -597,14 +682,43 @@ func VibeChatSendMessage(c *gin.Context) {
 		return
 	}
 
+	pendingMems := persistMemorySuggestions(chat.WorkspaceID, suggestions)
+
 	c.JSON(http.StatusOK, gin.H{
-		"user_message":      userMsg,
-		"assistant_message": assistantMsg,
-		"credits_used":      creditCost,
-		"soul_enhanced":     len(soulHandles) > 0,
-		"soul_handles":      soulHandles,
-		"memory_cats":       usedMemoryCats,
+		"user_message":        userMsg,
+		"assistant_message":   assistantMsg,
+		"credits_used":        creditCost,
+		"soul_enhanced":       len(soulHandles) > 0,
+		"soul_handles":        soulHandles,
+		"memory_cats":         usedMemoryCats,
+		"pending_memories":    pendingMems,
 	})
+}
+
+// persistMemorySuggestions creates VibeMemory rows in pending status for each
+// AI-generated suggestion. Returns the created rows (with IDs) for client
+// display. Failures are logged but non-fatal.
+func persistMemorySuggestions(workspaceID uuid.UUID, suggestions []services.MemorySuggestion) []models.VibeMemory {
+	if len(suggestions) == 0 {
+		return nil
+	}
+	out := make([]models.VibeMemory, 0, len(suggestions))
+	for _, s := range suggestions {
+		mem := models.VibeMemory{
+			WorkspaceID: workspaceID,
+			Category:    s.Category,
+			Content:     s.Content,
+			Reason:      s.Reason,
+			Source:      "ai",
+			Status:      models.MemoryStatusPending,
+		}
+		if err := database.DB.Create(&mem).Error; err != nil {
+			util.Log.Warn("[vibe-write] persist pending memory failed ws=%s cat=%s err=%v", workspaceID, s.Category, err)
+			continue
+		}
+		out = append(out, mem)
+	}
+	return out
 }
 
 // buildVibeWriteSystemPrompt constructs the system prompt from workspace memories.
@@ -627,28 +741,8 @@ Automatically detect what the user needs from their message. Do NOT ask them to 
 - STRATEGY: User asks about growth, algorithm, or tactics. Give actionable advice with specifics.
 - MEMORY: User wants to update profile, rules, or knowledge. Help them refine and confirm.
 
-## Writing Methodology (Mentor Layer)
-Apply these techniques automatically — do NOT explain them unless asked:
-
-### Hook Techniques
-- Curiosity Gap: Open with an intriguing statement that makes readers want to know more
-- Data Anchor: Lead with a specific number or concrete fact ("47 agents" > "many agents")
-- Contrarian Take: Challenge a common assumption to generate engagement
-- Story Hook: Start with a mini-narrative that draws readers in
-
-### X/Twitter Algorithm Awareness
-- Replies that spark dialogue get ~150x more reach than passive agreements
-- End replies with a question or fresh angle, never with a conclusion
-- External links in tweet body reduce reach 30-50%; place links in first reply instead
-- First 30 minutes of engagement are critical for algorithm visibility
-- Threads with strong hooks on each tweet outperform info-dump threads
-- Optimal lengths: Standalone tweets 200-250 chars, replies 100-200 chars
-
-### Quality Checks (auto-apply)
-- NEVER use hollow adjectives: "revolutionary", "groundbreaking", "game-changing" → replace with concrete data
-- Every tweet must have a clear call-to-action or conversation hook
-- Check for accidental promotional tone — show, don't pitch
-- Ensure the hook appears in the very first line
+## Writing Methodology
+A separate "Mentor Methodology" section will be injected below this prompt with decision heuristics, mental models, and reference manuals (sourced from x-mentor-skill@v2.0). Apply those naturally — do NOT recite them.
 
 ## Output Format
 - For reply variants: Present 2-3 versions labeled "Version A", "Version B", etc. Mark one as "✦ Recommended" and explain the reasoning underneath each variant
@@ -790,4 +884,57 @@ func refundVibeWriteCredits(userID uuid.UUID, creditCost int) error {
 	}
 	return database.DB.Model(&models.User{}).Where("id = ?", userID).
 		Update("credits", gorm.Expr("credits + ?", creditCost)).Error
+}
+
+// VibeMessageFeedback handles POST /api/vibe-write/messages/:msgId/feedback
+// Body: { "value": 1 | 0 | -1 }. Used by the user to rate an assistant
+// message; aggregated by scenario for methodology iteration.
+func VibeMessageFeedback(c *gin.Context) {
+	userID, _, ok := getEmailSessionUser(c)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "login required"})
+		return
+	}
+	msgID, err := uuid.Parse(c.Param("msgId"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid message ID"})
+		return
+	}
+	var msg models.VibeChatMessage
+	if err := database.DB.First(&msg, "id = ?", msgID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "message not found"})
+		return
+	}
+	if msg.Role != "assistant" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "feedback only on assistant messages"})
+		return
+	}
+	// Verify ownership via chat → workspace → user
+	var chat models.VibeChat
+	if err := database.DB.First(&chat, "id = ?", msg.ChatID).Error; err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "chat not found"})
+		return
+	}
+	var ws models.VibeWorkspace
+	if err := database.DB.Where("id = ? AND user_id = ?", chat.WorkspaceID, userID).First(&ws).Error; err != nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "not your message"})
+		return
+	}
+
+	var req struct {
+		Value int `json:"value"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "value required"})
+		return
+	}
+	if req.Value < -1 || req.Value > 1 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "value must be -1, 0, or 1"})
+		return
+	}
+	if err := database.DB.Model(&msg).Update("feedback", req.Value).Error; err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"ok": true, "feedback": req.Value})
 }

@@ -29,6 +29,14 @@ const (
 	MemoryCategoryRules     = "rules"
 )
 
+// Memory status constants. Pending memories are AI suggestions awaiting user
+// review and are NOT injected into the LLM prompt until accepted.
+const (
+	MemoryStatusPending  = "pending"
+	MemoryStatusAccepted = "accepted"
+	MemoryStatusRejected = "rejected"
+)
+
 // VibeMemory stores structured memories for a workspace.
 // Five categories: profile, knowledge, network, archive, rules.
 // Free users: profile + rules only. Pro: all 5.
@@ -37,7 +45,9 @@ type VibeMemory struct {
 	WorkspaceID uuid.UUID      `gorm:"type:uuid;not null;index" json:"workspace_id"`
 	Category    string         `gorm:"type:varchar(20);not null;index" json:"category"`
 	Content     string         `gorm:"type:text;not null" json:"content"`
-	Source      string         `gorm:"type:varchar(20);default:'user'" json:"source"` // user | ai | import
+	Source      string         `gorm:"type:varchar(20);default:'user'" json:"source"`           // user | ai | import
+	Status      string         `gorm:"type:varchar(20);default:'accepted';index" json:"status"` // pending | accepted | rejected
+	Reason      string         `gorm:"type:text" json:"reason,omitempty"`                       // why AI suggested this
 	SortOrder   int            `gorm:"default:0" json:"sort_order"`
 	CreatedAt   time.Time      `json:"created_at"`
 	UpdatedAt   time.Time      `json:"updated_at"`
@@ -66,5 +76,7 @@ type VibeChatMessage struct {
 	SoulHandles []string `gorm:"type:jsonb;serializer:json" json:"soul_handles,omitempty"`
 	MemoryCats  []string `gorm:"type:jsonb;serializer:json" json:"memory_cats,omitempty"`
 	Model       string   `gorm:"type:varchar(50)" json:"model,omitempty"`
+	Scenario    string   `gorm:"type:varchar(20);index" json:"scenario,omitempty"` // mentor methodology scenario tag
+	Feedback    int      `gorm:"default:0;index" json:"feedback"`                  // -1 thumbs-down, 0 none, 1 thumbs-up
 	CreatedAt      time.Time `json:"created_at"`
 }

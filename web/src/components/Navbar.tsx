@@ -149,6 +149,13 @@ export default function Navbar() {
                       <span>📊</span>
                       <span>{t("protocol")}</span>
                     </Link>
+                    <Link
+                      href="/settings"
+                      className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                    >
+                      <span>⚙️</span>
+                      <span>{t("settings")}</span>
+                    </Link>
                     <div className="border-t border-[#1e1e2e]" />
                     <button
                       onClick={handleEmailLogout}

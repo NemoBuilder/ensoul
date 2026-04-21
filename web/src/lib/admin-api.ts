@@ -465,3 +465,102 @@ export const adminAuditApi = {
     );
   },
 };
+
+// ── Methodology API ────────────────────────────────────────────
+
+export interface MentorMethodology {
+  id: string;
+  category: "reference" | "mental_model" | "heuristic" | "routing";
+  slug: string;
+  locale: string;
+  title: string;
+  summary: string;
+  body_md: string;
+  tags: string;
+  source: string;
+  version: string;
+  enabled: boolean;
+  priority: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MethodologyStat {
+  category: string;
+  source: string;
+  n: number;
+}
+
+export interface MethodologyListResponse {
+  records: MentorMethodology[];
+  total: number;
+  stats: MethodologyStat[];
+}
+
+export interface MethodologyWriteReq {
+  category: string;
+  slug: string;
+  locale?: string;
+  title: string;
+  summary?: string;
+  body_md: string;
+  tags?: string;
+  priority?: number;
+  enabled?: boolean;
+}
+
+export interface MethodologyPreviewResponse {
+  scenario: string;
+  used_slugs: string[];
+  heuristics: number;
+  references: number;
+  mental_models: number;
+  prompt_chars: number;
+  prompt: string;
+}
+
+export const adminMethodologyApi = {
+  list: (params: {
+    category?: string;
+    source?: string;
+    locale?: string;
+    enabled?: string;
+    q?: string;
+  } = {}) => {
+    const qs = new URLSearchParams();
+    Object.entries(params).forEach(([k, v]) => {
+      if (v !== undefined && v !== "") qs.set(k, String(v));
+    });
+    return adminFetch<MethodologyListResponse>(`/api/admin/methodology?${qs}`);
+  },
+  get: (id: string) =>
+    adminFetch<MentorMethodology>(`/api/admin/methodology/${id}`),
+  create: (data: MethodologyWriteReq) =>
+    adminFetch<MentorMethodology>(`/api/admin/methodology`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  update: (id: string, data: MethodologyWriteReq, force = false) =>
+    adminFetch<MentorMethodology>(
+      `/api/admin/methodology/${id}${force ? "?force=true" : ""}`,
+      {
+        method: "PUT",
+        body: JSON.stringify(data),
+      }
+    ),
+  delete: (id: string, hard = false) =>
+    adminFetch<{ ok: boolean; hard: boolean; id: string }>(
+      `/api/admin/methodology/${id}${hard ? "?hard=true" : ""}`,
+      { method: "DELETE" }
+    ),
+  preview: (message: string) =>
+    adminFetch<MethodologyPreviewResponse>(`/api/admin/methodology/preview`, {
+      method: "POST",
+      body: JSON.stringify({ message }),
+    }),
+  feedback: () =>
+    adminFetch<{
+      window_days: number;
+      rows: { scenario: string; up: number; down: number; total: number }[];
+    }>(`/api/admin/methodology/feedback`),
+};
