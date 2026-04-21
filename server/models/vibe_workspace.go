@@ -57,12 +57,14 @@ type VibeChat struct {
 
 // VibeChatMessage represents a message in a Vibe Write chat.
 type VibeChatMessage struct {
-	ID          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	ChatID      uuid.UUID `gorm:"type:uuid;not null;index" json:"chat_id"`
-	Role        string    `gorm:"type:varchar(20);not null" json:"role"` // user | assistant
-	Content     string    `gorm:"type:text;not null" json:"content"`
-	CreditsCost int       `gorm:"default:0" json:"credits_cost"`
-	UsedSoul    bool      `gorm:"default:false" json:"used_soul"`
-	Model       string    `gorm:"type:varchar(50)" json:"model,omitempty"`
-	CreatedAt   time.Time `json:"created_at"`
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ChatID         uuid.UUID `gorm:"type:uuid;not null;index" json:"chat_id"`
+	Role           string    `gorm:"type:varchar(20);not null" json:"role"` // user | assistant
+	Content        string    `gorm:"type:text;not null" json:"content"`
+	CreditsCost    int       `gorm:"default:0" json:"credits_cost"`
+	UsedSoul    bool     `gorm:"default:false" json:"used_soul"`
+	SoulHandles []string `gorm:"type:jsonb;serializer:json" json:"soul_handles,omitempty"`
+	MemoryCats  []string `gorm:"type:jsonb;serializer:json" json:"memory_cats,omitempty"`
+	Model       string   `gorm:"type:varchar(50)" json:"model,omitempty"`
+	CreatedAt      time.Time `json:"created_at"`
 }

@@ -941,6 +941,8 @@ export interface VibeChatMsg {
   role: "user" | "assistant";
   content: string;
   credits_cost: number;
+  soul_handles?: string[];
+  memory_cats?: string[];
   created_at: string;
 }
 
@@ -1000,14 +1002,24 @@ export const workspaceApi = {
       method: "DELETE",
     }),
 
-  getMessages: (chatId: string) =>
-    apiFetch<{ messages: VibeChatMsg[] }>(`/api/vibe-write/chats/${chatId}/messages`),
+  getMessages: (chatId: string, params?: { limit?: number; before?: string }) => {
+    const query = new URLSearchParams();
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.before) query.set("before", params.before);
+    const qs = query.toString();
+    return apiFetch<{ messages: VibeChatMsg[]; has_more?: boolean }>(
+      `/api/vibe-write/chats/${chatId}/messages${qs ? `?${qs}` : ""}`
+    );
+  },
 
   sendMessage: (chatId: string, content: string) =>
     apiFetch<{
       user_message: VibeChatMsg;
       assistant_message: VibeChatMsg;
       credits_used: number;
+      soul_enhanced?: boolean;
+      soul_handles?: string[];
+      memory_cats?: string[];
     }>(`/api/vibe-write/chats/${chatId}/messages`, {
       method: "POST",
       body: JSON.stringify({ content }),

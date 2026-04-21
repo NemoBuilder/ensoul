@@ -417,6 +417,21 @@ func CallVibeWriteLLMJSON(messages []ChatMessage, maxTokens int, temperature flo
 	return parseLLMJSON(raw, result)
 }
 
+// StreamVibeWriteLLM streams tokens using the Vibe Write LLM config (VibeWriteLLM()).
+func StreamVibeWriteLLM(messages []ChatMessage, maxTokens int, temperature float64, onChunk func(string)) error {
+	provider, apiKey, model, baseURL := config.Cfg.VibeWriteLLM()
+
+	if apiKey == "" {
+		return fmt.Errorf("VIBE_WRITE_LLM_API_KEY (or LLM_API_KEY) not configured")
+	}
+
+	provider = strings.ToLower(provider)
+	if provider == "claude" || provider == "anthropic" {
+		return streamClaudeWith(apiKey, model, messages, maxTokens, temperature, onChunk)
+	}
+	return streamOpenAIWith(apiKey, model, baseURL, messages, maxTokens, temperature, onChunk)
+}
+
 // ────────────────────────────────────────────────────────────────
 // Shared helpers
 // ────────────────────────────────────────────────────────────────
@@ -558,4 +573,125 @@ func callClaudeWith(apiKey, model string, messages []ChatMessage, maxTokens int,
 		claudeResp.Usage.InputTokens, claudeResp.Usage.OutputTokens)
 
 	return claudeResp.Content[0].Text, nil
+}
+
+// streamOpenAIWith is the parameterized streaming version (uses explicit apiKey/model/baseURL).
+func streamOpenAIWith(apiKey, model, baseURL string, messages []ChatMessage, maxTokens int, temperature float64, onChunk func(string)) error {
+	if baseURL == "" {
+		baseURL = "https://api.openai.com/v1"
+	}
+	reqBody := ChatRequest{
+		Model:       model,
+		Messages:    messages,
+		MaxTokens:   maxTokens,
+		Temperature: temperature,
+		Stream:      true,
+	}
+	body, _ := json.Marshal(reqBody)
+	url := strings.TrimRight(baseURL, "/") + "/chat/completions"
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("LLM streaming request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("LLM API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			break
+		}
+		var chunk StreamChunk
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue
+		}
+		for _, choice := range chunk.Choices {
+			if choice.Delta.Content != "" {
+				onChunk(choice.Delta.Content)
+			}
+		}
+	}
+	return scanner.Err()
+}
+
+// streamClaudeWith is the parameterized streaming version for Anthropic Claude.
+func streamClaudeWith(apiKey, model string, messages []ChatMessage, maxTokens int, temperature float64, onChunk func(string)) error {
+	var system string
+	var userMessages []ChatMessage
+	for _, m := range messages {
+		if m.Role == "system" {
+			system = m.Content
+		} else {
+			userMessages = append(userMessages, m)
+		}
+	}
+	if maxTokens == 0 {
+		maxTokens = 4096
+	}
+	reqBody := claudeRequest{
+		Model:       model,
+		MaxTokens:   maxTokens,
+		System:      system,
+		Messages:    userMessages,
+		Temperature: temperature,
+		Stream:      true,
+	}
+	body, _ := json.Marshal(reqBody)
+
+	req, err := http.NewRequest("POST", "https://api.anthropic.com/v1/messages", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("x-api-key", apiKey)
+	req.Header.Set("anthropic-version", "2023-06-01")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("Claude streaming request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("Claude API error (status %d): %s", resp.StatusCode, string(respBody))
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		var event map[string]interface{}
+		if err := json.Unmarshal([]byte(data), &event); err != nil {
+			continue
+		}
+		if et, _ := event["type"].(string); et == "content_block_delta" {
+			if delta, ok := event["delta"].(map[string]interface{}); ok {
+				if text, ok := delta["text"].(string); ok && text != "" {
+					onChunk(text)
+				}
+			}
+		}
+	}
+	return scanner.Err()
 }
