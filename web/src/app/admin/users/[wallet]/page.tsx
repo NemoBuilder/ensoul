@@ -4,7 +4,9 @@ import { useState, useEffect, useCallback } from "react";
 import { useRouter, useParams } from "next/navigation";
 import {
   adminUserApi,
+  adminGiftProApi,
   type AdminUserDetailResponse,
+  type GiftProLog,
 } from "@/lib/admin-api";
 
 // ── Confirm Modal ──────────────────────────────────────────────
@@ -103,6 +105,7 @@ export default function AdminUserDetailPage() {
     | "extend"
     | "revoke"
     | "note"
+    | "giftPro"
   >(null);
   const [modalLoading, setModalLoading] = useState(false);
   const [banReason, setBanReason] = useState("");
@@ -112,6 +115,9 @@ export default function AdminUserDetailPage() {
   const [extendDays, setExtendDays] = useState(30);
   const [extendReason, setExtendReason] = useState("");
   const [noteText, setNoteText] = useState("");
+  const [giftMonths, setGiftMonths] = useState(1);
+  const [giftReason, setGiftReason] = useState("");
+  const [giftLogs, setGiftLogs] = useState<GiftProLog[]>([]);
 
   const fetchDetail = useCallback(async () => {
     try {
@@ -127,9 +133,19 @@ export default function AdminUserDetailPage() {
     }
   }, [wallet]);
 
+  const fetchGiftLogs = useCallback(async () => {
+    try {
+      const res = await adminGiftProApi.listLogs({ user: wallet, page_size: 20 });
+      setGiftLogs(res.items);
+    } catch {
+      setGiftLogs([]);
+    }
+  }, [wallet]);
+
   useEffect(() => {
     fetchDetail();
-  }, [fetchDetail]);
+    fetchGiftLogs();
+  }, [fetchDetail, fetchGiftLogs]);
 
   const handleAction = async (action: () => Promise<unknown>) => {
     try {
@@ -137,6 +153,7 @@ export default function AdminUserDetailPage() {
       await action();
       setModal(null);
       fetchDetail();
+      fetchGiftLogs();
     } catch (err) {
       alert(err instanceof Error ? err.message : "Action failed");
     } finally {
@@ -366,6 +383,47 @@ export default function AdminUserDetailPage() {
         )}
       </div>
 
+      {/* ── Gift Pro (operates on User.ProExpiresAt directly) ── */}
+      <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
+            <span>🎁</span> Gift Pro
+          </h2>
+          <button
+            onClick={() => { setGiftMonths(1); setGiftReason(""); setModal("giftPro"); }}
+            className="rounded-lg bg-[#8b5cf6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#7c3aed]"
+          >
+            Gift Pro
+          </button>
+        </div>
+        <p className="mb-3 text-xs text-[#64748b]">
+          Pro expires at: <span className="text-[#94a3b8]">
+            {user.pro_expires_at ? new Date(user.pro_expires_at).toLocaleString() : "—"}
+          </span>
+        </p>
+        {giftLogs.length === 0 ? (
+          <p className="text-xs text-[#475569]">No gift records yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {giftLogs.map((g) => (
+              <div key={g.id} className="flex flex-wrap items-center gap-2 text-xs text-[#94a3b8]">
+                <span className="rounded-full bg-purple-500/10 px-1.5 py-0.5 text-[10px] text-purple-400">
+                  +{g.months}mo
+                </span>
+                <span className="text-[#64748b]">by {g.admin_name}</span>
+                <span className="text-[#475569]">
+                  → {new Date(g.new_expires_at).toLocaleDateString()}
+                </span>
+                {g.reason && <span className="text-[#64748b] italic">— {g.reason}</span>}
+                <span className="ml-auto text-[10px] text-[#475569]">
+                  {new Date(g.created_at).toLocaleDateString()}
+                </span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
       {/* ── Vibe Write Settings ────────────────────────────── */}
       <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
         <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
@@ -552,6 +610,53 @@ export default function AdminUserDetailPage() {
               className="w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-2 text-sm text-[#e2e8f0] outline-none"
               rows={2}
             />
+          </div>
+        </ConfirmModal>
+      )}
+
+      {/* Gift Pro Modal */}
+      {modal === "giftPro" && (
+        <ConfirmModal
+          title="🎁 Gift Pro"
+          confirmLabel={`Gift +${giftMonths}mo`}
+          confirmColor="bg-purple-600 hover:bg-purple-700"
+          onConfirm={() => handleAction(() => adminGiftProApi.gift(wallet, giftMonths, giftReason))}
+          onCancel={() => setModal(null)}
+          loading={modalLoading}
+        >
+          <div className="space-y-3">
+            <p className="text-xs text-[#64748b]">
+              Adds months on top of current expiry (or starts from now if expired). Idempotent — every call extends.
+            </p>
+            <div>
+              <label className="mb-1 block text-xs text-[#64748b]">Months</label>
+              <div className="flex gap-2">
+                {[1, 3, 6, 12].map((m) => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setGiftMonths(m)}
+                    className={`rounded-lg border px-3 py-1.5 text-xs ${
+                      giftMonths === m
+                        ? "border-[#8b5cf6] bg-[#8b5cf6]/20 text-[#a78bfa]"
+                        : "border-[#1e1e2e] text-[#94a3b8] hover:bg-[#1e1e2e]"
+                    }`}
+                  >
+                    {m}mo
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-xs text-[#64748b]">Reason</label>
+              <input
+                type="text"
+                placeholder="e.g. KOL partnership / support compensation"
+                value={giftReason}
+                onChange={(e) => setGiftReason(e.target.value)}
+                className="w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-2 text-sm text-[#e2e8f0] outline-none"
+              />
+            </div>
           </div>
         </ConfirmModal>
       )}

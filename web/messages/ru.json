@@ -505,6 +505,8 @@
     "catNetwork": "Network",
     "catArchive": "Archive",
     "catRules": "Writing Rules",
+    "downgradedToast": "Saved to Profile (upgrade Pro to unlock {category})",
+    "downgradedToastUpgrade": "Upgrade to Pro",
     "addMemoryPrompt": "Enter memory content:",
     "noMemories": "No memories yet",
     "add": "Add",
@@ -550,7 +552,13 @@
     "refinePrefix": "Refine this version:",
     "variantLabel": "Version {letter}",
     "ctxMethodology": "Methodology",
-    "ctxOutputLangs": "Output Languages"
+    "ctxOutputLangs": "Output Languages",
+    "pro": "Pro",
+    "proRequired": "Upgrade to Pro to unlock this category",
+    "openMemory": "Open this workspace memory",
+    "backToChat": "Back to chat",
+    "clickForMemory": "Click to view memory",
+    "switchWorkspace": "Switch workspace"
   },
   "Upgrade": {
     "title": "Перейти на Pro",
@@ -566,7 +574,9 @@
     "checkoutError": "Не удалось начать оплату. Попробуйте снова.",
     "maybeLater": "Позже",
     "processing": "Обработка...",
-    "upgradePro": "Перейти на Pro"
+    "upgradePro": "Перейти на Pro",
+    "soulEnhanced": "Soul context boost when replying to KOLs",
+    "variants3": "3 reply variants"
   },
   "Settings": {
     "title": "Настройки",

@@ -89,6 +89,9 @@ export default function VibeWritePage() {
   const [variantsByMsg, setVariantsByMsg] = useState<Record<string, VariantItem[]>>({});
   const [archivedMsgs, setArchivedMsgs] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  // Transient toast shown when the backend silently downgraded a Pro-only
+  // memory category to `profile` (Free user). Auto-dismisses.
+  const [downgradeToast, setDowngradeToast] = useState<string | null>(null);
   const [setupName, setSetupName] = useState("");
   const [setupHandle, setSetupHandle] = useState("");
   const [setupCreating, setSetupCreating] = useState(false);
@@ -101,12 +104,25 @@ export default function VibeWritePage() {
   const chatsReqSeq = useRef(0);
   const memoriesReqSeq = useRef(0);
   const messagesReqSeq = useRef(0);
+  // Set of chat ids that were just created locally inside `handleSend`.
+  // The messages useEffect skips its initial fetch for these so it does
+  // not duplicate the optimistic user bubble or clobber the streaming
+  // assistant placeholder.
+  const skipNextMessagesFetch = useRef<Set<string>>(new Set());
 
   const activeWs = workspaces.find((ws) => ws.id === activeWsId);
 
   function showUpgrade(reason: "credits" | "workspace" | "memory" | "feature") {
     setUpgradeReason(reason);
     setUpgradeOpen(true);
+  }
+
+  // Surface a transient hint when the backend silently downgrades a
+  // Pro-only memory category to Profile for Free users. Pulled from
+  // the create / review responses' `downgraded_from` field.
+  function flashDowngradeToast(fromCategory: string) {
+    setDowngradeToast(fromCategory);
+    setTimeout(() => setDowngradeToast((cur) => (cur === fromCategory ? null : cur)), 3500);
   }
 
   // Check auth
@@ -177,6 +193,13 @@ export default function VibeWritePage() {
       setMessages([]);
       setSoulEnhancedByMsg({});
       setMemoryCatsByMsg({});
+      return;
+    }
+    // If this chat was just created via `handleSend`, the optimistic
+    // user/assistant placeholders are already in `messages`. Skip the
+    // remote fetch once to avoid the duplicate-bubble / lost-stream bug.
+    if (skipNextMessagesFetch.current.has(activeChatId)) {
+      skipNextMessagesFetch.current.delete(activeChatId);
       return;
     }
     const reqId = ++messagesReqSeq.current;
@@ -261,6 +284,9 @@ export default function VibeWritePage() {
         const chat = await workspaceApi.createChat(wsId);
         setChats((prev) => [chat, ...prev]);
         chatId = chat.id;
+        // Mark this chat so the messages useEffect doesn't refetch
+        // and overwrite the optimistic placeholders we're about to push.
+        skipNextMessagesFetch.current.add(chatId);
         setActiveChatId(chatId);
       }
 
@@ -321,7 +347,12 @@ export default function VibeWritePage() {
           metaOutputLangs = (ctx.output_langs || []).filter((l) => !!l);
         },
         onSoulLock: (info) => {
-          // Free user pasted a tweet from a Soul-owning author — prompt upgrade
+          // Backend only emits this when a Free user attached a tweet
+          // whose author owns a Soul. Guard against stale/spurious events.
+          if (!attachedTweet) {
+            console.warn("[vibe-write] received soul_lock without attached tweet, ignoring", info);
+            return;
+          }
           showUpgrade("feature");
           console.info("[vibe-write] soul lock for @" + info.handle);
         },
@@ -474,11 +505,10 @@ export default function VibeWritePage() {
       const mem = await workspaceApi.createMemory(activeWsId, suggestion.category, suggestion.content);
       setMemories((prev) => [...prev, mem]);
       setDismissedSuggestions((prev) => new Set(prev).add(msgId));
-    } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "";
-      if (msg.includes("Pro") || msg.includes("category")) {
-        showUpgrade("memory");
-      }
+      if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+    } catch {
+      // Silent failure: backend either auto-downgraded successfully or
+      // returned an unexpected error. Either way, don't disrupt the user.
     }
   }
 
@@ -637,6 +667,7 @@ export default function VibeWritePage() {
     try {
       const updated = await workspaceApi.reviewMemory(memId, action);
       setMemories((prev) => prev.map((m) => (m.id === memId ? updated : m)));
+      if (updated.downgraded_from) flashDowngradeToast(updated.downgraded_from);
     } catch {
       // ignore
     }
@@ -692,12 +723,11 @@ export default function VibeWritePage() {
       const mem = await workspaceApi.createMemory(activeWsId, "archive", content);
       setMemories((prev) => [...prev, mem]);
       setArchivedMsgs((prev) => new Set(prev).add(msg.id));
-    } catch (err: unknown) {
-      const code = err instanceof ApiError ? err.code : undefined;
-      const text = err instanceof Error ? err.message : "";
-      if (code === "PRO_REQUIRED" || text.includes("Pro") || text.includes("category")) {
-        showUpgrade("memory");
-      }
+      // If backend downgraded archive→profile (Free user), show toast
+      // instead of pretending it landed in the Archive column.
+      if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+    } catch {
+      // Network / server error — silent. Don't pop the upgrade modal here.
     }
   }
 
@@ -790,22 +820,41 @@ export default function VibeWritePage() {
       {/* ===== Left Sidebar ===== */}
       {sidebarOpen && (
         <aside className="flex w-[280px] shrink-0 flex-col border-r border-[#1e1e2e] bg-[#0d0d14]">
-          {/* Workspace Switcher */}
+          {/* Workspace Switcher
+              Click row     → toggle Memory view of the active workspace
+              Click chevron → open switch-workspace dropdown */}
           <div className="border-b border-[#1e1e2e] p-3">
             <div
-              className="relative flex cursor-pointer items-center gap-2.5 rounded-lg bg-[#1e1e2e]/50 px-3 py-2 transition-colors hover:bg-[#1e1e2e]"
-              onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+              className={`relative flex items-center gap-2.5 rounded-lg px-3 py-2 transition-colors ${
+                currentView === "memory" ? "bg-[#8b5cf6]/15 ring-1 ring-[#8b5cf6]/40" : "bg-[#1e1e2e]/50 hover:bg-[#1e1e2e]"
+              }`}
             >
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8b5cf6]/20 text-sm font-bold text-[#8b5cf6]">
-                {activeWs?.name?.charAt(0)?.toUpperCase() || "✦"}
-              </div>
-              <div className="flex-1 min-w-0">
-                <div className="truncate text-sm font-medium text-[#e2e8f0]">{activeWs?.name || t("welcomeTitle")}</div>
-                {activeWs?.twitter_handle && (
-                  <div className="truncate text-xs text-[#64748b]">@{activeWs.twitter_handle}</div>
-                )}
-              </div>
-              <span className="text-xs text-[#64748b]">{wsDropdownOpen ? "▴" : "▾"}</span>
+              <button
+                type="button"
+                onClick={() => setCurrentView(currentView === "memory" ? "chat" : "memory")}
+                className="flex flex-1 items-center gap-2.5 text-left min-w-0"
+                title={currentView === "memory" ? t("backToChat") : t("openMemory")}
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#8b5cf6]/20 text-sm font-bold text-[#8b5cf6]">
+                  {currentView === "memory" ? "🧠" : (activeWs?.name?.charAt(0)?.toUpperCase() || "✦")}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="truncate text-sm font-medium text-[#e2e8f0]">{activeWs?.name || t("welcomeTitle")}</div>
+                  <div className="truncate text-xs text-[#64748b]">
+                    {currentView === "memory"
+                      ? t("memory")
+                      : (activeWs?.twitter_handle ? `@${activeWs.twitter_handle}` : t("clickForMemory"))}
+                  </div>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={() => setWsDropdownOpen(!wsDropdownOpen)}
+                className="rounded-md px-1.5 py-1 text-xs text-[#64748b] hover:bg-[#1e1e2e] hover:text-[#e2e8f0]"
+                title={t("switchWorkspace")}
+              >
+                {wsDropdownOpen ? "▴" : "▾"}
+              </button>
             </div>
 
             {/* Workspace dropdown */}
@@ -814,7 +863,7 @@ export default function VibeWritePage() {
                 {workspaces.map((ws) => (
                   <button
                     key={ws.id}
-                    onClick={() => { setActiveWsId(ws.id); setWsDropdownOpen(false); setActiveChatId(null); setMessages([]); }}
+                    onClick={() => { setActiveWsId(ws.id); setWsDropdownOpen(false); setActiveChatId(null); setMessages([]); setCurrentView("chat"); }}
                     className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm transition-colors hover:bg-[#1e1e2e] ${
                       ws.id === activeWsId ? "text-[#8b5cf6]" : "text-[#94a3b8]"
                     }`}
@@ -896,23 +945,6 @@ export default function VibeWritePage() {
               </div>
             )}
           </div>
-
-          {/* Sidebar Footer: Memory / Settings */}
-          <div className="border-t border-[#1e1e2e] p-2">
-            <div className="flex">
-              <button
-                onClick={() => setCurrentView(currentView === "memory" ? "chat" : "memory")}
-                className={`flex-1 rounded-lg py-2 text-center text-xs transition-colors ${
-                  currentView === "memory" ? "bg-[#1e1e2e] text-[#e2e8f0]" : "text-[#64748b] hover:text-[#94a3b8]"
-                }`}
-              >
-                🧠 {t("memory")}
-              </button>
-              <button className="flex-1 rounded-lg py-2 text-center text-xs text-[#64748b] hover:text-[#94a3b8]">
-                ⚙️ {t("settings")}
-              </button>
-            </div>
-          </div>
         </aside>
       )}
 
@@ -990,19 +1022,21 @@ export default function VibeWritePage() {
                         <span>{cat.label}</span>
                         <span className="ml-1 rounded-full bg-[#1e1e2e] px-1.5 py-0.5 text-[10px] text-[#64748b]">{cat.items.length}</span>
                       </div>
-                      <button
-                        onClick={() => {
-                          const isPro = user?.is_pro;
-                          if (!isPro && !["profile", "rules"].includes(cat.key)) {
-                            showUpgrade("memory");
-                            return;
-                          }
-                          setAddingMemory({ cat: cat.key, content: "" });
-                        }}
-                        className="text-xs text-[#64748b] transition-colors hover:text-[#e2e8f0]"
-                      >
-                        ＋
-                      </button>
+                      {(() => {
+                        const locked = !user?.is_pro && !["profile", "rules"].includes(cat.key);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (locked) { showUpgrade("memory"); return; }
+                              setAddingMemory({ cat: cat.key, content: "" });
+                            }}
+                            title={locked ? t("proRequired") : t("add")}
+                            className={`text-xs transition-colors ${locked ? "text-[#64748b]/60 hover:text-amber-400" : "text-[#64748b] hover:text-[#e2e8f0]"}`}
+                          >
+                            {locked ? "🔒" : "＋"}
+                          </button>
+                        );
+                      })()}
                     </div>
                     {addingMemory?.cat === cat.key && (
                       <div className="border-b border-[#1e1e2e] p-2">
@@ -1016,11 +1050,11 @@ export default function VibeWritePage() {
                               const content = addingMemory.content.trim();
                               if (content && activeWsId) {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
-                                  .then((mem) => setMemories((prev) => [...prev, mem]))
-                                  .catch((err: unknown) => {
-                                    const msg = err instanceof Error ? err.message : "";
-                                    if (msg.includes("Pro") || msg.includes("category")) showUpgrade("memory");
-                                  });
+                                  .then((mem) => {
+                                    setMemories((prev) => [...prev, mem]);
+                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+                                  })
+                                  .catch(() => { /* silent */ });
                               }
                               setAddingMemory(null);
                             } else if (e.key === "Escape") {
@@ -1038,11 +1072,11 @@ export default function VibeWritePage() {
                               const content = addingMemory.content.trim();
                               if (content && activeWsId) {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
-                                  .then((mem) => setMemories((prev) => [...prev, mem]))
-                                  .catch((err: unknown) => {
-                                    const msg = err instanceof Error ? err.message : "";
-                                    if (msg.includes("Pro") || msg.includes("category")) showUpgrade("memory");
-                                  });
+                                  .then((mem) => {
+                                    setMemories((prev) => [...prev, mem]);
+                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+                                  })
+                                  .catch(() => { /* silent */ });
                               }
                               setAddingMemory(null);
                             }}
@@ -1499,18 +1533,21 @@ export default function VibeWritePage() {
                         <span>{cat.label}</span>
                         <span className="ml-1 text-[#64748b]">{cat.items.length}</span>
                       </div>
-                      <button
-                        onClick={() => {
-                          if (!user?.is_pro && !["profile", "rules"].includes(cat.key)) {
-                            showUpgrade("memory");
-                            return;
-                          }
-                          setAddingMemory({ cat: cat.key, content: "" });
-                        }}
-                        className="text-[10px] text-[#64748b] transition-colors hover:text-[#e2e8f0]"
-                      >
-                        + {t("add")}
-                      </button>
+                      {(() => {
+                        const locked = !user?.is_pro && !["profile", "rules"].includes(cat.key);
+                        return (
+                          <button
+                            onClick={() => {
+                              if (locked) { showUpgrade("memory"); return; }
+                              setAddingMemory({ cat: cat.key, content: "" });
+                            }}
+                            title={locked ? t("proRequired") : undefined}
+                            className={`text-[10px] transition-colors ${locked ? "text-[#64748b]/60 hover:text-amber-400" : "text-[#64748b] hover:text-[#e2e8f0]"}`}
+                          >
+                            {locked ? `🔒 ${t("pro")}` : `+ ${t("add")}`}
+                          </button>
+                        );
+                      })()}
                     </div>
                     {addingMemory?.cat === cat.key && (
                       <div className="mb-1.5">
@@ -1524,11 +1561,11 @@ export default function VibeWritePage() {
                               const content = addingMemory.content.trim();
                               if (content && activeWsId) {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
-                                  .then((mem) => setMemories((prev) => [...prev, mem]))
-                                  .catch((err: unknown) => {
-                                    const msg = err instanceof Error ? err.message : "";
-                                    if (msg.includes("Pro") || msg.includes("category")) showUpgrade("memory");
-                                  });
+                                  .then((mem) => {
+                                    setMemories((prev) => [...prev, mem]);
+                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+                                  })
+                                  .catch(() => { /* silent */ });
                               }
                               setAddingMemory(null);
                             } else if (e.key === "Escape") {
@@ -1546,11 +1583,11 @@ export default function VibeWritePage() {
                               const content = addingMemory.content.trim();
                               if (content && activeWsId) {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
-                                  .then((mem) => setMemories((prev) => [...prev, mem]))
-                                  .catch((err: unknown) => {
-                                    const msg = err instanceof Error ? err.message : "";
-                                    if (msg.includes("Pro") || msg.includes("category")) showUpgrade("memory");
-                                  });
+                                  .then((mem) => {
+                                    setMemories((prev) => [...prev, mem]);
+                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
+                                  })
+                                  .catch(() => { /* silent */ });
                               }
                               setAddingMemory(null);
                             }}
@@ -1702,6 +1739,45 @@ export default function VibeWritePage() {
 
       {/* Upgrade modal */}
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason={upgradeReason} />
+
+      {/* Free user soft-downgrade toast */}
+      {downgradeToast && (
+        <div className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-[#2d2d3a] bg-[#1a1a24] px-4 py-3 text-sm text-[#e2e8f0] shadow-lg">
+          <div className="flex items-start gap-3">
+            <span className="text-lg leading-none">💾</span>
+            <div className="flex-1">
+              <div>
+                {t("downgradedToast", {
+                  category:
+                    downgradeToast === "knowledge"
+                      ? t("catKnowledge")
+                      : downgradeToast === "network"
+                      ? t("catNetwork")
+                      : downgradeToast === "archive"
+                      ? t("catArchive")
+                      : downgradeToast,
+                })}
+              </div>
+              <button
+                onClick={() => {
+                  setDowngradeToast(null);
+                  showUpgrade("memory");
+                }}
+                className="mt-1 text-xs text-[#a78bfa] hover:underline"
+              >
+                {t("downgradedToastUpgrade")}
+              </button>
+            </div>
+            <button
+              onClick={() => setDowngradeToast(null)}
+              className="text-[#64748b] hover:text-[#e2e8f0]"
+              aria-label="Close"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

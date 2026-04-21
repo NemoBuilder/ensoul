@@ -62,6 +62,11 @@ func VibeChatStreamMessage(c *gin.Context) {
 		AttachedTweet *services.AttachedTweet `json:"attached_tweet,omitempty"`
 		VariantCount  int                     `json:"variant_count,omitempty"`
 		OutputLangs   []string                `json:"output_langs,omitempty"`
+		// UseSoul: explicit opt-in to use the attached tweet author's Soul as
+		// persona context. When false (default), Soul is NOT auto-applied even
+		// if the author owns one — preventing surprise paywalls for Free users
+		// who only wanted to write a normal reply.
+		UseSoul bool `json:"use_soul,omitempty"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "content is required"})
@@ -142,15 +147,32 @@ func VibeChatStreamMessage(c *gin.Context) {
 	creditCost += len(extraLangs)
 
 	// Soul lookup for attached tweet author (drives gating + bonus credit)
+	//
+	// Soul is applied ONLY when the user explicitly opts in. Two signals count
+	// as explicit:
+	//   1. req.UseSoul == true (frontend "Use Soul" button)
+	//   2. User typed `@<author_handle>` in their content
+	//
+	// Without an explicit signal we never enhance with Soul and never emit
+	// `soul_lock` to Free users — replying to a Soul-owning author should not
+	// trigger an upgrade prompt by default.
 	var attachedSoul *models.Shell
 	var soulLockedForFree bool
+	var soulExplicit bool
 	if tweet != nil && tweet.AuthorHandle != "" {
 		if shell, sErr := services.GetShellByHandle(tweet.AuthorHandle); sErr == nil && shell != nil && shell.MintTxHash != "" {
 			attachedSoul = shell
-			if isPro {
-				creditCost += services.CreditCostSoulContext
-			} else {
-				soulLockedForFree = true
+			if req.UseSoul {
+				soulExplicit = true
+			} else if strings.Contains(strings.ToLower(req.Content), "@"+strings.ToLower(tweet.AuthorHandle)) {
+				soulExplicit = true
+			}
+			if soulExplicit {
+				if isPro {
+					creditCost += services.CreditCostSoulContext
+				} else {
+					soulLockedForFree = true
+				}
 			}
 		}
 	}
@@ -225,11 +247,11 @@ func VibeChatStreamMessage(c *gin.Context) {
 		systemPrompt += soulContext
 	}
 	attachedSoulContext := ""
-	if attachedSoul != nil && isPro {
+	if attachedSoul != nil && isPro && soulExplicit {
 		attachedSoulContext, _ = extractSoulContext("@" + attachedSoul.Handle)
 	}
 	allSoulHandles := soulHandles
-	if attachedSoul != nil {
+	if attachedSoul != nil && soulExplicit {
 		allSoulHandles = appendUnique(allSoulHandles, attachedSoul.Handle)
 	}
 
@@ -263,7 +285,7 @@ func VibeChatStreamMessage(c *gin.Context) {
 	writeEvent("context", gin.H{
 		"used_memory_cats":  usedMemoryCats,
 		"soul_handles":      allSoulHandles,
-		"soul_enhanced":     attachedSoul != nil && isPro,
+		"soul_enhanced":     attachedSoul != nil && isPro && soulExplicit,
 		"methodology_slugs": methodologySlugs,
 		"output_langs":      append([]string{primaryLang}, extraLangs...),
 		"variant_count":     wantVariants,

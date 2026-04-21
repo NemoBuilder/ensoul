@@ -518,6 +518,8 @@
     "catNetwork": "人脉",
     "catArchive": "归档",
     "catRules": "写作规则",
+    "downgradedToast": "已存入 Profile（升级 Pro 解锁 {category}）",
+    "downgradedToastUpgrade": "升级 Pro",
     "addMemoryPrompt": "输入记忆内容：",
     "noMemories": "暂无记忆",
     "add": "添加",
@@ -563,7 +565,13 @@
     "refinePrefix": "请基于这个版本继续打磨：",
     "variantLabel": "版本 {letter}",
     "ctxMethodology": "方法论引用",
-    "ctxOutputLangs": "输出语言"
+    "ctxOutputLangs": "输出语言",
+    "pro": "Pro",
+    "proRequired": "升级到 Pro 解锁此分类",
+    "openMemory": "查看此工作区的记忆",
+    "backToChat": "返回对话",
+    "clickForMemory": "点击查看记忆",
+    "switchWorkspace": "切换工作区"
   },
   "Upgrade": {
     "title": "升级到 Pro",
@@ -579,7 +587,9 @@
     "checkoutError": "启动结账失败，请重试。",
     "maybeLater": "稍后再说",
     "processing": "处理中...",
-    "upgradePro": "升级到 Pro"
+    "upgradePro": "升级到 Pro",
+    "soulEnhanced": "Soul 上下文增强（回复名人时）",
+    "variants3": "回复时生成 3 个变体"
   },
   "Settings": {
     "title": "设置",

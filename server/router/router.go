@@ -286,6 +286,10 @@ func Setup() *gin.Engine {
 			admin.POST("/users/:wallet/subscription/extend", handlers.AdminExtendSubscription)
 			admin.POST("/users/:wallet/subscription/revoke", handlers.AdminRevokeSubscription)
 
+			// Gift Pro (promotional grants — operates on User.ProExpiresAt directly)
+			admin.POST("/gift-pro", handlers.AdminGiftPro)
+			admin.GET("/gift-pro/logs", handlers.AdminListGiftProLogs)
+
 			// Claw management (mining approval)
 			admin.GET("/claws/stats", handlers.AdminClawStats)
 			admin.GET("/claws", handlers.AdminListClaws)

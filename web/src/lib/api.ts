@@ -967,6 +967,12 @@ export interface VibeMemory {
   source: "user" | "ai" | "import";
   status: "pending" | "accepted" | "rejected";
   reason?: string;
+  /**
+   * Set when a Free user tried to save into a Pro-only category and the
+   * backend silently downgraded the entry to `profile`. UI should surface
+   * a soft inline hint instead of an upgrade modal.
+   */
+  downgraded_from?: "knowledge" | "network" | "archive";
   created_at: string;
   updated_at: string;
 }
@@ -1123,6 +1129,10 @@ export const workspaceApi = {
       attached_tweet?: { url?: string; author_handle?: string; text?: string };
       variant_count?: number;
       output_langs?: string[];
+      /** Explicit opt-in to use the attached tweet author's Soul. Without
+       * this flag (or an `@handle` mention in content), Soul is NOT applied
+       * even if the author owns one. */
+      use_soul?: boolean;
     } | string,
     handlers: {
       onMeta?: (meta: {

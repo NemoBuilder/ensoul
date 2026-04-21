@@ -247,6 +247,8 @@ export interface AdminUserDetailResponse {
     first_seen_at: string;
     last_seen_at: string;
     login_count: number;
+    pro_expires_at?: string | null;
+    email?: string;
   };
   subscription: {
     id: string;
@@ -361,6 +363,52 @@ export const adminUserApi = {
 
   stats: () =>
     adminFetch<AdminUserOverviewStats>(`/api/admin/users/stats`),
+};
+
+// ── Gift Pro (promotional grants on User.ProExpiresAt) ──────────
+
+export interface GiftProLog {
+  id: string;
+  admin_user_id?: string;
+  admin_name: string;
+  user_id: string;
+  user_email?: string;
+  user_wallet?: string;
+  months: number;
+  reason?: string;
+  old_expires_at?: string | null;
+  new_expires_at: string;
+  created_at: string;
+}
+
+export interface GiftProResponse {
+  status: string;
+  user_id: string;
+  user_email?: string;
+  user_wallet?: string;
+  months: number;
+  pro_expires_at: string;
+  log: GiftProLog;
+}
+
+export const adminGiftProApi = {
+  /** identifier: UUID, email, or wallet */
+  gift: (identifier: string, months: number, reason: string) =>
+    adminFetch<GiftProResponse>(`/api/admin/gift-pro`, {
+      method: "POST",
+      body: JSON.stringify({ identifier, months, reason }),
+    }),
+
+  listLogs: (params: { page?: number; page_size?: number; user?: string } = {}) => {
+    const q = new URLSearchParams();
+    if (params.page) q.set("page", String(params.page));
+    if (params.page_size) q.set("page_size", String(params.page_size));
+    if (params.user) q.set("user", params.user);
+    const qs = q.toString();
+    return adminFetch<{ items: GiftProLog[]; total: number; page: number; page_size: number }>(
+      `/api/admin/gift-pro/logs${qs ? `?${qs}` : ""}`
+    );
+  },
 };
 
 // ── Claw Management Types ──────────────────────────────────────

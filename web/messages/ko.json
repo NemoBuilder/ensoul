@@ -505,6 +505,8 @@
     "catNetwork": "네트워크",
     "catArchive": "아카이브",
     "catRules": "글쓰기 규칙",
+    "downgradedToast": "Profile에 저장됨 (Pro로 업그레이드하여 {category} 잠금 해제)",
+    "downgradedToastUpgrade": "Pro로 업그레이드",
     "addMemoryPrompt": "메모리 내용을 입력하세요:",
     "noMemories": "아직 메모리가 없습니다",
     "add": "추가",
@@ -550,7 +552,13 @@
     "refinePrefix": "Refine this version:",
     "variantLabel": "Version {letter}",
     "ctxMethodology": "Methodology",
-    "ctxOutputLangs": "Output Languages"
+    "ctxOutputLangs": "Output Languages",
+    "pro": "Pro",
+    "proRequired": "Upgrade to Pro to unlock this category",
+    "openMemory": "Open this workspace memory",
+    "backToChat": "Back to chat",
+    "clickForMemory": "Click to view memory",
+    "switchWorkspace": "Switch workspace"
   },
   "Upgrade": {
     "title": "Pro로 업그레이드",
@@ -566,7 +574,9 @@
     "checkoutError": "결제 시작 실패. 다시 시도하세요.",
     "maybeLater": "나중에",
     "processing": "처리 중...",
-    "upgradePro": "Pro로 업그레이드"
+    "upgradePro": "Pro로 업그레이드",
+    "soulEnhanced": "Soul context boost when replying to KOLs",
+    "variants3": "3 reply variants"
   },
   "Settings": {
     "title": "설정",

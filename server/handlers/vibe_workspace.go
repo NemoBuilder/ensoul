@@ -235,16 +235,16 @@ func VibeMemoryCreate(c *gin.Context) {
 		return
 	}
 
-	// Check category access (Free vs Pro)
+	// Check category access (Free vs Pro). Instead of 403, auto-downgrade
+	// Pro-only categories to Profile so the UI is never interrupted by an
+	// upgrade modal. UI surfaces a soft "stored in Profile" hint via
+	// `downgraded_from` in the response.
 	var user models.User
 	database.DB.First(&user, "id = ?", userID)
+	downgradedFrom := ""
 	if !user.IsPro() && !freeMemoryCategories[req.Category] {
-		c.JSON(http.StatusForbidden, gin.H{
-			"error":    "Pro required for this memory category",
-			"code":     "PRO_REQUIRED",
-			"category": req.Category,
-		})
-		return
+		downgradedFrom = req.Category
+		req.Category = models.MemoryCategoryProfile
 	}
 
 	mem := models.VibeMemory{
@@ -258,7 +258,20 @@ func VibeMemoryCreate(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusCreated, mem)
+	resp := gin.H{
+		"id":           mem.ID,
+		"workspace_id": mem.WorkspaceID,
+		"category":     mem.Category,
+		"content":      mem.Content,
+		"source":       mem.Source,
+		"status":       mem.Status,
+		"created_at":   mem.CreatedAt,
+		"updated_at":   mem.UpdatedAt,
+	}
+	if downgradedFrom != "" {
+		resp["downgraded_from"] = downgradedFrom
+	}
+	c.JSON(http.StatusCreated, resp)
 }
 
 // VibeMemoryUpdate handles PUT /api/vibe-write/memories/:memId
@@ -380,12 +393,40 @@ func VibeMemoryReview(c *gin.Context) {
 	if newStatus == models.MemoryStatusAccepted && strings.TrimSpace(req.Content) != "" {
 		updates["content"] = req.Content
 	}
+
+	// Free user accepting a Pro-only category? Auto-downgrade to Profile
+	// instead of returning 403, so the user is never interrupted with an
+	// upgrade modal during their first memory interaction.
+	downgradedFrom := ""
+	if newStatus == models.MemoryStatusAccepted {
+		var user models.User
+		if err := database.DB.First(&user, "id = ?", userID).Error; err == nil {
+			if !user.IsPro() && !freeMemoryCategories[mem.Category] {
+				downgradedFrom = mem.Category
+				updates["category"] = models.MemoryCategoryProfile
+			}
+		}
+	}
+
 	if err := database.DB.Model(&mem).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
 	database.DB.First(&mem, "id = ?", memID)
-	c.JSON(http.StatusOK, mem)
+	resp := gin.H{
+		"id":           mem.ID,
+		"workspace_id": mem.WorkspaceID,
+		"category":     mem.Category,
+		"content":      mem.Content,
+		"source":       mem.Source,
+		"status":       mem.Status,
+		"created_at":   mem.CreatedAt,
+		"updated_at":   mem.UpdatedAt,
+	}
+	if downgradedFrom != "" {
+		resp["downgraded_from"] = downgradedFrom
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // ── Chat endpoints ────────────────────────────────────────────

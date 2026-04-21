@@ -90,6 +90,7 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.User{},
 		&models.EmailCode{},
 		&models.AdminAuditLog{},
+		&models.GiftProLog{},
 		// Vibe Write 2.0 workspace models
 		&models.VibeWorkspace{},
 		&models.VibeMemory{},

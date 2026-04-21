@@ -53,7 +53,7 @@ export default function UpgradeModal({ open, onClose, reason = "feature" }: Upgr
 
         {/* Features */}
         <div className="mb-6 space-y-3 rounded-xl bg-[#0a0a0f] p-4">
-          {["credits5000", "workspaces10", "allMemory", "prioritySupport"].map((key) => (
+          {["credits5000", "workspaces10", "allMemory", "soulEnhanced", "variants3", "prioritySupport"].map((key) => (
             <div key={key} className="flex items-center gap-2 text-sm text-[#e2e8f0]">
               <span className="text-[#8b5cf6]">✓</span>
               <span>{t(key)}</span>

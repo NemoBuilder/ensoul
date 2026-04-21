@@ -767,3 +767,21 @@ type AdminAuditLog struct {
 	IP          string    `gorm:"type:varchar(45)" json:"ip"`
 	CreatedAt   time.Time `json:"created_at"`
 }
+
+// GiftProLog records every admin gift-pro operation so that promotional
+// grants, KOL partnerships, and customer-support compensations are auditable.
+// The source of truth for Pro state is User.ProExpiresAt; this table only
+// records who/when/why.
+type GiftProLog struct {
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	AdminUserID   *uuid.UUID `gorm:"type:uuid;index" json:"admin_user_id,omitempty"`
+	AdminName     string     `gorm:"type:varchar(50)" json:"admin_name"`
+	UserID        uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	UserEmail     string     `gorm:"type:varchar(255)" json:"user_email,omitempty"`
+	UserWallet    string     `gorm:"type:varchar(42)" json:"user_wallet,omitempty"`
+	Months        int        `gorm:"not null" json:"months"`
+	Reason        string     `gorm:"type:text" json:"reason,omitempty"`
+	OldExpiresAt  *time.Time `json:"old_expires_at,omitempty"`
+	NewExpiresAt  time.Time  `json:"new_expires_at"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
