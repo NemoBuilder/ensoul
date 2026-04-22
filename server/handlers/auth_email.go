@@ -146,6 +146,11 @@ func EmailVerify(c *gin.Context) {
 		return
 	}
 
+	// Code is consumed only after the full verify→create-user→create-session
+	// flow has succeeded, so a transient failure earlier doesn't burn the
+	// user's only chance to use this code.
+	services.ConsumeEmailCode(email, code)
+
 	// Set HttpOnly cookie
 	secureCookie := config.Cfg.IsProduction()
 	c.SetSameSite(http.SameSiteLaxMode)

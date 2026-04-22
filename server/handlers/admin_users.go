@@ -7,11 +7,24 @@ import (
 	"github.com/ensoul-labs/ensoul-server/models"
 	"github.com/ensoul-labs/ensoul-server/services"
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 // ═══════════════════════════════════════════════════════════════════════
 // Admin User Management Handlers
 // ═══════════════════════════════════════════════════════════════════════
+
+// parseUserID extracts and validates the :id route param as a UUID.
+// On failure it writes a 400 response and returns ok=false.
+func parseUserID(c *gin.Context) (uuid.UUID, bool) {
+	idStr := c.Param("id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid user id"})
+		return uuid.Nil, false
+	}
+	return id, true
+}
 
 // AdminListUsers handles GET /api/admin/users
 func AdminListUsers(c *gin.Context) {
@@ -24,6 +37,7 @@ func AdminListUsers(c *gin.Context) {
 		Search:       c.Query("search"),
 		Status:       c.Query("status"),
 		Subscription: c.Query("subscription"),
+		AuthType:     c.Query("auth_type"),
 		Sort:         c.Query("sort"),
 		Order:        c.Query("order"),
 	}
@@ -42,15 +56,14 @@ func AdminListUsers(c *gin.Context) {
 	})
 }
 
-// AdminGetUser handles GET /api/admin/users/:wallet
+// AdminGetUser handles GET /api/admin/users/:id
 func AdminGetUser(c *gin.Context) {
-	wallet := c.Param("wallet")
-	if wallet == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "wallet address is required"})
+	id, ok := parseUserID(c)
+	if !ok {
 		return
 	}
 
-	detail, err := services.AdminGetUserDetail(wallet)
+	detail, err := services.AdminGetUserDetail(id)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
 		return
@@ -59,7 +72,7 @@ func AdminGetUser(c *gin.Context) {
 	c.JSON(http.StatusOK, detail)
 }
 
-// AdminBanUser handles POST /api/admin/users/:wallet/ban
+// AdminBanUser handles POST /api/admin/users/:id/ban
 func AdminBanUser(c *gin.Context) {
 	admin := getAdminFromContext(c)
 	if admin == nil || admin.Role != models.AdminRoleSuperAdmin {
@@ -67,7 +80,10 @@ func AdminBanUser(c *gin.Context) {
 		return
 	}
 
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 	var req struct {
 		Reason string `json:"reason"`
 	}
@@ -75,15 +91,15 @@ func AdminBanUser(c *gin.Context) {
 		req.Reason = ""
 	}
 
-	if err := services.AdminBanUser(wallet, req.Reason, admin); err != nil {
+	if err := services.AdminBanUser(id, req.Reason, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "banned", "wallet_addr": wallet})
+	c.JSON(http.StatusOK, gin.H{"status": "banned", "id": id})
 }
 
-// AdminUnbanUser handles POST /api/admin/users/:wallet/unban
+// AdminUnbanUser handles POST /api/admin/users/:id/unban
 func AdminUnbanUser(c *gin.Context) {
 	admin := getAdminFromContext(c)
 	if admin == nil || admin.Role != models.AdminRoleSuperAdmin {
@@ -91,20 +107,26 @@ func AdminUnbanUser(c *gin.Context) {
 		return
 	}
 
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 
-	if err := services.AdminUnbanUser(wallet, admin); err != nil {
+	if err := services.AdminUnbanUser(id, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "active", "wallet_addr": wallet})
+	c.JSON(http.StatusOK, gin.H{"status": "active", "id": id})
 }
 
-// AdminUpdateUserNote handles PUT /api/admin/users/:wallet/note
+// AdminUpdateUserNote handles PUT /api/admin/users/:id/note
 func AdminUpdateUserNote(c *gin.Context) {
 	admin := getAdminFromContext(c)
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		Note string `json:"note"`
@@ -114,18 +136,21 @@ func AdminUpdateUserNote(c *gin.Context) {
 		return
 	}
 
-	if err := services.AdminUpdateUserNote(wallet, req.Note, admin); err != nil {
+	if err := services.AdminUpdateUserNote(id, req.Note, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "updated", "wallet_addr": wallet})
+	c.JSON(http.StatusOK, gin.H{"status": "updated", "id": id})
 }
 
-// AdminGrantSubscription handles POST /api/admin/users/:wallet/subscription/grant
+// AdminGrantSubscription handles POST /api/admin/users/:id/subscription/grant
 func AdminGrantSubscription(c *gin.Context) {
 	admin := getAdminFromContext(c)
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		Tier   string `json:"tier" binding:"required"`
@@ -141,18 +166,21 @@ func AdminGrantSubscription(c *gin.Context) {
 		return
 	}
 
-	if err := services.AdminGrantSubscription(wallet, req.Tier, req.Days, req.Reason, admin); err != nil {
+	if err := services.AdminGrantSubscription(id, req.Tier, req.Days, req.Reason, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "granted", "wallet_addr": wallet, "tier": req.Tier, "days": req.Days})
+	c.JSON(http.StatusOK, gin.H{"status": "granted", "id": id, "tier": req.Tier, "days": req.Days})
 }
 
-// AdminExtendSubscription handles POST /api/admin/users/:wallet/subscription/extend
+// AdminExtendSubscription handles POST /api/admin/users/:id/subscription/extend
 func AdminExtendSubscription(c *gin.Context) {
 	admin := getAdminFromContext(c)
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 
 	var req struct {
 		Days   int    `json:"days" binding:"required"`
@@ -167,15 +195,15 @@ func AdminExtendSubscription(c *gin.Context) {
 		return
 	}
 
-	if err := services.AdminExtendSubscription(wallet, req.Days, req.Reason, admin); err != nil {
+	if err := services.AdminExtendSubscription(id, req.Days, req.Reason, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "extended", "wallet_addr": wallet, "days": req.Days})
+	c.JSON(http.StatusOK, gin.H{"status": "extended", "id": id, "days": req.Days})
 }
 
-// AdminRevokeSubscription handles POST /api/admin/users/:wallet/subscription/revoke
+// AdminRevokeSubscription handles POST /api/admin/users/:id/subscription/revoke
 func AdminRevokeSubscription(c *gin.Context) {
 	admin := getAdminFromContext(c)
 	if admin == nil || admin.Role != models.AdminRoleSuperAdmin {
@@ -183,7 +211,10 @@ func AdminRevokeSubscription(c *gin.Context) {
 		return
 	}
 
-	wallet := c.Param("wallet")
+	id, ok := parseUserID(c)
+	if !ok {
+		return
+	}
 	var req struct {
 		Reason string `json:"reason"`
 	}
@@ -191,12 +222,12 @@ func AdminRevokeSubscription(c *gin.Context) {
 		req.Reason = ""
 	}
 
-	if err := services.AdminRevokeSubscription(wallet, req.Reason, admin); err != nil {
+	if err := services.AdminRevokeSubscription(id, req.Reason, admin); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "revoked", "wallet_addr": wallet})
+	c.JSON(http.StatusOK, gin.H{"status": "revoked", "id": id})
 }
 
 // AdminUserStats handles GET /api/admin/users/stats

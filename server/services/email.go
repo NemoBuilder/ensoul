@@ -80,28 +80,38 @@ func SendEmailCode(email string) error {
 	return nil
 }
 
-// VerifyEmailCode checks if the code is valid for the email.
-// Marks the code as used on success.
+// VerifyEmailCode checks if the code is valid for the email **without**
+// marking it as used. The caller is responsible for calling
+// ConsumeEmailCode after the dependent operation (e.g. user creation)
+// succeeds — this prevents a transient server error from burning a code
+// the user has no way to recover from.
 func VerifyEmailCode(email, code string) bool {
 	var emailCode models.EmailCode
 	err := database.DB.Where(
 		"email = ? AND code = ? AND used = false AND expires_at > ?",
 		email, code, time.Now(),
 	).Order("created_at DESC").First(&emailCode).Error
+	return err == nil
+}
 
-	if err != nil {
-		return false
+// ConsumeEmailCode marks the most recent valid code for this email as used
+// and invalidates all other unused codes for the same email. Idempotent —
+// no-op if no matching code is found. Call this only after the dependent
+// operation has succeeded.
+func ConsumeEmailCode(email, code string) {
+	var emailCode models.EmailCode
+	if err := database.DB.Where(
+		"email = ? AND code = ? AND used = false AND expires_at > ?",
+		email, code, time.Now(),
+	).Order("created_at DESC").First(&emailCode).Error; err != nil {
+		return
 	}
 
-	// Mark as used
 	database.DB.Model(&emailCode).Update("used", true)
 
-	// Invalidate all other unused codes for this email
 	database.DB.Model(&models.EmailCode{}).
 		Where("email = ? AND used = false AND id != ?", email, emailCode.ID).
 		Update("used", true)
-
-	return true
 }
 
 // sendSMTP sends the verification code email via Proton SMTP.

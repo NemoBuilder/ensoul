@@ -220,8 +220,14 @@ export const adminMiningApi = {
 
 // ── User Management Types ──────────────────────────────────────
 
+export type AuthType = "wallet" | "email" | "linked" | "unknown";
+
 export interface AdminUserListItem {
-  wallet_addr: string;
+  id: string;
+  auth_type: AuthType;
+  email?: string;
+  email_verified: boolean;
+  wallet_addr?: string;
   status: "active" | "banned";
   first_seen_at: string;
   last_seen_at: string;
@@ -229,9 +235,8 @@ export interface AdminUserListItem {
   note: string;
   ban_reason?: string;
   banned_at?: string;
-  sub_tier: string | null;
-  sub_status: string | null;
-  sub_expires_at: string | null;
+  is_pro: boolean;
+  pro_expires_at?: string | null;
   snipe_count: number;
 }
 
@@ -249,7 +254,10 @@ export interface AdminUserDetailResponse {
     login_count: number;
     pro_expires_at?: string | null;
     email?: string;
+    email_verified?: boolean;
   };
+  auth_type: AuthType;
+  is_pro: boolean;
   subscription: {
     id: string;
     wallet_addr: string;
@@ -294,6 +302,9 @@ export interface AdminUserOverviewStats {
   total_users: number;
   active_users: number;
   banned_users: number;
+  wallet_only_users: number;
+  email_only_users: number;
+  linked_users: number;
   pro_subscribers: number;
   free_users: number;
   today_new_users: number;
@@ -310,6 +321,7 @@ export const adminUserApi = {
     search?: string;
     status?: string;
     subscription?: string;
+    auth_type?: string;
     sort?: string;
     order?: string;
   }) => {
@@ -322,42 +334,42 @@ export const adminUserApi = {
     );
   },
 
-  detail: (wallet: string) =>
-    adminFetch<AdminUserDetailResponse>(`/api/admin/users/${wallet}`),
+  detail: (id: string) =>
+    adminFetch<AdminUserDetailResponse>(`/api/admin/users/${id}`),
 
-  ban: (wallet: string, reason: string) =>
-    adminFetch<{ status: string; wallet_addr: string }>(
-      `/api/admin/users/${wallet}/ban`,
+  ban: (id: string, reason: string) =>
+    adminFetch<{ status: string; id: string }>(
+      `/api/admin/users/${id}/ban`,
       { method: "POST", body: JSON.stringify({ reason }) }
     ),
 
-  unban: (wallet: string) =>
-    adminFetch<{ status: string; wallet_addr: string }>(
-      `/api/admin/users/${wallet}/unban`,
+  unban: (id: string) =>
+    adminFetch<{ status: string; id: string }>(
+      `/api/admin/users/${id}/unban`,
       { method: "POST" }
     ),
 
-  updateNote: (wallet: string, note: string) =>
-    adminFetch<{ status: string; wallet_addr: string }>(
-      `/api/admin/users/${wallet}/note`,
+  updateNote: (id: string, note: string) =>
+    adminFetch<{ status: string; id: string }>(
+      `/api/admin/users/${id}/note`,
       { method: "PUT", body: JSON.stringify({ note }) }
     ),
 
-  grantSubscription: (wallet: string, tier: string, days: number, reason: string) =>
-    adminFetch<{ status: string; wallet_addr: string; tier: string; days: number }>(
-      `/api/admin/users/${wallet}/subscription/grant`,
+  grantSubscription: (id: string, tier: string, days: number, reason: string) =>
+    adminFetch<{ status: string; id: string; tier: string; days: number }>(
+      `/api/admin/users/${id}/subscription/grant`,
       { method: "POST", body: JSON.stringify({ tier, days, reason }) }
     ),
 
-  extendSubscription: (wallet: string, days: number, reason: string) =>
-    adminFetch<{ status: string; wallet_addr: string; days: number }>(
-      `/api/admin/users/${wallet}/subscription/extend`,
+  extendSubscription: (id: string, days: number, reason: string) =>
+    adminFetch<{ status: string; id: string; days: number }>(
+      `/api/admin/users/${id}/subscription/extend`,
       { method: "POST", body: JSON.stringify({ days, reason }) }
     ),
 
-  revokeSubscription: (wallet: string, reason: string) =>
-    adminFetch<{ status: string; wallet_addr: string }>(
-      `/api/admin/users/${wallet}/subscription/revoke`,
+  revokeSubscription: (id: string, reason: string) =>
+    adminFetch<{ status: string; id: string }>(
+      `/api/admin/users/${id}/subscription/revoke`,
       { method: "POST", body: JSON.stringify({ reason }) }
     ),
 
@@ -392,7 +404,7 @@ export interface GiftProResponse {
 }
 
 export const adminGiftProApi = {
-  /** identifier: UUID, email, or wallet */
+  /** identifier: UUID or email only (wallet addresses are rejected) */
   gift: (identifier: string, months: number, reason: string) =>
     adminFetch<GiftProResponse>(`/api/admin/gift-pro`, {
       method: "POST",

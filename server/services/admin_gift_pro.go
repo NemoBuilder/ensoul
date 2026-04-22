@@ -2,6 +2,7 @@ package services
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ensoul-labs/ensoul-server/database"
@@ -37,8 +38,20 @@ func GiftPro(user *models.User, months int, reason string, admin *models.AdminUs
 	newExp := base.AddDate(0, months, 0)
 
 	old := user.ProExpiresAt
-	if err := database.DB.Model(user).Update("pro_expires_at", &newExp).Error; err != nil {
-		return nil, fmt.Errorf("failed to update pro_expires_at: %w", err)
+
+	// Bump credits to Pro monthly quota if currently below it. We take max()
+	// so that calling gift twice in the same period doesn't refund the credits
+	// the user has already spent. Mirrors what subscription_created webhook does.
+	updates := map[string]interface{}{
+		"pro_expires_at": &newExp,
+	}
+	wasFreeOrLow := user.Credits < ProCreditsPerMonth
+	if wasFreeOrLow {
+		updates["credits"] = ProCreditsPerMonth
+		updates["credits_reset"] = time.Now().Truncate(24 * time.Hour).AddDate(0, 1, 0)
+	}
+	if err := database.DB.Model(user).Updates(updates).Error; err != nil {
+		return nil, fmt.Errorf("failed to update user pro state: %w", err)
 	}
 
 	log := &models.GiftProLog{
@@ -72,20 +85,30 @@ func GiftPro(user *models.User, months int, reason string, admin *models.AdminUs
 	return log, nil
 }
 
-// GiftProByIdentifier resolves a user by UUID, email, or wallet address and
-// then grants Pro. Returns the user (post-update) along with the log row.
+// GiftProByIdentifier resolves a user by UUID or email and then grants Pro.
+// V3 rule: gifts can ONLY be sent to email accounts. Wallet addresses are
+// rejected, and the resolved user must have a non-empty email.
 func GiftProByIdentifier(identifier string, months int, reason string, admin *models.AdminUser) (*models.User, *models.GiftProLog, error) {
+	identifier = strings.TrimSpace(identifier)
 	var user models.User
 	q := database.DB
-	if id, err := uuid.Parse(identifier); err == nil {
-		q = q.Where("id = ?", id)
-	} else if len(identifier) == 42 && identifier[0] == '0' && identifier[1] == 'x' {
-		q = q.Where("wallet_addr = ?", identifier)
-	} else {
-		q = q.Where("email = ?", identifier)
+	switch {
+	case len(identifier) == 42 && strings.HasPrefix(identifier, "0x"):
+		return nil, nil, fmt.Errorf("gift pro requires an email or user id; wallet address is not allowed")
+	default:
+		if id, err := uuid.Parse(identifier); err == nil {
+			q = q.Where("id = ?", id)
+		} else if strings.Contains(identifier, "@") {
+			q = q.Where("email = ?", strings.ToLower(identifier))
+		} else {
+			return nil, nil, fmt.Errorf("identifier must be a user id (uuid) or an email address")
+		}
 	}
 	if err := q.First(&user).Error; err != nil {
 		return nil, nil, fmt.Errorf("user not found")
+	}
+	if user.Email == "" {
+		return nil, nil, fmt.Errorf("target user has no email; pro gifts can only be sent to email accounts")
 	}
 	log, err := GiftPro(&user, months, reason, admin)
 	if err != nil {

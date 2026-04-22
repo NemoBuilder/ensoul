@@ -99,6 +99,7 @@ type Claw struct {
 	TwitterHandle    string         `gorm:"type:varchar(255)" json:"twitter_handle,omitempty"`
 	TwitterTweetURL  string         `gorm:"type:text" json:"twitter_tweet_url,omitempty"`
 	WalletAddr       string         `gorm:"type:varchar(42)" json:"wallet_addr"`
+	ClaimedByUserID  *uuid.UUID     `gorm:"type:uuid;index" json:"claimed_by_user_id,omitempty"`
 	WalletPKEnc      string         `gorm:"type:text" json:"-"`
 	TotalSubmitted   int            `gorm:"default:0" json:"total_submitted"`
 	TotalAccepted    int            `gorm:"default:0" json:"total_accepted"`
@@ -146,9 +147,10 @@ type EmailSession struct {
 
 // ClawBinding binds a Claw API key to a wallet address.
 type ClawBinding struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
-	ClawID     uuid.UUID `gorm:"type:uuid;not null;index" json:"claw_id"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	WalletAddr string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	ClawID     uuid.UUID  `gorm:"type:uuid;not null;index" json:"claw_id"`
 	ClawName   string    `gorm:"type:varchar(255)" json:"claw_name"`
 	CreatedAt  time.Time `json:"created_at"`
 
@@ -309,6 +311,7 @@ const (
 // to allow rollback; AutoMigrate still runs but no code path writes here.
 type Subscription struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID        *uuid.UUID     `gorm:"type:uuid;index" json:"user_id,omitempty"`
 	WalletAddr    string         `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
 	Tier          string         `gorm:"type:varchar(20);not null" json:"tier"`
 	LLMModel      string         `gorm:"type:varchar(50)" json:"llm_model"`
@@ -345,6 +348,7 @@ type VibeWriteKOL struct {
 type VibeWriteReply struct {
 	ID           uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
 	ShellID      *uuid.UUID `gorm:"type:uuid;index" json:"shell_id"` // nullable: Soul is optional
+	UserID       *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
 	WalletAddr   string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
 	TweetID      string     `gorm:"type:varchar(30);not null;index" json:"tweet_id"`
 	TweetText    string     `gorm:"type:text" json:"tweet_text"`
@@ -363,9 +367,10 @@ type VibeWriteReply struct {
 //
 // Deprecated: removed in vN+1, do not use. Replaced by VibeMemory (profile + rules categories).
 type UserPersona struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	WalletAddr string    `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
-	Bio        string    `gorm:"type:text" json:"bio"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	WalletAddr string     `gorm:"type:varchar(42);uniqueIndex;not null" json:"wallet_addr"`
+	Bio        string     `gorm:"type:text" json:"bio"`
 	Style      string    `gorm:"type:text" json:"style"`
 	Materials  string    `gorm:"type:text" json:"materials"` // reference materials
 	Language   string    `gorm:"type:varchar(10);default:'en'" json:"language"`
@@ -620,9 +625,10 @@ const (
 
 // HolderRevenue records a monthly revenue share for a Soul holder.
 type HolderRevenue struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	ShellID    uuid.UUID `gorm:"type:uuid;not null;index" json:"shell_id"`
-	WalletAddr string    `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	ShellID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"shell_id"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	WalletAddr string     `gorm:"type:varchar(42);not null;index" json:"wallet_addr"`
 	Period     string    `gorm:"type:varchar(7);not null;index" json:"period"` // "2026-02"
 	UsageCount int       `gorm:"default:0" json:"usage_count"`
 	Weight     float64   `gorm:"type:decimal(18,8);default:0" json:"weight"`
@@ -673,9 +679,10 @@ type SoulUsage struct {
 // UsedPaymentTx prevents replay attacks by recording each payment tx_hash.
 // The uniqueIndex on TxHash ensures the same transaction cannot be used twice.
 type UsedPaymentTx struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	TxHash     string    `gorm:"type:varchar(66);not null;uniqueIndex" json:"tx_hash"`
-	WalletAddr string    `gorm:"type:varchar(42);not null" json:"wallet_addr"`
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	TxHash     string     `gorm:"type:varchar(66);not null;uniqueIndex" json:"tx_hash"`
+	UserID     *uuid.UUID `gorm:"type:uuid;index" json:"user_id,omitempty"`
+	WalletAddr string     `gorm:"type:varchar(42);not null" json:"wallet_addr"`
 	Purpose    string    `gorm:"type:varchar(30);not null" json:"purpose"` // "subscription", "mint", etc.
 	CreatedAt  time.Time `json:"created_at"`
 }
@@ -718,10 +725,16 @@ const (
 // Can be created via email signup or wallet login.
 type User struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Email         string         `gorm:"type:varchar(255);uniqueIndex" json:"email,omitempty"`
+	// Email and WalletAddr are kept as plain strings (default '') so users may
+	// register with only one of them. Uniqueness is enforced via PARTIAL unique
+	// indexes created in database.go that skip empty values and soft-deleted
+	// rows — see ensureUserPartialUniqueIndexes(). DO NOT add `uniqueIndex`
+	// here or AutoMigrate will recreate a non-partial index that breaks
+	// email-only / wallet-only signups.
+	Email         string         `gorm:"type:varchar(255);index" json:"email,omitempty"`
 	EmailVerified bool           `gorm:"default:false" json:"email_verified"`
 	PasswordHash  string         `gorm:"type:varchar(255)" json:"-"`
-	WalletAddr    string         `gorm:"type:varchar(42);uniqueIndex" json:"wallet_addr,omitempty"`
+	WalletAddr    string         `gorm:"type:varchar(42);index" json:"wallet_addr,omitempty"`
 	TwitterHandle string         `gorm:"type:varchar(30)" json:"twitter_handle,omitempty"`
 	Status        string         `gorm:"type:varchar(20);default:'active'" json:"status"`
 	BanReason     string         `gorm:"type:text" json:"ban_reason,omitempty"`

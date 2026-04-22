@@ -7,6 +7,7 @@ import {
   adminGiftProApi,
   type AdminUserDetailResponse,
   type GiftProLog,
+  type AuthType,
 } from "@/lib/admin-api";
 
 // ── Confirm Modal ──────────────────────────────────────────────
@@ -56,7 +57,7 @@ function ConfirmModal({
   );
 }
 
-// ── Time helpers ───────────────────────────────────────────────
+// ── Helpers ────────────────────────────────────────────────────
 
 function timeAgo(dateStr: string): string {
   const diff = Date.now() - new Date(dateStr).getTime();
@@ -74,7 +75,10 @@ function formatDate(dateStr: string): string {
   return new Date(dateStr).toLocaleString();
 }
 
-// ── Info Row ───────────────────────────────────────────────────
+function shortAddr(addr: string): string {
+  if (addr.length <= 12) return addr;
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
 
 function InfoRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -85,18 +89,32 @@ function InfoRow({ label, children }: { label: string; children: React.ReactNode
   );
 }
 
+function AuthTypeBadge({ type }: { type: AuthType }) {
+  const map: Record<AuthType, { icon: string; label: string; cls: string }> = {
+    email:   { icon: "✉️", label: "Email",   cls: "bg-blue-500/10 text-blue-400 border-blue-500/30" },
+    wallet:  { icon: "🔁", label: "Wallet",  cls: "bg-amber-500/10 text-amber-400 border-amber-500/30" },
+    linked:  { icon: "🔗", label: "Linked",  cls: "bg-emerald-500/10 text-emerald-400 border-emerald-500/30" },
+    unknown: { icon: "❓", label: "Unknown", cls: "bg-[#1e1e2e] text-[#64748b] border-[#1e1e2e]" },
+  };
+  const { icon, label, cls } = map[type] ?? map.unknown;
+  return (
+    <span className={`inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs font-medium ${cls}`}>
+      <span>{icon}</span> {label}
+    </span>
+  );
+}
+
 // ── Main Page ──────────────────────────────────────────────────
 
 export default function AdminUserDetailPage() {
   const router = useRouter();
   const params = useParams();
-  const wallet = params.wallet as string;
+  const userID = params.id as string;
 
   const [data, setData] = useState<AdminUserDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Modal states
   const [modal, setModal] = useState<
     | null
     | "ban"
@@ -123,7 +141,7 @@ export default function AdminUserDetailPage() {
     try {
       setLoading(true);
       setError("");
-      const res = await adminUserApi.detail(wallet);
+      const res = await adminUserApi.detail(userID);
       setData(res);
       setNoteText(res.user.note || "");
     } catch (err) {
@@ -131,16 +149,16 @@ export default function AdminUserDetailPage() {
     } finally {
       setLoading(false);
     }
-  }, [wallet]);
+  }, [userID]);
 
   const fetchGiftLogs = useCallback(async () => {
     try {
-      const res = await adminGiftProApi.listLogs({ user: wallet, page_size: 20 });
+      const res = await adminGiftProApi.listLogs({ user: userID, page_size: 20 });
       setGiftLogs(res.items);
     } catch {
       setGiftLogs([]);
     }
-  }, [wallet]);
+  }, [userID]);
 
   useEffect(() => {
     fetchDetail();
@@ -183,9 +201,13 @@ export default function AdminUserDetailPage() {
     );
   }
 
-  const { user, subscription, subscription_history, persona, selected_tags, muted_accounts, stats } = data;
+  const { user, auth_type, subscription, subscription_history, persona, stats } = data;
+  const selected_tags = data.selected_tags ?? [];
+  const muted_accounts = data.muted_accounts ?? [];
   const isBanned = user.status === "banned";
   const hasSub = !!subscription;
+  const hasEmail = !!user.email;
+  const hasWallet = !!user.wallet_addr;
 
   return (
     <div className="space-y-6">
@@ -201,14 +223,47 @@ export default function AdminUserDetailPage() {
       <div className="grid gap-4 lg:grid-cols-2">
         {/* User Info Card */}
         <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
-            <span>👤</span> User Info
-          </h2>
-          <InfoRow label="Address">
-            <code className="rounded bg-[#1e1e2e] px-1.5 py-0.5 text-xs text-[#8b5cf6]">
-              {user.wallet_addr}
-            </code>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
+              <span>👤</span> User Info
+            </h2>
+            <AuthTypeBadge type={auth_type} />
+          </div>
+
+          {/* Identity — email primary */}
+          {hasEmail ? (
+            <InfoRow label="Email">
+              <span className="flex items-center gap-2">
+                <span className="text-[#e2e8f0]">{user.email}</span>
+                {user.email_verified && (
+                  <span className="rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-400 border border-emerald-500/30">
+                    ✓ Verified
+                  </span>
+                )}
+              </span>
+            </InfoRow>
+          ) : (
+            <InfoRow label="Email">
+              <span className="text-xs text-[#475569]">— (wallet-only account)</span>
+            </InfoRow>
+          )}
+
+          {hasWallet ? (
+            <InfoRow label="Wallet">
+              <code className="rounded bg-[#1e1e2e] px-1.5 py-0.5 text-xs text-[#8b5cf6]">
+                {user.wallet_addr}
+              </code>
+            </InfoRow>
+          ) : (
+            <InfoRow label="Wallet">
+              <span className="text-xs text-[#475569]">— (not bound)</span>
+            </InfoRow>
+          )}
+
+          <InfoRow label="User ID">
+            <code className="text-[10px] text-[#64748b]">{user.id}</code>
           </InfoRow>
+
           <InfoRow label="Status">
             {isBanned ? (
               <span className="inline-flex items-center gap-1 rounded-full bg-red-500/10 px-2 py-0.5 text-xs text-red-400 border border-red-500/30">
@@ -260,35 +315,54 @@ export default function AdminUserDetailPage() {
 
         {/* Stats Card */}
         <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
-          <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
-            <span>📊</span> Stats
-          </h2>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Total Snipes</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_snipes}</p>
-            </div>
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Today Snipes</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.today_snipes}</p>
-            </div>
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Total Chats</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_chats}</p>
-            </div>
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Shells Owned</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.shells_owned}</p>
-            </div>
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Claws Bound</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.claws_bound}</p>
-            </div>
-            <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
-              <p className="text-xs text-[#64748b]">Withdrawals</p>
-              <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_withdrawals.toFixed(2)}</p>
-            </div>
+          <div className="mb-3 flex items-center justify-between">
+            <h2 className="flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
+              <span>📊</span> Stats
+            </h2>
+            {!hasWallet && (
+              <span className="text-[10px] text-[#475569]">
+                Wallet-bound stats unavailable
+              </span>
+            )}
           </div>
+          {hasWallet ? (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Total Snipes</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_snipes}</p>
+              </div>
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Today Snipes</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.today_snipes}</p>
+              </div>
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Total Chats</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_chats}</p>
+              </div>
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Shells Owned</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.shells_owned}</p>
+              </div>
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Claws Bound</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.claws_bound}</p>
+              </div>
+              <div className="rounded-lg bg-[#1e1e2e]/50 p-3">
+                <p className="text-xs text-[#64748b]">Withdrawals</p>
+                <p className="mt-1 text-xl font-bold text-[#e2e8f0]">{stats.total_withdrawals.toFixed(2)}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="rounded-lg border border-dashed border-[#1e1e2e] bg-[#0a0a0f] p-6 text-center">
+              <p className="text-xs text-[#64748b]">
+                This user has no wallet bound. On-chain stats (snipes, shells, claws, withdrawals)
+                are not applicable.
+              </p>
+              <p className="mt-2 text-sm text-[#94a3b8]">
+                Vibe Write Chats: <span className="font-bold text-[#e2e8f0]">{stats.total_chats}</span>
+              </p>
+            </div>
+          )}
         </div>
       </div>
 
@@ -355,7 +429,6 @@ export default function AdminUserDetailPage() {
           </div>
         )}
 
-        {/* Subscription History */}
         {subscription_history && subscription_history.length > 0 && (
           <div className="mt-4 border-t border-[#1e1e2e] pt-3">
             <h3 className="mb-2 text-xs font-medium text-[#64748b]">History</h3>
@@ -383,7 +456,7 @@ export default function AdminUserDetailPage() {
         )}
       </div>
 
-      {/* ── Gift Pro (operates on User.ProExpiresAt directly) ── */}
+      {/* ── Gift Pro (email-only) ───────────────────────── */}
       <div className="rounded-xl border border-[#1e1e2e] bg-[#0d0d14] p-5">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-center gap-2 text-sm font-semibold text-[#e2e8f0]">
@@ -391,11 +464,22 @@ export default function AdminUserDetailPage() {
           </h2>
           <button
             onClick={() => { setGiftMonths(1); setGiftReason(""); setModal("giftPro"); }}
-            className="rounded-lg bg-[#8b5cf6] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#7c3aed]"
+            disabled={!hasEmail}
+            title={hasEmail ? "Gift Pro months to this user" : "Only email accounts can receive Pro gifts"}
+            className={`rounded-lg px-3 py-1.5 text-xs font-medium text-white transition-colors ${
+              hasEmail
+                ? "bg-[#8b5cf6] hover:bg-[#7c3aed]"
+                : "bg-[#1e1e2e] text-[#475569] cursor-not-allowed"
+            }`}
           >
-            Gift Pro
+            🎁 Gift Pro
           </button>
         </div>
+        {!hasEmail && (
+          <p className="mb-3 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs text-amber-400">
+            ⚠ Pro gifts can only be sent to accounts with an email. This wallet-only user cannot receive gifts.
+          </p>
+        )}
         <p className="mb-3 text-xs text-[#64748b]">
           Pro expires at: <span className="text-[#94a3b8]">
             {user.pro_expires_at ? new Date(user.pro_expires_at).toLocaleString() : "—"}
@@ -458,18 +542,17 @@ export default function AdminUserDetailPage() {
 
       {/* ═══ Modals ═══════════════════════════════════════ */}
 
-      {/* Ban Modal */}
       {modal === "ban" && (
         <ConfirmModal
           title="🚫 Ban User"
           confirmLabel="Ban User"
           confirmColor="bg-red-600 hover:bg-red-700"
-          onConfirm={() => handleAction(() => adminUserApi.ban(wallet, banReason))}
+          onConfirm={() => handleAction(() => adminUserApi.ban(userID, banReason))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
           <p className="mb-3 text-sm text-[#94a3b8]">
-            This will ban <code className="text-[#8b5cf6]">{wallet.slice(0, 10)}...</code>,
+            This will ban <strong>{user.email || (hasWallet ? shortAddr(user.wallet_addr) : user.id)}</strong>,
             force logout, and cancel any active subscription.
           </p>
           <textarea
@@ -482,29 +565,27 @@ export default function AdminUserDetailPage() {
         </ConfirmModal>
       )}
 
-      {/* Unban Modal */}
       {modal === "unban" && (
         <ConfirmModal
           title="✅ Unban User"
           confirmLabel="Unban User"
           confirmColor="bg-emerald-600 hover:bg-emerald-700"
-          onConfirm={() => handleAction(() => adminUserApi.unban(wallet))}
+          onConfirm={() => handleAction(() => adminUserApi.unban(userID))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
           <p className="text-sm text-[#94a3b8]">
-            This will restore access for <code className="text-[#8b5cf6]">{wallet.slice(0, 10)}...</code>.
+            This will restore access for <strong>{user.email || (hasWallet ? shortAddr(user.wallet_addr) : user.id)}</strong>.
             Note: subscription will NOT be automatically restored.
           </p>
         </ConfirmModal>
       )}
 
-      {/* Edit Note Modal */}
       {modal === "note" && (
         <ConfirmModal
           title="✏️ Edit Note"
           confirmLabel="Save Note"
-          onConfirm={() => handleAction(() => adminUserApi.updateNote(wallet, noteText))}
+          onConfirm={() => handleAction(() => adminUserApi.updateNote(userID, noteText))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
@@ -518,13 +599,12 @@ export default function AdminUserDetailPage() {
         </ConfirmModal>
       )}
 
-      {/* Grant Subscription Modal */}
       {modal === "grant" && (
         <ConfirmModal
           title="⭐ Grant Pro Subscription"
           confirmLabel="Grant"
           confirmColor="bg-purple-600 hover:bg-purple-700"
-          onConfirm={() => handleAction(() => adminUserApi.grantSubscription(wallet, "pro", grantDays, grantReason))}
+          onConfirm={() => handleAction(() => adminUserApi.grantSubscription(userID, "pro", grantDays, grantReason))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
@@ -554,12 +634,11 @@ export default function AdminUserDetailPage() {
         </ConfirmModal>
       )}
 
-      {/* Extend Subscription Modal */}
       {modal === "extend" && (
         <ConfirmModal
           title="📅 Extend Subscription"
           confirmLabel={`Extend +${extendDays} Days`}
-          onConfirm={() => handleAction(() => adminUserApi.extendSubscription(wallet, extendDays, extendReason))}
+          onConfirm={() => handleAction(() => adminUserApi.extendSubscription(userID, extendDays, extendReason))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
@@ -589,13 +668,12 @@ export default function AdminUserDetailPage() {
         </ConfirmModal>
       )}
 
-      {/* Revoke Subscription Modal */}
       {modal === "revoke" && (
         <ConfirmModal
           title="⚠️ Revoke Subscription"
           confirmLabel="Revoke"
           confirmColor="bg-red-600 hover:bg-red-700"
-          onConfirm={() => handleAction(() => adminUserApi.revokeSubscription(wallet, revokeReason))}
+          onConfirm={() => handleAction(() => adminUserApi.revokeSubscription(userID, revokeReason))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
@@ -614,19 +692,21 @@ export default function AdminUserDetailPage() {
         </ConfirmModal>
       )}
 
-      {/* Gift Pro Modal */}
       {modal === "giftPro" && (
         <ConfirmModal
           title="🎁 Gift Pro"
           confirmLabel={`Gift +${giftMonths}mo`}
           confirmColor="bg-purple-600 hover:bg-purple-700"
-          onConfirm={() => handleAction(() => adminGiftProApi.gift(wallet, giftMonths, giftReason))}
+          onConfirm={() => handleAction(() => adminGiftProApi.gift(userID, giftMonths, giftReason))}
           onCancel={() => setModal(null)}
           loading={modalLoading}
         >
           <div className="space-y-3">
             <p className="text-xs text-[#64748b]">
               Adds months on top of current expiry (or starts from now if expired). Idempotent — every call extends.
+            </p>
+            <p className="rounded-lg bg-blue-500/5 border border-blue-500/20 px-3 py-2 text-xs text-blue-300">
+              Recipient: <span className="font-medium">{user.email}</span>
             </p>
             <div>
               <label className="mb-1 block text-xs text-[#64748b]">Months</label>

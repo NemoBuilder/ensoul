@@ -214,6 +214,9 @@ func AuthBindEmail(c *gin.Context) {
 		return
 	}
 
+	// Burn the code only after the bind succeeded.
+	services.ConsumeEmailCode(email, code)
+
 	util.Log.Info("[bind] user %s bound email %s", user.ID, email)
 	c.JSON(http.StatusOK, gin.H{"email": email, "bound": true})
 }

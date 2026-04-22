@@ -134,7 +134,106 @@ func Connect(cfg *config.Config) *gorm.DB {
 	// Override pack location with METHODOLOGY_DIR env var.
 	seedMentorMethodology()
 
+	// Step 8: Replace GORM's plain unique indexes on users.email / users.wallet_addr
+	// with PARTIAL unique indexes that ignore empty strings and soft-deleted rows.
+	// Without this, the second email-only signup collides with the first
+	// (both would write wallet_addr = ''), causing a 500 on /api/auth/email/verify.
+	ensureUserPartialUniqueIndexes()
+
+	// Step 9: Add user_id columns to legacy business tables and backfill from
+	// wallet_addr → users.id. Lets the V3 admin layer treat users.id as the
+	// single source of truth across mixed wallet/email signups.
+	ensureUserIDColumns()
+
 	return DB
+}
+
+// ensureUserIDColumns adds nullable user_id columns to legacy business tables
+// (subscriptions, vibe_write_replies, claw_bindings, claws, holder_revenues,
+// user_personas, used_payment_tx) and backfills them by joining on wallet_addr.
+// Idempotent and safe to run on every startup.
+func ensureUserIDColumns() {
+	addCols := []string{
+		`ALTER TABLE subscriptions      ADD COLUMN IF NOT EXISTS user_id UUID`,
+		`ALTER TABLE vibe_write_replies ADD COLUMN IF NOT EXISTS user_id UUID`,
+		`ALTER TABLE claw_bindings      ADD COLUMN IF NOT EXISTS user_id UUID`,
+		`ALTER TABLE claws              ADD COLUMN IF NOT EXISTS claimed_by_user_id UUID`,
+		`ALTER TABLE holder_revenues    ADD COLUMN IF NOT EXISTS user_id UUID`,
+		`ALTER TABLE user_personas      ADD COLUMN IF NOT EXISTS user_id UUID`,
+		`ALTER TABLE used_payment_tx    ADD COLUMN IF NOT EXISTS user_id UUID`,
+	}
+	for _, s := range addCols {
+		if err := DB.Exec(s).Error; err != nil {
+			util.Log.Warn("[migrate] add user_id column failed (non-fatal): %v — sql: %s", err, s)
+		}
+	}
+
+	backfills := []string{
+		`UPDATE subscriptions s SET user_id = u.id FROM users u
+			WHERE s.wallet_addr <> '' AND s.wallet_addr = u.wallet_addr AND s.user_id IS NULL`,
+		`UPDATE vibe_write_replies r SET user_id = u.id FROM users u
+			WHERE r.wallet_addr <> '' AND r.wallet_addr = u.wallet_addr AND r.user_id IS NULL`,
+		`UPDATE claw_bindings b SET user_id = u.id FROM users u
+			WHERE b.wallet_addr <> '' AND b.wallet_addr = u.wallet_addr AND b.user_id IS NULL`,
+		`UPDATE claws c SET claimed_by_user_id = u.id FROM users u
+			WHERE c.wallet_addr <> '' AND c.wallet_addr = u.wallet_addr AND c.claimed_by_user_id IS NULL`,
+		`UPDATE holder_revenues h SET user_id = u.id FROM users u
+			WHERE h.wallet_addr <> '' AND h.wallet_addr = u.wallet_addr AND h.user_id IS NULL`,
+		`UPDATE user_personas p SET user_id = u.id FROM users u
+			WHERE p.wallet_addr <> '' AND p.wallet_addr = u.wallet_addr AND p.user_id IS NULL`,
+		`UPDATE used_payment_tx t SET user_id = u.id FROM users u
+			WHERE t.wallet_addr <> '' AND t.wallet_addr = u.wallet_addr AND t.user_id IS NULL`,
+	}
+	for _, s := range backfills {
+		if err := DB.Exec(s).Error; err != nil {
+			util.Log.Warn("[migrate] backfill user_id failed (non-fatal): %v — sql: %s", err, s)
+		}
+	}
+
+	indexes := []string{
+		`CREATE INDEX IF NOT EXISTS idx_subscriptions_user      ON subscriptions(user_id)        WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_vibe_write_replies_user ON vibe_write_replies(user_id)   WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_claw_bindings_user      ON claw_bindings(user_id)        WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_claws_claimed_by_user   ON claws(claimed_by_user_id)     WHERE claimed_by_user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_holder_revenues_user    ON holder_revenues(user_id)      WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_user_personas_user      ON user_personas(user_id)        WHERE user_id IS NOT NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_used_payment_tx_user    ON used_payment_tx(user_id)      WHERE user_id IS NOT NULL`,
+	}
+	for _, s := range indexes {
+		if err := DB.Exec(s).Error; err != nil {
+			util.Log.Warn("[migrate] create user_id index failed (non-fatal): %v — sql: %s", err, s)
+		}
+	}
+	util.Log.Info("[migrate] user_id columns + backfill on business tables ensured")
+}
+
+// ensureUserPartialUniqueIndexes drops the legacy non-partial unique indexes on
+// users.email and users.wallet_addr (created by an earlier `uniqueIndex` GORM
+// tag) and replaces them with partial unique indexes that skip empty strings
+// and soft-deleted rows. Idempotent and safe to run on every startup.
+func ensureUserPartialUniqueIndexes() {
+	stmts := []string{
+		// Drop any pre-existing non-partial unique index that GORM may have created
+		`DROP INDEX IF EXISTS idx_users_email`,
+		`DROP INDEX IF EXISTS idx_users_wallet_addr`,
+		// Plain (non-unique) indexes for fast lookups — these match the new
+		// `index` GORM tag and may already exist; CREATE IF NOT EXISTS is safe.
+		`CREATE INDEX IF NOT EXISTS idx_users_email_lookup    ON users (email)       WHERE deleted_at IS NULL`,
+		`CREATE INDEX IF NOT EXISTS idx_users_wallet_lookup   ON users (wallet_addr) WHERE deleted_at IS NULL`,
+		// Partial unique indexes — ignore empty values and soft-deleted rows
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_email_unique
+			ON users (email)
+			WHERE email <> '' AND deleted_at IS NULL`,
+		`CREATE UNIQUE INDEX IF NOT EXISTS idx_users_wallet_addr_unique
+			ON users (wallet_addr)
+			WHERE wallet_addr <> '' AND deleted_at IS NULL`,
+	}
+	for _, s := range stmts {
+		if err := DB.Exec(s).Error; err != nil {
+			util.Log.Warn("[migrate] partial-unique-index step failed (non-fatal): %v — sql: %s", err, s)
+		}
+	}
+	util.Log.Info("[migrate] partial unique indexes on users.email / users.wallet_addr ensured")
 }
 
 // normalizeHandlesToLower converts all shell handles to lowercase in-place.
