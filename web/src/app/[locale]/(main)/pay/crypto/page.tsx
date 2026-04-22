@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useRouter } from "@/i18n/navigation";
 import { useSearchParams } from "next/navigation";
@@ -40,6 +40,14 @@ function fmt(weiStr: string | undefined, decimals: number, display: number): str
 }
 
 export default function CryptoPayPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-[#0a0a0f] pt-24 pb-20 text-[#e2e8f0]" />}>
+      <CryptoPayPageInner />
+    </Suspense>
+  );
+}
+
+function CryptoPayPageInner() {
   const t = useTranslations("CryptoPay");
   const router = useRouter();
   const searchParams = useSearchParams();
