@@ -16,6 +16,7 @@ export default function WorkspaceLayout({
   children: React.ReactNode;
 }) {
   const t = useTranslations("Workspace");
+  const tNav = useTranslations("Navbar");
   const [user, setUser] = useState<EmailSessionInfo | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
   const [upgradeOpen, setUpgradeOpen] = useState(false);
@@ -134,8 +135,52 @@ export default function WorkspaceLayout({
                         )}
                         <span>{user.credits} {t("credits")}</span>
                       </div>
+                      {user.is_pro && user.pro_expires_at && (
+                        <p className="mt-1 text-[10px] text-[#64748b]">
+                          {tNav("proExpiresOn", {
+                            date: new Date(user.pro_expires_at).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }),
+                          })}
+                        </p>
+                      )}
                     </div>
                     <div className="py-1">
+                      <Link
+                        role="menuitem"
+                        href="/pricing"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
+                      >
+                        <span>{user.is_pro ? "🔄" : "⭐"}</span>
+                        <span>{user.is_pro ? tNav("renewSubscription") : tNav("upgradeToPro")}</span>
+                      </Link>
+                      <Link
+                        role="menuitem"
+                        href="/my-souls"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
+                      >
+                        <span>🧬</span><span>{tNav("mySouls")}</span>
+                      </Link>
+                      <Link
+                        role="menuitem"
+                        href="/protocol"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
+                      >
+                        <span>📊</span><span>{tNav("protocol")}</span>
+                      </Link>
+                      <Link
+                        role="menuitem"
+                        href="/settings"
+                        onClick={() => setMenuOpen(false)}
+                        className="flex items-center gap-2 px-3 py-2 text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
+                      >
+                        <span>⚙️</span><span>{tNav("settings")}</span>
+                      </Link>
                       {!user.has_password && (
                         <button
                           role="menuitem"
@@ -143,15 +188,6 @@ export default function WorkspaceLayout({
                           className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
                         >
                           <span>🔑</span><span>{t("setPassword")}</span>
-                        </button>
-                      )}
-                      {!user.is_pro && (
-                        <button
-                          role="menuitem"
-                          onClick={() => { setMenuOpen(false); setUpgradeOpen(true); }}
-                          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs text-[#e2e8f0] hover:bg-[#1e1e2e]"
-                        >
-                          <span>💎</span><span>{t("upgradeToPro")}</span>
                         </button>
                       )}
                     </div>

@@ -49,6 +49,9 @@ func main() {
 	// Start tax wallet auto-mint scheduler (weekly, Monday 00:00 UTC)
 	services.StartTaxWalletScheduler()
 
+	// Start crypto payment pending-verifier (every 5 minutes)
+	services.StartCryptoPaymentRefresh(5 * time.Minute)
+
 	// Vibe Write v1 background workers removed in V3 cleanup (D Stage 2):
 	//   - StartVibeWriteMonitor (KOL tweet monitor)
 	//   - InitSSEHub / StartFeedRefresher (tag-based feed)

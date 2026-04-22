@@ -742,6 +742,7 @@ type User struct {
 	BannedBy      string         `gorm:"type:varchar(50)" json:"banned_by,omitempty"`
 	Note          string         `gorm:"type:text" json:"note,omitempty"`
 	ProExpiresAt        *time.Time     `json:"pro_expires_at,omitempty"`
+	ProSource           string         `gorm:"type:varchar(16)" json:"pro_source,omitempty"` // 'lemon' | 'crypto'
 	LemonSubscriptionID string         `gorm:"type:varchar(100)" json:"lemon_subscription_id,omitempty"`
 	Credits             int            `gorm:"default:50" json:"credits"`
 	CreditsReset  time.Time      `json:"credits_reset"`
@@ -797,4 +798,27 @@ type GiftProLog struct {
 	OldExpiresAt  *time.Time `json:"old_expires_at,omitempty"`
 	NewExpiresAt  time.Time  `json:"new_expires_at"`
 	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// CryptoPayment records on-chain payments for Pro subscription via BSC.
+// Token = "USDT" or "BNB". tx_hash is globally unique to prevent replay.
+type CryptoPayment struct {
+	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID               uuid.UUID  `gorm:"type:uuid;not null;index" json:"user_id"`
+	Chain                string     `gorm:"type:varchar(16);not null" json:"chain"`              // 'bsc'
+	Token                string     `gorm:"type:varchar(16);not null" json:"token"`              // 'USDT' | 'BNB'
+	TokenAddr            string     `gorm:"type:varchar(64)" json:"token_addr,omitempty"`        // USDT contract; empty for BNB
+	ToAddr               string     `gorm:"type:varchar(64);not null" json:"to_addr"`            // platform recipient
+	FromAddr             string     `gorm:"type:varchar(64)" json:"from_addr,omitempty"`         // payer
+	TxHash               string     `gorm:"type:varchar(80);not null;uniqueIndex" json:"tx_hash"`
+	AmountWei            string     `gorm:"type:numeric(78,0);not null" json:"amount_wei"`       // raw on-chain amount
+	PaidUSDTEquivalent   string     `gorm:"type:numeric(38,18);not null;default:'0'" json:"paid_usdt_equivalent"`
+	BlockNumber          uint64     `json:"block_number"`
+	Confirmations        int        `gorm:"default:0" json:"confirmations"`
+	Status               string     `gorm:"type:varchar(16);not null;index" json:"status"`       // 'pending' | 'confirmed' | 'rejected'
+	RejectReason         string     `gorm:"type:varchar(32)" json:"reject_reason,omitempty"`
+	Months               int        `gorm:"not null;default:1" json:"months"`                    // number of Pro months purchased (1..24)
+	ProGrantedUntil      *time.Time `json:"pro_granted_until,omitempty"`
+	CreatedAt            time.Time  `json:"created_at"`
+	VerifiedAt           *time.Time `json:"verified_at,omitempty"`
 }

@@ -150,6 +150,12 @@ func Setup() *gin.Engine {
 			billing.POST("/checkout", middleware.RateLimit(middleware.GeneralLimiter), handlers.BillingCheckout)
 			billing.POST("/webhook", handlers.BillingWebhook) // No auth — verified via signature
 			billing.GET("/status", handlers.BillingStatus)
+
+			// Crypto payment (BSC USDT/BNB)
+			billing.GET("/crypto/quote", handlers.CryptoBillingQuote)
+			billing.POST("/crypto/submit", middleware.RateLimit(middleware.GeneralLimiter), handlers.CryptoBillingSubmit)
+			billing.GET("/crypto/status", handlers.CryptoBillingStatus)
+			billing.GET("/crypto/history", handlers.CryptoBillingHistory)
 		}
 
 		// Chat endpoints

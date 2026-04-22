@@ -21,6 +21,7 @@
     "disconnect": "切断",
     "souls": "ソウル",
     "protocol": "プロトコル",
+    "pricing": "料金",
     "login": "ログイン",
     "logout": "ログアウト",
     "credits": "クレジット",
@@ -33,7 +34,7 @@
   },
   "Home": {
     "heroTitle": "AIライティングパートナー",
-    "heroHighlight": "Twitter/X向け。",
+    "heroHighlight": "X向け。",
     "heroDesc": "記憶を持つAIパートナー——ツイート作成、リプライ、オーディエンス拡大をサポート。使うほどあなたのスタイルを理解します。",
     "startWriting": "書き始める",
     "exploreSouls": "ソウルを探索",

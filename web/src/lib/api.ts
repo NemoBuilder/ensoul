@@ -521,6 +521,7 @@ export interface EmailSessionInfo {
   twitter_handle?: string;
   wallet_addr?: string;
   is_pro: boolean;
+  pro_expires_at?: string;
   credits: number;
   has_password: boolean;
 }
@@ -947,6 +948,58 @@ export const billingApi = {
     apiFetch<{ url: string }>("/api/billing/checkout", { method: "POST" }),
   status: () =>
     apiFetch<BillingStatus>("/api/billing/status"),
+};
+
+// --- Crypto Payment (BSC USDT/BNB) ---
+
+export interface CryptoQuote {
+  months: number;
+  price_per_month_usdt: string;
+  price_usdt: string;
+  usdt_wei: string;
+  bnb_wei: string;
+  bnb_human: string;
+  buffer_bps: number;
+  recipient_addr: string;
+  usdt_contract: string;
+  chain_id: number;
+  duration_days: number;
+  expires_at: number;
+}
+
+export interface CryptoPayment {
+  id: string;
+  user_id: string;
+  chain: string;
+  token: "USDT" | "BNB";
+  token_addr?: string;
+  to_addr: string;
+  from_addr?: string;
+  tx_hash: string;
+  amount_wei: string;
+  paid_usdt_equivalent: string;
+  block_number: number;
+  confirmations: number;
+  status: "pending" | "confirmed" | "rejected";
+  reject_reason?: string;
+  months: number;
+  pro_granted_until?: string;
+  created_at: string;
+  verified_at?: string;
+}
+
+export const cryptoBillingApi = {
+  quote: (months: number = 1) =>
+    apiFetch<CryptoQuote>(`/api/billing/crypto/quote?months=${encodeURIComponent(months)}`),
+  submit: (txHash: string, expectedToken: "USDT" | "BNB", months: number = 1) =>
+    apiFetch<CryptoPayment>("/api/billing/crypto/submit", {
+      method: "POST",
+      body: JSON.stringify({ tx_hash: txHash, expected_token: expectedToken, months }),
+    }),
+  status: (id: string) =>
+    apiFetch<CryptoPayment>(`/api/billing/crypto/status?id=${encodeURIComponent(id)}`),
+  history: () =>
+    apiFetch<{ items: CryptoPayment[] }>("/api/billing/crypto/history"),
 };
 
 // --- Vibe Write 2.0 Workspace API ---

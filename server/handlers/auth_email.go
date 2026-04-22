@@ -215,6 +215,7 @@ func EmailSessionInfo(c *gin.Context) {
 		"twitter_handle": user.TwitterHandle,
 		"wallet_addr":    user.WalletAddr,
 		"is_pro":         user.IsPro(),
+		"pro_expires_at": user.ProExpiresAt,
 		"credits":        user.Credits,
 		"has_password":   user.PasswordHash != "",
 	})

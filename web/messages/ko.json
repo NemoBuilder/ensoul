@@ -21,6 +21,7 @@
     "disconnect": "연결 해제",
     "souls": "소울",
     "protocol": "프로토콜",
+    "pricing": "요금제",
     "login": "로그인",
     "logout": "로그아웃",
     "credits": "크레딧",
@@ -33,7 +34,7 @@
   },
   "Home": {
     "heroTitle": "AI 글쓰기 파트너",
-    "heroHighlight": "Twitter/X를 위한.",
+    "heroHighlight": "X를 위한.",
     "heroDesc": "기억을 가진 AI 파트너 — 트윗 작성, 답글 작성, 오디언스 성장을 도와줍니다. 사용할수록 당신의 스타일을 더 잘 이해합니다.",
     "startWriting": "글쓰기 시작",
     "exploreSouls": "소울 탐색",

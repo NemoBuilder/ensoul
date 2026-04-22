@@ -90,6 +90,14 @@ type Config struct {
 	LemonSqueezyStoreID       string // Store ID
 	LemonSqueezyVariantID     string // Pro plan variant ID
 	LemonSqueezyWebhookSecret string // Webhook signing secret
+
+	// Crypto payment (BSC USDT/BNB parallel channel)
+	PaymentRecipient            string // PAYMENT_RECIPIENT_ADDR — receiving wallet (read-only, no private key)
+	PaymentMinConfirm           int    // PAYMENT_MIN_CONFIRM           default 2
+	ProPriceUSDT                int    // PRO_PRICE_USDT                default 49
+	ProDurationDays             int    // PRO_DURATION_DAYS             default 30
+	ProBNBQuoteBufferBPS        int    // PRO_BNB_QUOTE_BUFFER_BPS      default 150 (1.5%)
+	ProBNBVerifyToleranceBPS    int    // PRO_BNB_VERIFY_TOLERANCE_BPS  default 200 (2%)
 }
 
 // Global config instance
@@ -164,6 +172,13 @@ func Load() *Config {
 		LemonSqueezyStoreID:       getEnv("LEMONSQUEEZY_STORE_ID", ""),
 		LemonSqueezyVariantID:     getEnv("LEMONSQUEEZY_VARIANT_ID", ""),
 		LemonSqueezyWebhookSecret: getEnv("LEMONSQUEEZY_WEBHOOK_SECRET", ""),
+
+		PaymentRecipient:         getEnv("PAYMENT_RECIPIENT_ADDR", ""),
+		PaymentMinConfirm:        parseIntEnv("PAYMENT_MIN_CONFIRM", 2),
+		ProPriceUSDT:             parseIntEnv("PRO_PRICE_USDT", 49),
+		ProDurationDays:          parseIntEnv("PRO_DURATION_DAYS", 30),
+		ProBNBQuoteBufferBPS:     parseIntEnv("PRO_BNB_QUOTE_BUFFER_BPS", 150),
+		ProBNBVerifyToleranceBPS: parseIntEnv("PRO_BNB_VERIFY_TOLERANCE_BPS", 200),
 	}
 
 	// Auto-set log level based on environment if not explicitly configured

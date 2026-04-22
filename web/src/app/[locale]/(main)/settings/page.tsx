@@ -4,12 +4,29 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { useAccount, useSignMessage } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { bindApi, emailAuthApi, type EmailSessionInfo } from "@/lib/api";
+import { Link } from "@/i18n/navigation";
+import {
+  bindApi,
+  billingApi,
+  cryptoBillingApi,
+  emailAuthApi,
+  type BillingStatus,
+  type CryptoPayment,
+  type EmailSessionInfo,
+} from "@/lib/api";
+import PaymentMethodModal from "@/components/PaymentMethodModal";
 
 export default function SettingsPage() {
   const t = useTranslations("Settings");
+  const tSub = useTranslations("Subscription");
   const [user, setUser] = useState<EmailSessionInfo | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Subscription state
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const [payments, setPayments] = useState<CryptoPayment[] | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [methodOpen, setMethodOpen] = useState(false);
 
   // Bind-wallet state (when user is email-only)
   const { address: connectedAddr, isConnected } = useAccount();
@@ -35,6 +52,43 @@ export default function SettingsPage() {
       .catch(() => setUser(null))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!user) return;
+    billingApi.status().then(setBilling).catch(() => setBilling(null));
+  }, [user]);
+
+  useEffect(() => {
+    if (!historyOpen || payments !== null) return;
+    cryptoBillingApi
+      .history()
+      .then((r) => setPayments(r.items))
+      .catch(() => setPayments([]));
+  }, [historyOpen, payments]);
+
+  function formatExpires(): string | null {
+    if (!billing?.pro_expires_at) return null;
+    try {
+      return new Date(billing.pro_expires_at).toLocaleDateString(undefined, {
+        year: "numeric",
+        month: "short",
+        day: "numeric",
+      });
+    } catch {
+      return null;
+    }
+  }
+
+  function daysRemaining(): number | null {
+    if (!billing?.pro_expires_at) return null;
+    try {
+      const diff = new Date(billing.pro_expires_at).getTime() - Date.now();
+      if (diff <= 0) return 0;
+      return Math.ceil(diff / (1000 * 60 * 60 * 24));
+    } catch {
+      return null;
+    }
+  }
 
   async function handleBindWallet() {
     if (!isConnected || !connectedAddr) {
@@ -121,6 +175,115 @@ export default function SettingsPage() {
           <Row label={t("creditsRemaining")} value={String(user.credits)} />
         </section>
 
+        {/* Subscription */}
+        <section className="mb-8 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-[#e2e8f0]">{tSub("title")}</h2>
+            {billing?.is_pro && (
+              <span className="rounded bg-[#8b5cf6] px-2 py-0.5 text-[10px] font-bold text-white">
+                PRO
+              </span>
+            )}
+          </div>
+
+          {billing?.is_pro ? (
+            <>
+              <Row label={tSub("plan")} value={tSub("planPro")} />
+              <Row label={tSub("expiresAt")} value={formatExpires() ?? "—"} />
+              <Row
+                label={tSub("daysRemainingLabel")}
+                value={daysRemaining() !== null ? tSub("daysValue", { n: daysRemaining()! }) : "—"}
+              />
+              <div className="mt-4 flex flex-wrap gap-2">
+                <button
+                  onClick={() => setMethodOpen(true)}
+                  className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+                >
+                  {tSub("renewNow")}
+                </button>
+                <Link
+                  href="/pricing"
+                  className="rounded-lg border border-[#1e1e2e] px-4 py-2 text-sm text-[#e2e8f0] transition-colors hover:border-[#8b5cf6]"
+                >
+                  {tSub("viewPlan")}
+                </Link>
+              </div>
+            </>
+          ) : (
+            <>
+              <Row label={tSub("plan")} value={tSub("planFree")} />
+              <p className="mt-3 text-sm text-[#94a3b8]">{tSub("freeHint")}</p>
+              <div className="mt-4">
+                <button
+                  onClick={() => setMethodOpen(true)}
+                  className="rounded-lg bg-[#8b5cf6] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
+                >
+                  {tSub("upgradeNow")}
+                </button>
+              </div>
+            </>
+          )}
+
+          {/* Payment history toggle */}
+          <div className="mt-5 border-t border-[#1e1e2e] pt-4">
+            <button
+              onClick={() => setHistoryOpen((v) => !v)}
+              className="flex w-full items-center justify-between text-sm text-[#94a3b8] hover:text-[#e2e8f0]"
+            >
+              <span>{tSub("history")}</span>
+              <span className={`transition-transform ${historyOpen ? "rotate-180" : ""}`}>▾</span>
+            </button>
+
+            {historyOpen && (
+              <div className="mt-3 space-y-2">
+                {payments === null && (
+                  <p className="text-xs text-[#64748b]">{tSub("loading")}</p>
+                )}
+                {payments && payments.length === 0 && (
+                  <p className="text-xs text-[#64748b]">{tSub("historyEmpty")}</p>
+                )}
+                {payments &&
+                  payments.map((p) => (
+                    <div
+                      key={p.id}
+                      className="rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] p-3 text-xs"
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-[#94a3b8]">
+                          {new Date(p.created_at).toLocaleString()}
+                        </span>
+                        <span
+                          className={
+                            p.status === "confirmed"
+                              ? "text-emerald-400"
+                              : p.status === "rejected"
+                              ? "text-red-400"
+                              : "text-yellow-300"
+                          }
+                        >
+                          {tSub(`status_${p.status}`)}
+                        </span>
+                      </div>
+                      <div className="mt-1 flex items-center justify-between text-[#94a3b8]">
+                        <span>
+                          {p.token} · {tSub("via", { method: tSub("methodCrypto") })}
+                        </span>
+                        <a
+                          href={`https://bscscan.com/tx/${p.tx_hash}`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[#a78bfa] hover:underline"
+                        >
+                          {p.tx_hash.slice(0, 8)}…{p.tx_hash.slice(-6)}
+                        </a>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+        </section>
+
         {/* Bind wallet */}
         {!user.wallet_addr && (
           <section className="mb-8 rounded-lg border border-[#1e1e2e] bg-[#14141f] p-6">
@@ -200,6 +363,14 @@ export default function SettingsPage() {
           </section>
         )}
       </div>
+      <PaymentMethodModal
+        open={methodOpen}
+        onClose={() => {
+          setMethodOpen(false);
+          // Refresh status after the modal closes (LemonSqueezy webhook may have run).
+          billingApi.status().then(setBilling).catch(() => {});
+        }}
+      />
     </div>
   );
 }

@@ -27,10 +27,8 @@ func BillingCheckout(c *gin.Context) {
 		c.JSON(http.StatusNotFound, gin.H{"error": "user not found"})
 		return
 	}
-	if user.IsPro() {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "already a Pro subscriber"})
-		return
-	}
+	// Pro users may purchase again to extend their subscription. The webhook
+	// (HandleSubscriptionWebhook) already extends pro_expires_at idempotently.
 
 	checkoutURL, err := services.CreateCheckoutURL(userID, email)
 	if err != nil {

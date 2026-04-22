@@ -2,7 +2,9 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { billingApi } from "@/lib/api";
+import { Link } from "@/i18n/navigation";
+import { PRICING } from "@/lib/pricing";
+import PaymentMethodModal from "./PaymentMethodModal";
 
 interface UpgradeModalProps {
   open: boolean;
@@ -12,21 +14,12 @@ interface UpgradeModalProps {
 
 export default function UpgradeModal({ open, onClose, reason = "feature" }: UpgradeModalProps) {
   const t = useTranslations("Upgrade");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
+  const [methodOpen, setMethodOpen] = useState(false);
 
   if (!open) return null;
 
-  async function handleUpgrade() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await billingApi.checkout();
-      window.location.href = res.url;
-    } catch {
-      setError(t("checkoutError"));
-      setLoading(false);
-    }
+  function handleUpgrade() {
+    setMethodOpen(true);
   }
 
   const reasonText: Record<string, string> = {
@@ -64,15 +57,21 @@ export default function UpgradeModal({ open, onClose, reason = "feature" }: Upgr
         </div>
 
         {/* Price */}
-        <div className="mb-4 text-center">
-          <span className="text-3xl font-bold text-[#e2e8f0]">$49</span>
+        <div className="mb-2 text-center">
+          <span className="text-3xl font-bold text-[#e2e8f0]">${PRICING.pro.priceUSD}</span>
           <span className="text-sm text-[#64748b]"> / {t("month")}</span>
         </div>
 
-        {/* Error */}
-        {error && (
-          <p className="mb-3 text-center text-sm text-red-400">{error}</p>
-        )}
+        {/* Link to full pricing page */}
+        <div className="mb-4 text-center">
+          <Link
+            href="/pricing"
+            onClick={onClose}
+            className="text-xs text-[#94a3b8] underline-offset-2 hover:text-[#a78bfa] hover:underline"
+          >
+            {t("viewFullComparison")}
+          </Link>
+        </div>
 
         {/* Actions */}
         <div className="flex gap-3">
@@ -84,13 +83,13 @@ export default function UpgradeModal({ open, onClose, reason = "feature" }: Upgr
           </button>
           <button
             onClick={handleUpgrade}
-            disabled={loading}
-            className="flex-1 rounded-lg bg-[#8b5cf6] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa] disabled:opacity-50"
+            className="flex-1 rounded-lg bg-[#8b5cf6] px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#a78bfa]"
           >
-            {loading ? t("processing") : t("upgradePro")}
+            {t("upgradePro")}
           </button>
         </div>
       </div>
+      <PaymentMethodModal open={methodOpen} onClose={() => setMethodOpen(false)} />
     </div>
   );
 }

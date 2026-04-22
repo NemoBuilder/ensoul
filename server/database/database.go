@@ -91,6 +91,8 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.EmailCode{},
 		&models.AdminAuditLog{},
 		&models.GiftProLog{},
+		// Crypto payment (BSC USDT/BNB)
+		&models.CryptoPayment{},
 		// Vibe Write 2.0 workspace models
 		&models.VibeWorkspace{},
 		&models.VibeMemory{},

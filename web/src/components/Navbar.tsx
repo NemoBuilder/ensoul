@@ -74,6 +74,7 @@ export default function Navbar() {
           <div className="flex items-center gap-6">
             {[
               { href: "/vibe-write" as const, label: t("vibe-write") },
+              { href: "/pricing" as const, label: t("pricing") },
               { href: "/explore" as const, label: t("souls") },
               { href: "/protocol" as const, label: t("protocol") },
             ].map((item) => (
@@ -134,7 +135,25 @@ export default function Navbar() {
                       <p className="text-xs text-[#94a3b8]">
                         {emailUser.is_pro ? "Pro" : "Free"} · {emailUser.credits} {t("credits")}
                       </p>
+                      {emailUser.is_pro && emailUser.pro_expires_at && (
+                        <p className="mt-1 text-[10px] text-[#64748b]">
+                          {t("proExpiresOn", {
+                            date: new Date(emailUser.pro_expires_at).toLocaleDateString(undefined, {
+                              year: "numeric",
+                              month: "short",
+                              day: "numeric",
+                            }),
+                          })}
+                        </p>
+                      )}
                     </div>
+                    <Link
+                      href="/pricing"
+                      className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"
+                    >
+                      <span>{emailUser.is_pro ? "🔄" : "⭐"}</span>
+                      <span>{emailUser.is_pro ? t("renewSubscription") : t("upgradeToPro")}</span>
+                    </Link>
                     <Link
                       href="/my-souls"
                       className="flex items-center gap-2 px-4 py-3 text-sm text-[#e2e8f0] transition-colors hover:bg-[#1e1e2e]"

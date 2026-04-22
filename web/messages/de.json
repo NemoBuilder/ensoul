@@ -21,6 +21,7 @@
     "disconnect": "Trennen",
     "souls": "Souls",
     "protocol": "Protocol",
+    "pricing": "Preise",
     "login": "Login",
     "logout": "Logout",
     "credits": "credits",
@@ -33,7 +34,7 @@
   },
   "Home": {
     "heroTitle": "Your AI writing partner",
-    "heroHighlight": "for Twitter/X.",
+    "heroHighlight": "for X.",
     "heroDesc": "An AI partner with memory — helps you write tweets, craft replies, and grow your audience. The more you use it, the better it knows your style.",
     "startWriting": "Start Writing",
     "exploreSouls": "Explore Souls",
