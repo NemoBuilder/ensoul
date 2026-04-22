@@ -967,12 +967,6 @@ export interface VibeMemory {
   source: "user" | "ai" | "import";
   status: "pending" | "accepted" | "rejected";
   reason?: string;
-  /**
-   * Set when a Free user tried to save into a Pro-only category and the
-   * backend silently downgraded the entry to `profile`. UI should surface
-   * a soft inline hint instead of an upgrade modal.
-   */
-  downgraded_from?: "knowledge" | "network" | "archive";
   created_at: string;
   updated_at: string;
 }
@@ -1001,6 +995,13 @@ export interface VibeChatMsg {
 export const workspaceApi = {
   list: () =>
     apiFetch<{ workspaces: Workspace[] }>("/api/vibe-write/workspaces"),
+
+  /** Resolve a Twitter/X status URL into a structured AttachedTweet.
+   * `text` may be empty when SocialData is not configured server-side. */
+  fetchTweet: (url: string) =>
+    apiFetch<{ url: string; author_handle: string; text: string }>(
+      `/api/vibe-write/fetch-tweet?url=${encodeURIComponent(url)}`
+    ),
 
   create: (name: string, twitterHandle?: string) =>
     apiFetch<Workspace>("/api/vibe-write/workspaces", {
@@ -1042,6 +1043,49 @@ export const workspaceApi = {
     apiFetch<VibeMemory>(`/api/vibe-write/workspaces/${wsId}/memories`, {
       method: "POST",
       body: JSON.stringify({ category, content }),
+    }),
+
+  // Smart Import: paste any free-form text, AI auto-categorises it into the 5
+  // memory categories. Available to all users; only anti-abuse caps apply.
+  importMemories: (
+    wsId: string,
+    text: string,
+    mode: "review" | "auto-accept" = "review"
+  ) =>
+    apiFetch<{
+      suggestions: VibeMemory[];
+      stats: {
+        input_chars: number;
+        generated_count: number;
+        created_count: number;
+        dedup_dropped: number;
+        mode: string;
+      };
+    }>(`/api/vibe-write/workspaces/${wsId}/memories/import`, {
+      method: "POST",
+      body: JSON.stringify({ text, mode }),
+    }),
+
+  // Import any Twitter user's recent tweets as memory suggestions for THIS
+  // workspace. Unlike `setup`, this does NOT mutate the workspace's bound
+  // twitter_handle nor User.TwitterHandle — the source handle is recorded
+  // only in each memory's `reason` ("Imported from @<handle>. ...").
+  // Costs 5 credits, refunded on upstream failure. Daily cap: 20/user.
+  importTwitter: (
+    wsId: string,
+    twitterHandle: string,
+    autoAccept = false
+  ) =>
+    apiFetch<{
+      workspace: Workspace;
+      profile_source: string;
+      tweets_analyzed: number;
+      pending_memories: VibeMemory[];
+      status: string;
+      credits_used: number;
+    }>(`/api/vibe-write/workspaces/${wsId}/memories/import-twitter`, {
+      method: "POST",
+      body: JSON.stringify({ twitter_handle: twitterHandle, auto_accept: autoAccept }),
     }),
 
   updateMemory: (memId: string, content: string) =>

@@ -437,6 +437,11 @@ func StreamVibeWriteLLM(messages []ChatMessage, maxTokens int, temperature float
 // ────────────────────────────────────────────────────────────────
 
 // parseLLMJSON strips markdown code fences and unmarshals JSON.
+//
+// LLMs occasionally emit JSON whose string values contain unescaped ASCII
+// double quotes (e.g. `"content": "Nemo 对"灵魂"很有兴趣"`). When the strict
+// parser fails, we try a single best-effort repair pass that escapes those
+// inner quotes via repairUnescapedInnerQuotes.
 func parseLLMJSON(raw string, result interface{}) error {
 	cleaned := strings.TrimSpace(raw)
 	if strings.HasPrefix(cleaned, "```json") {
@@ -449,10 +454,84 @@ func parseLLMJSON(raw string, result interface{}) error {
 		cleaned = strings.TrimSpace(cleaned)
 	}
 
+	if err := json.Unmarshal([]byte(cleaned), result); err == nil {
+		return nil
+	}
+
+	// Best-effort repair: escape stray ASCII `"` that appear *inside* string
+	// values. If the repair succeeds we use it; otherwise return the
+	// original error so callers see the raw payload.
+	repaired := repairUnescapedInnerQuotes(cleaned)
+	if repaired != cleaned {
+		if err := json.Unmarshal([]byte(repaired), result); err == nil {
+			return nil
+		}
+	}
+
+	// Re-run strict parse to surface the real error.
 	if err := json.Unmarshal([]byte(cleaned), result); err != nil {
 		return fmt.Errorf("failed to parse LLM JSON response: %w\nraw response:\n%s", err, raw)
 	}
 	return nil
+}
+
+// repairUnescapedInnerQuotes walks a JSON document and escapes ASCII double
+// quotes that occur *inside* a string value. Heuristic: a `"` is treated as
+// the closer of the current string when the next non-whitespace byte is one
+// of `, } ] :`, or EOF; otherwise it is escaped to `\"`.
+//
+// Limitations: does not handle multiline strings inside JSON (rare in LLM
+// output), does not attempt to repair broken keys, and does not address
+// trailing commas. Good enough for the common LLM mistake observed in
+// practice.
+func repairUnescapedInnerQuotes(s string) string {
+	var out strings.Builder
+	out.Grow(len(s) + 8)
+
+	inString := false
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if c == '\\' && inString && i+1 < len(s) {
+			// Preserve escape sequences as-is.
+			out.WriteByte(c)
+			out.WriteByte(s[i+1])
+			i++
+			continue
+		}
+		if c != '"' {
+			out.WriteByte(c)
+			continue
+		}
+		if !inString {
+			// Opening quote of a new string token.
+			inString = true
+			out.WriteByte(c)
+			continue
+		}
+		// We're currently inside a string and saw a `"`. Decide: is it the
+		// real closer, or an unescaped inner quote?
+		j := i + 1
+		for j < len(s) && (s[j] == ' ' || s[j] == '\t' || s[j] == '\n' || s[j] == '\r') {
+			j++
+		}
+		if j >= len(s) {
+			// EOF — treat as closer.
+			out.WriteByte(c)
+			inString = false
+			continue
+		}
+		switch s[j] {
+		case ',', '}', ']', ':':
+			// Real string terminator.
+			out.WriteByte(c)
+			inString = false
+		default:
+			// Unescaped inner quote — escape it and stay in-string.
+			out.WriteByte('\\')
+			out.WriteByte('"')
+		}
+	}
+	return out.String()
 }
 
 // resolveBaseURL returns the effective base URL for an OpenAI-compatible provider.

@@ -156,11 +156,11 @@ func VibeWorkspaceDelete(c *gin.Context) {
 }
 
 // ── Memory endpoints ───────────────────────────────────────────
-
-var freeMemoryCategories = map[string]bool{
-	models.MemoryCategoryProfile: true,
-	models.MemoryCategoryRules:   true,
-}
+//
+// All 5 memory categories are available to ALL users (Free + Pro).
+// Memory is the user's own data — gating it behind Pro is value-inverted
+// and was removed in V3 (see mydocs/V3docs/V3-记忆系统重构方案.md).
+// Anti-abuse caps live in the Smart Import handler instead.
 
 var allMemoryCategories = map[string]bool{
 	models.MemoryCategoryProfile:   true,
@@ -235,18 +235,6 @@ func VibeMemoryCreate(c *gin.Context) {
 		return
 	}
 
-	// Check category access (Free vs Pro). Instead of 403, auto-downgrade
-	// Pro-only categories to Profile so the UI is never interrupted by an
-	// upgrade modal. UI surfaces a soft "stored in Profile" hint via
-	// `downgraded_from` in the response.
-	var user models.User
-	database.DB.First(&user, "id = ?", userID)
-	downgradedFrom := ""
-	if !user.IsPro() && !freeMemoryCategories[req.Category] {
-		downgradedFrom = req.Category
-		req.Category = models.MemoryCategoryProfile
-	}
-
 	mem := models.VibeMemory{
 		WorkspaceID: wsID,
 		Category:    req.Category,
@@ -258,20 +246,7 @@ func VibeMemoryCreate(c *gin.Context) {
 		return
 	}
 
-	resp := gin.H{
-		"id":           mem.ID,
-		"workspace_id": mem.WorkspaceID,
-		"category":     mem.Category,
-		"content":      mem.Content,
-		"source":       mem.Source,
-		"status":       mem.Status,
-		"created_at":   mem.CreatedAt,
-		"updated_at":   mem.UpdatedAt,
-	}
-	if downgradedFrom != "" {
-		resp["downgraded_from"] = downgradedFrom
-	}
-	c.JSON(http.StatusCreated, resp)
+	c.JSON(http.StatusCreated, mem)
 }
 
 // VibeMemoryUpdate handles PUT /api/vibe-write/memories/:memId
@@ -394,39 +369,12 @@ func VibeMemoryReview(c *gin.Context) {
 		updates["content"] = req.Content
 	}
 
-	// Free user accepting a Pro-only category? Auto-downgrade to Profile
-	// instead of returning 403, so the user is never interrupted with an
-	// upgrade modal during their first memory interaction.
-	downgradedFrom := ""
-	if newStatus == models.MemoryStatusAccepted {
-		var user models.User
-		if err := database.DB.First(&user, "id = ?", userID).Error; err == nil {
-			if !user.IsPro() && !freeMemoryCategories[mem.Category] {
-				downgradedFrom = mem.Category
-				updates["category"] = models.MemoryCategoryProfile
-			}
-		}
-	}
-
 	if err := database.DB.Model(&mem).Updates(updates).Error; err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "update failed"})
 		return
 	}
 	database.DB.First(&mem, "id = ?", memID)
-	resp := gin.H{
-		"id":           mem.ID,
-		"workspace_id": mem.WorkspaceID,
-		"category":     mem.Category,
-		"content":      mem.Content,
-		"source":       mem.Source,
-		"status":       mem.Status,
-		"created_at":   mem.CreatedAt,
-		"updated_at":   mem.UpdatedAt,
-	}
-	if downgradedFrom != "" {
-		resp["downgraded_from"] = downgradedFrom
-	}
-	c.JSON(http.StatusOK, resp)
+	c.JSON(http.StatusOK, mem)
 }
 
 // ── Chat endpoints ────────────────────────────────────────────

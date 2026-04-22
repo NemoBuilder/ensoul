@@ -174,6 +174,9 @@ func Setup() *gin.Engine {
 		// Vibe Write 2.0 workspace endpoints (email auth required)
 		vw := api.Group("/vibe-write")
 		{
+			// Tweet URL → structured AttachedTweet (used by chat input auto-attach)
+			vw.GET("/fetch-tweet", handlers.VibeFetchTweet)
+
 			// Workspaces
 			vw.GET("/workspaces", handlers.VibeWorkspaceList)
 			vw.POST("/workspaces", handlers.VibeWorkspaceCreate)
@@ -184,6 +187,8 @@ func Setup() *gin.Engine {
 			// Memories (per workspace)
 			vw.GET("/workspaces/:id/memories", handlers.VibeMemoryList)
 			vw.POST("/workspaces/:id/memories", handlers.VibeMemoryCreate)
+			vw.POST("/workspaces/:id/memories/import", middleware.RateLimit(middleware.GeneralLimiter), handlers.VibeMemoryImport)
+			vw.POST("/workspaces/:id/memories/import-twitter", middleware.RateLimit(middleware.GeneralLimiter), handlers.VibeMemoryImportTwitter)
 			vw.PUT("/memories/:memId", handlers.VibeMemoryUpdate)
 			vw.DELETE("/memories/:memId", handlers.VibeMemoryDelete)
 			vw.POST("/memories/:memId/review", handlers.VibeMemoryReview)
@@ -278,13 +283,13 @@ func Setup() *gin.Engine {
 			// User management
 			admin.GET("/users/stats", handlers.AdminUserStats)
 			admin.GET("/users", handlers.AdminListUsers)
-			admin.GET("/users/:wallet", handlers.AdminGetUser)
-			admin.POST("/users/:wallet/ban", handlers.AdminBanUser)
-			admin.POST("/users/:wallet/unban", handlers.AdminUnbanUser)
-			admin.PUT("/users/:wallet/note", handlers.AdminUpdateUserNote)
-			admin.POST("/users/:wallet/subscription/grant", handlers.AdminGrantSubscription)
-			admin.POST("/users/:wallet/subscription/extend", handlers.AdminExtendSubscription)
-			admin.POST("/users/:wallet/subscription/revoke", handlers.AdminRevokeSubscription)
+			admin.GET("/users/:id", handlers.AdminGetUser)
+			admin.POST("/users/:id/ban", handlers.AdminBanUser)
+			admin.POST("/users/:id/unban", handlers.AdminUnbanUser)
+			admin.PUT("/users/:id/note", handlers.AdminUpdateUserNote)
+			admin.POST("/users/:id/subscription/grant", handlers.AdminGrantSubscription)
+			admin.POST("/users/:id/subscription/extend", handlers.AdminExtendSubscription)
+			admin.POST("/users/:id/subscription/revoke", handlers.AdminRevokeSubscription)
 
 			// Gift Pro (promotional grants — operates on User.ProExpiresAt directly)
 			admin.POST("/gift-pro", handlers.AdminGiftPro)

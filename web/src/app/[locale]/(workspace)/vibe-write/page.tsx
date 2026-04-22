@@ -89,9 +89,6 @@ export default function VibeWritePage() {
   const [variantsByMsg, setVariantsByMsg] = useState<Record<string, VariantItem[]>>({});
   const [archivedMsgs, setArchivedMsgs] = useState<Set<string>>(new Set());
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
-  // Transient toast shown when the backend silently downgraded a Pro-only
-  // memory category to `profile` (Free user). Auto-dismisses.
-  const [downgradeToast, setDowngradeToast] = useState<string | null>(null);
   const [setupName, setSetupName] = useState("");
   const [setupHandle, setSetupHandle] = useState("");
   const [setupCreating, setSetupCreating] = useState(false);
@@ -115,14 +112,6 @@ export default function VibeWritePage() {
   function showUpgrade(reason: "credits" | "workspace" | "memory" | "feature") {
     setUpgradeReason(reason);
     setUpgradeOpen(true);
-  }
-
-  // Surface a transient hint when the backend silently downgrades a
-  // Pro-only memory category to Profile for Free users. Pulled from
-  // the create / review responses' `downgraded_from` field.
-  function flashDowngradeToast(fromCategory: string) {
-    setDowngradeToast(fromCategory);
-    setTimeout(() => setDowngradeToast((cur) => (cur === fromCategory ? null : cur)), 3500);
   }
 
   // Check auth
@@ -153,6 +142,22 @@ export default function VibeWritePage() {
     window.addEventListener("ensoul:auth-changed", onAuthChanged);
     return () => window.removeEventListener("ensoul:auth-changed", onAuthChanged);
   }, [checkAuth]);
+
+  // Block the browser's default drag-and-drop behaviour at the page level so a
+  // mis-aimed file drop on the vibe-write page never causes the browser to
+  // navigate away by opening / downloading the file. The Smart Import
+  // dropzone re-enables drop only inside its own container.
+  useEffect(() => {
+    function block(e: DragEvent) {
+      e.preventDefault();
+    }
+    window.addEventListener("dragover", block);
+    window.addEventListener("drop", block);
+    return () => {
+      window.removeEventListener("dragover", block);
+      window.removeEventListener("drop", block);
+    };
+  }, []);
 
   // Load workspaces
   useEffect(() => {
@@ -310,6 +315,37 @@ export default function VibeWritePage() {
         if (!cleanText) cleanText = "Help me reply";
       }
 
+      // ---- Auto-detect bare tweet URL (no [Tweet] markers needed) ----
+      // The model can't follow links, so a pasted URL alone makes it answer
+      // "I can't access external links". Detect it client-side, fetch the
+      // tweet body via the backend, and attach it transparently.
+      if (!attachedTweet) {
+        const bareUrlMatch = cleanText.match(
+          /(https?:\/\/(?:twitter\.com|x\.com)\/([A-Za-z0-9_]{1,15})\/status\/\d+)/
+        );
+        if (bareUrlMatch) {
+          const url = bareUrlMatch[1];
+          const handle = bareUrlMatch[2];
+          try {
+            const fetched = await workspaceApi.fetchTweet(url);
+            attachedTweet = {
+              url: fetched.url || url,
+              author_handle: fetched.author_handle || handle,
+              text: fetched.text || "",
+            };
+            // Strip the URL from the visible text; keep the user's intent words
+            cleanText = cleanText.replace(url, "").replace(/\s+/g, " ").trim();
+            if (!cleanText) cleanText = "Help me reply";
+          } catch (err) {
+            console.warn("[vibe-write] failed to fetch tweet, falling back", err);
+            // Still attach minimal info so backend goes into reply mode
+            attachedTweet = { url, author_handle: handle, text: "" };
+            cleanText = cleanText.replace(url, "").replace(/\s+/g, " ").trim();
+            if (!cleanText) cleanText = "Help me reply";
+          }
+        }
+      }
+
       const tempUserMsg: VibeChatMsg = {
         id: `temp-${Date.now()}`, chat_id: chatId, role: "user",
         content: text, credits_cost: 0, created_at: new Date().toISOString(),
@@ -451,8 +487,6 @@ export default function VibeWritePage() {
         showUpgrade("credits");
       } else if (code === "WORKSPACE_LIMIT" || msg.includes("workspace limit")) {
         showUpgrade("workspace");
-      } else if (code === "PRO_REQUIRED") {
-        showUpgrade("memory");
       } else {
         setMessages((prev) => [...prev, {
           id: `error-${Date.now()}`, chat_id: activeChatId || "", role: "assistant",
@@ -505,10 +539,8 @@ export default function VibeWritePage() {
       const mem = await workspaceApi.createMemory(activeWsId, suggestion.category, suggestion.content);
       setMemories((prev) => [...prev, mem]);
       setDismissedSuggestions((prev) => new Set(prev).add(msgId));
-      if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
     } catch {
-      // Silent failure: backend either auto-downgraded successfully or
-      // returned an unexpected error. Either way, don't disrupt the user.
+      // ignore
     }
   }
 
@@ -519,6 +551,190 @@ export default function VibeWritePage() {
   // Login modal (for unauthenticated CTA)
   const [addingMemory, setAddingMemory] = useState<{ cat: string; content: string } | null>(null);
   const [loginOpen, setLoginOpen] = useState(false);
+
+  // Smart Import (paste any text → AI auto-categorises into the 5 memory categories)
+  const [importOpen, setImportOpen] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [importMode, setImportMode] = useState<"review" | "auto-accept">("review");
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importDragOver, setImportDragOver] = useState(false);
+
+  // Memory-page header: rename workspace (inline edit) + refresh self-portrait
+  // + import from arbitrary Twitter handle.
+  const [renamingWs, setRenamingWs] = useState(false);
+  const [renameValue, setRenameValue] = useState("");
+  const [renameSaving, setRenameSaving] = useState(false);
+  const [refreshOpen, setRefreshOpen] = useState(false);
+  const [refreshAutoAccept, setRefreshAutoAccept] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [refreshError, setRefreshError] = useState<string | null>(null);
+  const [twImportOpen, setTwImportOpen] = useState(false);
+  const [twImportHandle, setTwImportHandle] = useState("");
+  const [twImportAutoAccept, setTwImportAutoAccept] = useState(false);
+  const [twImporting, setTwImporting] = useState(false);
+  const [twImportError, setTwImportError] = useState<string | null>(null);
+  const importFileInputRef = useRef<HTMLInputElement>(null);
+
+  // Read a .md / .txt / .markdown file into the import textarea.
+  // Multiple files are concatenated with a separator.
+  async function loadImportFiles(files: FileList | File[]) {
+    const accepted: File[] = [];
+    const list = Array.from(files);
+    for (const f of list) {
+      const lower = f.name.toLowerCase();
+      const isText =
+        f.type.startsWith("text/") ||
+        lower.endsWith(".md") ||
+        lower.endsWith(".markdown") ||
+        lower.endsWith(".txt");
+      if (!isText) continue;
+      // Hard cap per file at the same 20k limit; oversized files trigger a friendly error.
+      if (f.size > 20000 * 4) {
+        setImportError(t("smartImportTooLong"));
+        return;
+      }
+      accepted.push(f);
+    }
+    if (accepted.length === 0) {
+      setImportError(t("smartImportFileType"));
+      return;
+    }
+    try {
+      const parts = await Promise.all(
+        accepted.map(async (f) => {
+          const text = await f.text();
+          return accepted.length > 1 ? `# ${f.name}\n\n${text}` : text;
+        })
+      );
+      const merged = parts.join("\n\n---\n\n");
+      setImportText((prev) => {
+        const combined = prev.trim() ? prev.trim() + "\n\n" + merged : merged;
+        return combined.slice(0, 20000);
+      });
+      setImportError(null);
+    } catch {
+      setImportError(t("smartImportFailed"));
+    }
+  }
+
+  async function handleSmartImport() {
+    if (!activeWsId) return;
+    const text = importText.trim();
+    if (!text) return;
+    setImporting(true);
+    setImportError(null);
+    try {
+      const res = await workspaceApi.importMemories(activeWsId, text, importMode);
+      // Merge new memories into local state.
+      setMemories((prev) => [...prev, ...res.suggestions]);
+      setImportOpen(false);
+      setImportText("");
+    } catch (err: unknown) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      if (code === "TEXT_TOO_LONG") setImportError(t("smartImportTooLong"));
+      else if (code === "RATE_LIMITED") setImportError(t("smartImportRateLimit"));
+      else if (code === "WORKSPACE_MEMORY_FULL") setImportError(t("smartImportFull"));
+      else if (code === "INVALID_CONTENT") setImportError(t("smartImportFileType"));
+      else setImportError(t("smartImportFailed"));
+    } finally {
+      setImporting(false);
+    }
+  }
+
+  // ---- Memory page: rename workspace (inline edit) ----
+  function startRenameWs() {
+    if (!activeWs) return;
+    setRenameValue(activeWs.name || "");
+    setRenamingWs(true);
+  }
+  async function commitRenameWs() {
+    if (!activeWsId) { setRenamingWs(false); return; }
+    const next = renameValue.trim();
+    if (!next || next === activeWs?.name) { setRenamingWs(false); return; }
+    if (next.length > 100) return;
+    setRenameSaving(true);
+    try {
+      const updated = await workspaceApi.update(activeWsId, { name: next });
+      setWorkspaces((prev) => prev.map((w) => (w.id === activeWsId ? { ...w, ...updated } : w)));
+      setRenamingWs(false);
+    } catch {
+      // Silently revert; UX is non-blocking.
+      setRenamingWs(false);
+    } finally {
+      setRenameSaving(false);
+    }
+  }
+
+  // ---- Memory page: refresh self-portrait (re-distill workspace's own handle) ----
+  function mapTwitterErrorCode(code?: string): string {
+    if (code === "INSUFFICIENT_CREDITS") return t("creditsInsufficient");
+    if (code === "RATE_LIMITED") return t("importTwitterRateLimited");
+    if (code === "TWITTER_FETCH_FAILED" || code === "PROFILE_FETCH_FAILED") return t("importTwitterFetchFailed");
+    if (code === "INVALID_HANDLE") return t("importTwitterInvalidHandle");
+    if (code === "WORKSPACE_MEMORY_FULL") return t("smartImportFull");
+    return t("importTwitterFailed");
+  }
+  async function handleRefreshSelfPortrait() {
+    if (!activeWsId || !activeWs?.twitter_handle) return;
+    setRefreshing(true);
+    setRefreshError(null);
+    try {
+      const res = await workspaceApi.setup(activeWsId, activeWs.twitter_handle, refreshAutoAccept);
+      if (res.pending_memories?.length) {
+        setMemories((prev) => [...prev, ...res.pending_memories]);
+      }
+      setRefreshOpen(false);
+    } catch (err: unknown) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      setRefreshError(mapTwitterErrorCode(code));
+    } finally {
+      setRefreshing(false);
+    }
+  }
+
+  // Extract a Twitter/X handle from raw user input. Accepts:
+  //   "nina_rong", "@nina_rong",
+  //   "x.com/nina_rong", "twitter.com/nina_rong",
+  //   "https://x.com/nina_rong", "https://x.com/nina_rong/status/123",
+  //   "https://x.com/nina_rong?lang=en"
+  // Returns "" when nothing usable is found.
+  function extractTwitterHandle(raw: string): string {
+    const s = raw.trim();
+    if (!s) return "";
+    // URL form
+    const urlMatch = s.match(/(?:https?:\/\/)?(?:www\.)?(?:twitter\.com|x\.com)\/(?:#!\/)?@?([A-Za-z0-9_]{1,15})\b/i);
+    if (urlMatch) return urlMatch[1];
+    // Bare @handle / handle
+    const bare = s.replace(/^@/, "").split(/[/?#\s]/)[0];
+    if (/^[A-Za-z0-9_]{1,15}$/.test(bare)) return bare;
+    return "";
+  }
+
+  // ---- Memory page: import arbitrary Twitter handle ----
+  async function handleTwitterImport() {
+    if (!activeWsId) return;
+    const handle = extractTwitterHandle(twImportHandle);
+    if (!handle) {
+      setTwImportError(t("importTwitterInvalidHandle"));
+      return;
+    }
+    setTwImporting(true);
+    setTwImportError(null);
+    try {
+      const res = await workspaceApi.importTwitter(activeWsId, handle, twImportAutoAccept);
+      if (res.pending_memories?.length) {
+        setMemories((prev) => [...prev, ...res.pending_memories]);
+      }
+      setTwImportOpen(false);
+      setTwImportHandle("");
+    } catch (err: unknown) {
+      const code = err instanceof ApiError ? err.code : undefined;
+      setTwImportError(mapTwitterErrorCode(code));
+    } finally {
+      setTwImporting(false);
+    }
+  }
 
   if (!authChecked) {
     return (
@@ -667,7 +883,6 @@ export default function VibeWritePage() {
     try {
       const updated = await workspaceApi.reviewMemory(memId, action);
       setMemories((prev) => prev.map((m) => (m.id === memId ? updated : m)));
-      if (updated.downgraded_from) flashDowngradeToast(updated.downgraded_from);
     } catch {
       // ignore
     }
@@ -712,8 +927,7 @@ export default function VibeWritePage() {
     inputRef.current?.focus();
   }
 
-  // Save an assistant message into the Archive memory category. If the user
-  // is Free (no archive access), surface the upgrade modal.
+  // Save an assistant message into the Archive memory category.
   async function handleSaveToArchive(msg: VibeChatMsg, contentOverride?: string) {
     if (!activeWsId) return;
     if (archivedMsgs.has(msg.id)) return;
@@ -723,11 +937,8 @@ export default function VibeWritePage() {
       const mem = await workspaceApi.createMemory(activeWsId, "archive", content);
       setMemories((prev) => [...prev, mem]);
       setArchivedMsgs((prev) => new Set(prev).add(msg.id));
-      // If backend downgraded archive→profile (Free user), show toast
-      // instead of pretending it landed in the Archive column.
-      if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
     } catch {
-      // Network / server error — silent. Don't pop the upgrade modal here.
+      // Network / server error — silent.
     }
   }
 
@@ -970,10 +1181,61 @@ export default function VibeWritePage() {
         {currentView === "memory" ? (
           <div className="flex-1 overflow-y-auto p-6">
             <div className="mx-auto max-w-5xl">
-              <div className="mb-6 flex items-center justify-between">
-                <div>
+              <div className="mb-6 flex items-center justify-between gap-3">
+                <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-bold text-[#e2e8f0]">🧠 {t("memoryManager")}</h2>
-                  <p className="mt-0.5 text-xs text-[#64748b]">{activeWs?.name}</p>
+                  {renamingWs ? (
+                    <div className="mt-1 flex items-center gap-2">
+                      <input
+                        autoFocus
+                        value={renameValue}
+                        onChange={(e) => setRenameValue(e.target.value.slice(0, 100))}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") void commitRenameWs();
+                          else if (e.key === "Escape") setRenamingWs(false);
+                        }}
+                        onBlur={() => { if (!renameSaving) void commitRenameWs(); }}
+                        disabled={renameSaving}
+                        maxLength={100}
+                        className="w-full max-w-xs rounded-md border border-[#8b5cf6]/40 bg-[#0a0a0f] px-2 py-1 text-xs text-[#e2e8f0] outline-none focus:border-[#8b5cf6]"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={startRenameWs}
+                      title={t("memoryRenameTitle")}
+                      className="mt-0.5 flex items-center gap-1.5 text-xs text-[#64748b] transition-colors hover:text-[#a78bfa]"
+                    >
+                      <span className="truncate">{activeWs?.name}</span>
+                      <span className="opacity-60">✏️</span>
+                    </button>
+                  )}
+                </div>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
+                  {activeWs?.twitter_handle && (
+                    <button
+                      onClick={() => { setRefreshError(null); setRefreshAutoAccept(false); setRefreshOpen(true); }}
+                      className="flex items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 py-1.5 text-xs font-medium text-sky-300 transition-colors hover:bg-sky-500/20"
+                    >
+                      <span>🔄</span>
+                      <span>{t("refreshSelfPortraitBtn")}</span>
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setTwImportError(null); setTwImportHandle(""); setTwImportAutoAccept(false); setTwImportOpen(true); }}
+                    className="flex items-center gap-1.5 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300 transition-colors hover:bg-emerald-500/20"
+                  >
+                    <span>🐦</span>
+                    <span>{t("importTwitterBtn")}</span>
+                  </button>
+                  <button
+                    onClick={() => { setImportError(null); setImportOpen(true); }}
+                    className="flex items-center gap-1.5 rounded-lg border border-[#8b5cf6]/40 bg-[#8b5cf6]/10 px-3 py-1.5 text-xs font-medium text-[#a78bfa] transition-colors hover:bg-[#8b5cf6]/20"
+                  >
+                    <span>📥</span>
+                    <span>{t("smartImport")}</span>
+                  </button>
                 </div>
               </div>
 
@@ -983,12 +1245,18 @@ export default function VibeWritePage() {
                     ✨ AI suggested {pendingMemories.length} memor{pendingMemories.length === 1 ? "y" : "ies"} for review
                   </div>
                   <div className="space-y-2">
-                    {pendingMemories.map((m) => (
+                    {pendingMemories.map((m) => {
+                      const handleMatch = m.reason?.match(/@([A-Za-z0-9_]{1,30})/);
+                      const sourceHandle = handleMatch?.[1] ?? null;
+                      return (
                       <div key={m.id} className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-[#0d0d14] p-3">
                         <div className="flex-1">
-                          <div className="mb-1 flex items-center gap-2 text-[10px] uppercase text-[#64748b]">
+                          <div className="mb-1 flex flex-wrap items-center gap-2 text-[10px] uppercase text-[#64748b]">
                             <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-amber-400">{m.category}</span>
-                            {m.reason && <span className="italic">— {m.reason}</span>}
+                            {sourceHandle && (
+                              <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-sky-300">🐦 @{sourceHandle}</span>
+                            )}
+                            {m.reason && <span className="italic normal-case">— {m.reason}</span>}
                           </div>
                           <div className="text-sm text-[#e2e8f0]">{m.content}</div>
                         </div>
@@ -1007,7 +1275,8 @@ export default function VibeWritePage() {
                           </button>
                         </div>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -1022,21 +1291,13 @@ export default function VibeWritePage() {
                         <span>{cat.label}</span>
                         <span className="ml-1 rounded-full bg-[#1e1e2e] px-1.5 py-0.5 text-[10px] text-[#64748b]">{cat.items.length}</span>
                       </div>
-                      {(() => {
-                        const locked = !user?.is_pro && !["profile", "rules"].includes(cat.key);
-                        return (
-                          <button
-                            onClick={() => {
-                              if (locked) { showUpgrade("memory"); return; }
-                              setAddingMemory({ cat: cat.key, content: "" });
-                            }}
-                            title={locked ? t("proRequired") : t("add")}
-                            className={`text-xs transition-colors ${locked ? "text-[#64748b]/60 hover:text-amber-400" : "text-[#64748b] hover:text-[#e2e8f0]"}`}
-                          >
-                            {locked ? "🔒" : "＋"}
-                          </button>
-                        );
-                      })()}
+                      <button
+                        onClick={() => setAddingMemory({ cat: cat.key, content: "" })}
+                        title={t("add")}
+                        className="text-xs text-[#64748b] transition-colors hover:text-[#e2e8f0]"
+                      >
+                        ＋
+                      </button>
                     </div>
                     {addingMemory?.cat === cat.key && (
                       <div className="border-b border-[#1e1e2e] p-2">
@@ -1052,7 +1313,6 @@ export default function VibeWritePage() {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
                                   .then((mem) => {
                                     setMemories((prev) => [...prev, mem]);
-                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
                                   })
                                   .catch(() => { /* silent */ });
                               }
@@ -1074,7 +1334,6 @@ export default function VibeWritePage() {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
                                   .then((mem) => {
                                     setMemories((prev) => [...prev, mem]);
-                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
                                   })
                                   .catch(() => { /* silent */ });
                               }
@@ -1533,21 +1792,12 @@ export default function VibeWritePage() {
                         <span>{cat.label}</span>
                         <span className="ml-1 text-[#64748b]">{cat.items.length}</span>
                       </div>
-                      {(() => {
-                        const locked = !user?.is_pro && !["profile", "rules"].includes(cat.key);
-                        return (
-                          <button
-                            onClick={() => {
-                              if (locked) { showUpgrade("memory"); return; }
-                              setAddingMemory({ cat: cat.key, content: "" });
-                            }}
-                            title={locked ? t("proRequired") : undefined}
-                            className={`text-[10px] transition-colors ${locked ? "text-[#64748b]/60 hover:text-amber-400" : "text-[#64748b] hover:text-[#e2e8f0]"}`}
-                          >
-                            {locked ? `🔒 ${t("pro")}` : `+ ${t("add")}`}
-                          </button>
-                        );
-                      })()}
+                      <button
+                        onClick={() => setAddingMemory({ cat: cat.key, content: "" })}
+                        className="text-[10px] text-[#64748b] transition-colors hover:text-[#e2e8f0]"
+                      >
+                        + {t("add")}
+                      </button>
                     </div>
                     {addingMemory?.cat === cat.key && (
                       <div className="mb-1.5">
@@ -1563,7 +1813,6 @@ export default function VibeWritePage() {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
                                   .then((mem) => {
                                     setMemories((prev) => [...prev, mem]);
-                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
                                   })
                                   .catch(() => { /* silent */ });
                               }
@@ -1585,7 +1834,6 @@ export default function VibeWritePage() {
                                 workspaceApi.createMemory(activeWsId, cat.key, content)
                                   .then((mem) => {
                                     setMemories((prev) => [...prev, mem]);
-                                    if (mem.downgraded_from) flashDowngradeToast(mem.downgraded_from);
                                   })
                                   .catch(() => { /* silent */ });
                               }
@@ -1740,41 +1988,278 @@ export default function VibeWritePage() {
       {/* Upgrade modal */}
       <UpgradeModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} reason={upgradeReason} />
 
-      {/* Free user soft-downgrade toast */}
-      {downgradeToast && (
-        <div className="fixed bottom-6 right-6 z-50 max-w-sm rounded-lg border border-[#2d2d3a] bg-[#1a1a24] px-4 py-3 text-sm text-[#e2e8f0] shadow-lg">
-          <div className="flex items-start gap-3">
-            <span className="text-lg leading-none">💾</span>
-            <div className="flex-1">
+      {/* Smart Import dialog */}
+      {importOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => { if (!importing) setImportOpen(false); }}
+        >
+          <div
+            className="mx-4 w-full max-w-2xl rounded-2xl border border-[#1e1e2e] bg-[#14141f] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-4 flex items-start justify-between gap-3">
               <div>
-                {t("downgradedToast", {
-                  category:
-                    downgradeToast === "knowledge"
-                      ? t("catKnowledge")
-                      : downgradeToast === "network"
-                      ? t("catNetwork")
-                      : downgradeToast === "archive"
-                      ? t("catArchive")
-                      : downgradeToast,
-                })}
+                <h3 className="text-lg font-bold text-[#e2e8f0]">📥 {t("smartImportTitle")}</h3>
+                <p className="mt-1 text-xs text-[#94a3b8]">{t("smartImportDesc")}</p>
               </div>
               <button
-                onClick={() => {
-                  setDowngradeToast(null);
-                  showUpgrade("memory");
-                }}
-                className="mt-1 text-xs text-[#a78bfa] hover:underline"
+                onClick={() => { if (!importing) setImportOpen(false); }}
+                className="text-[#64748b] hover:text-[#e2e8f0]"
+                aria-label="Close"
               >
-                {t("downgradedToastUpgrade")}
+                ×
               </button>
             </div>
-            <button
-              onClick={() => setDowngradeToast(null)}
-              className="text-[#64748b] hover:text-[#e2e8f0]"
-              aria-label="Close"
+
+            <div
+              className={`relative rounded-lg ring-1 transition-colors ${
+                importDragOver
+                  ? "ring-[#8b5cf6]/70 ring-2"
+                  : "ring-[#1e1e2e] focus-within:ring-[#8b5cf6]/50"
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (!importDragOver) setImportDragOver(true);
+              }}
+              onDragLeave={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setImportDragOver(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setImportDragOver(false);
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                  void loadImportFiles(e.dataTransfer.files);
+                }
+              }}
             >
-              ×
-            </button>
+              <textarea
+                autoFocus
+                value={importText}
+                onChange={(e) => setImportText(e.target.value)}
+                placeholder={t("smartImportPlaceholder")}
+                rows={10}
+                maxLength={20000}
+                className="w-full resize-none rounded-lg bg-[#0d0d14] px-3 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] outline-none"
+              />
+              {importDragOver && (
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center rounded-lg bg-[#8b5cf6]/10 text-sm font-medium text-[#a78bfa]">
+                  📂 {t("smartImportDropHere")}
+                </div>
+              )}
+            </div>
+            <input
+              ref={importFileInputRef}
+              type="file"
+              accept=".md,.markdown,.txt,text/plain,text/markdown"
+              multiple
+              hidden
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) {
+                  void loadImportFiles(e.target.files);
+                }
+                // Reset so the same file can be selected again
+                e.target.value = "";
+              }}
+            />
+            <div className="mt-1 flex items-center justify-between text-[10px]">
+              <button
+                type="button"
+                onClick={() => importFileInputRef.current?.click()}
+                className="flex items-center gap-1 text-[#64748b] transition-colors hover:text-[#a78bfa]"
+              >
+                <span>📎</span>
+                <span>{t("smartImportUpload")}</span>
+              </button>
+              <span className={importText.length > 18000 ? "text-amber-400" : "text-[#64748b]"}>
+                {importText.length} / 20000
+              </span>
+            </div>
+
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-[#94a3b8]">
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="import-mode"
+                  checked={importMode === "review"}
+                  onChange={() => setImportMode("review")}
+                  className="accent-[#8b5cf6]"
+                />
+                <span>{t("smartImportReview")}</span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-1.5">
+                <input
+                  type="radio"
+                  name="import-mode"
+                  checked={importMode === "auto-accept"}
+                  onChange={() => setImportMode("auto-accept")}
+                  className="accent-[#8b5cf6]"
+                />
+                <span>{t("smartImportAuto")}</span>
+              </label>
+            </div>
+
+            {importError && (
+              <div className="mt-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {importError}
+              </div>
+            )}
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                onClick={() => setImportOpen(false)}
+                disabled={importing}
+                className="rounded-lg border border-[#2a2a3a] px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1e1e2e] disabled:opacity-50"
+              >
+                {t("cancel")}
+              </button>
+              <button
+                onClick={handleSmartImport}
+                disabled={importing || importText.trim().length === 0}
+                className="flex items-center gap-1.5 rounded-lg bg-[#8b5cf6] px-4 py-1.5 text-xs font-medium text-white hover:bg-[#7c3aed] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {importing && (
+                  <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                )}
+                <span>{importing ? t("smartImportImporting") : t("smartImportStart")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refresh self-portrait dialog */}
+      {refreshOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => { if (!refreshing) setRefreshOpen(false); }}
+        >
+          <div
+            className="mx-4 w-full max-w-md rounded-2xl border border-[#1e1e2e] bg-[#14141f] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-[#e2e8f0]">🔄 {t("refreshSelfPortraitTitle")}</h3>
+              <button
+                onClick={() => { if (!refreshing) setRefreshOpen(false); }}
+                className="text-[#64748b] hover:text-[#e2e8f0]"
+                aria-label="Close"
+              >×</button>
+            </div>
+            <p className="mb-3 text-xs text-[#94a3b8]">
+              {t("refreshSelfPortraitDesc", { handle: activeWs?.twitter_handle ?? "" })}
+            </p>
+            <p className="mb-4 text-[11px] text-amber-300">
+              {t("importTwitterCostHint")}
+            </p>
+            {user?.is_pro && (
+              <label className="mb-4 flex cursor-pointer items-center gap-2 text-xs text-[#94a3b8]">
+                <input
+                  type="checkbox"
+                  checked={refreshAutoAccept}
+                  onChange={(e) => setRefreshAutoAccept(e.target.checked)}
+                  className="accent-[#8b5cf6]"
+                />
+                <span>{t("importTwitterAutoAcceptLabel")}</span>
+              </label>
+            )}
+            {refreshError && (
+              <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {refreshError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setRefreshOpen(false)}
+                disabled={refreshing}
+                className="rounded-lg border border-[#2a2a3a] px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1e1e2e] disabled:opacity-50"
+              >{t("cancel")}</button>
+              <button
+                onClick={handleRefreshSelfPortrait}
+                disabled={refreshing}
+                className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-sky-500 disabled:opacity-50"
+              >
+                {refreshing && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                <span>{refreshing ? t("smartImportImporting") : t("refreshSelfPortraitBtn")}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import-from-Twitter dialog */}
+      {twImportOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm"
+          onClick={() => { if (!twImporting) setTwImportOpen(false); }}
+        >
+          <div
+            className="mx-4 w-full max-w-md rounded-2xl border border-[#1e1e2e] bg-[#14141f] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="mb-3 flex items-start justify-between gap-3">
+              <h3 className="text-lg font-bold text-[#e2e8f0]">🐦 {t("importTwitterTitle")}</h3>
+              <button
+                onClick={() => { if (!twImporting) setTwImportOpen(false); }}
+                className="text-[#64748b] hover:text-[#e2e8f0]"
+                aria-label="Close"
+              >×</button>
+            </div>
+            <p className="mb-3 text-xs text-[#94a3b8]">{t("importTwitterDesc")}</p>
+            <input
+              autoFocus
+              value={twImportHandle}
+              onChange={(e) => setTwImportHandle(e.target.value)}
+              placeholder={t("importTwitterPlaceholder")}
+              maxLength={300}
+              onKeyDown={(e) => { if (e.key === "Enter" && !twImporting) void handleTwitterImport(); }}
+              className="mb-2 w-full rounded-lg border border-[#1e1e2e] bg-[#0a0a0f] px-3 py-2.5 text-sm text-[#e2e8f0] placeholder-[#64748b] outline-none focus:border-emerald-500/60"
+            />
+            {(() => {
+              const parsed = extractTwitterHandle(twImportHandle);
+              if (!twImportHandle.trim()) return null;
+              return parsed ? (
+                <p className="mb-3 text-[11px] text-emerald-400">→ @{parsed}</p>
+              ) : (
+                <p className="mb-3 text-[11px] text-red-400">{t("importTwitterInvalidHandle")}</p>
+              );
+            })()}
+            <p className="mb-4 text-[11px] text-amber-300">{t("importTwitterCostHint")}</p>
+            {user?.is_pro && (
+              <label className="mb-4 flex cursor-pointer items-center gap-2 text-xs text-[#94a3b8]">
+                <input
+                  type="checkbox"
+                  checked={twImportAutoAccept}
+                  onChange={(e) => setTwImportAutoAccept(e.target.checked)}
+                  className="accent-[#8b5cf6]"
+                />
+                <span>{t("importTwitterAutoAcceptLabel")}</span>
+              </label>
+            )}
+            {twImportError && (
+              <div className="mb-3 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
+                {twImportError}
+              </div>
+            )}
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setTwImportOpen(false)}
+                disabled={twImporting}
+                className="rounded-lg border border-[#2a2a3a] px-3 py-1.5 text-xs text-[#94a3b8] hover:bg-[#1e1e2e] disabled:opacity-50"
+              >{t("cancel")}</button>
+              <button
+                onClick={handleTwitterImport}
+                disabled={twImporting || twImportHandle.trim().length === 0}
+                className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-4 py-1.5 text-xs font-medium text-white hover:bg-emerald-500 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {twImporting && <span className="h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />}
+                <span>{twImporting ? t("smartImportImporting") : t("importTwitterBtn")}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}

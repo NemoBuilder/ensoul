@@ -90,6 +90,18 @@ func VibeChatStreamMessage(c *gin.Context) {
 		mode = "reply"
 	}
 
+	// Defense: a frontend may pass an AttachedTweet with only URL/handle when
+	// SocialData isn't available. Without the actual tweet text the model
+	// can't write a useful reply, so fail fast with a friendly message
+	// instead of generating a generic placeholder.
+	if mode == "reply" && strings.TrimSpace(tweet.Text) == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "couldn't read this tweet automatically. Please paste the tweet text alongside the link, or wrap it in [Tweet]...[/Tweet] markers.",
+			"code":  "TWEET_TEXT_MISSING",
+		})
+		return
+	}
+
 	wantVariants := req.VariantCount
 	if mode == "reply" {
 		if wantVariants <= 0 {

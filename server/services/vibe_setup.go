@@ -73,7 +73,11 @@ OUTPUT REQUIREMENTS — STRICT JSON ONLY, no markdown fences, no commentary:
 - Use the user's primary language for "content" (detect from tweets).
 - Keep "reason" in English under 20 words.
 - Do not invent facts not supported by the profile/tweets.
-- Skip categories that have no support rather than padding.`
+- Skip categories that have no support rather than padding.
+- CRITICAL JSON SAFETY: inside any string value, NEVER use the ASCII double
+  quote character ". To quote anything inline, use 「」 / 『』 (CJK corner
+  brackets) or single quotes '...'. Unescaped " inside a value will break
+  the JSON parser.`
 
 	messages := []ChatMessage{
 		{Role: "system", Content: system},

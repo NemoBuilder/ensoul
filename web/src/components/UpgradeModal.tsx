@@ -32,7 +32,9 @@ export default function UpgradeModal({ open, onClose, reason = "feature" }: Upgr
   const reasonText: Record<string, string> = {
     credits: t("reasonCredits"),
     workspace: t("reasonWorkspace"),
-    memory: t("reasonMemory"),
+    // "memory" reason is no longer triggered (V3: memory categories are free for all)
+    // but kept in the union for backward-compat; fall through to the generic copy.
+    memory: t("reasonFeature"),
     feature: t("reasonFeature"),
   };
 
