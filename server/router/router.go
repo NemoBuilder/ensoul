@@ -320,6 +320,67 @@ func Setup() *gin.Engine {
 			admin.POST("/methodology/preview", handlers.AdminPreviewMethodology)
 			admin.GET("/methodology/feedback", handlers.AdminMethodologyFeedback)
 		}
+
+		// V4 Galaxy endpoints (Phase 1 scaffolding).
+		// Auth: write endpoints rely on currentEmailUser/currentWalletUser inside
+		// the handler — do NOT wrap them in middleware.AuthSession() (which is
+		// wallet-only) because email-logged-in users must also be able to apply.
+		v4 := api.Group("/v4")
+		{
+			galaxy := v4.Group("/galaxy")
+			{
+				galaxy.GET("/list", handlers.GalaxyList)
+				galaxy.GET("/:slug", handlers.GalaxyGet)
+				galaxy.GET("/:slug/atoms", handlers.GalaxyAtoms)
+				galaxy.POST("/apply", middleware.RateLimit(middleware.GeneralLimiter), handlers.GalaxyApply)
+				galaxy.POST("/:slug/source", middleware.RateLimit(middleware.GeneralLimiter), handlers.GalaxySourceUpload)
+				// Approve is admin/curator only (uses the same admin auth as
+				// the rest of the platform — API key OR session+role=admin).
+				galaxy.POST("/applications/:id/approve", middleware.AuthAdmin(), handlers.GalaxyApprove)
+			}
+
+			atom := v4.Group("/atom")
+			{
+				atom.POST("/:id/dispute", middleware.RateLimit(middleware.GeneralLimiter), handlers.AtomDispute)
+				atom.POST("/:id/resolve", middleware.AuthAdmin(), handlers.AtomResolve)
+				atom.GET("/:id/proof", handlers.AtomProof)
+			}
+
+			credits := v4.Group("/credits")
+			{
+				credits.GET("/me", handlers.CreditsMe)
+			}
+
+			epochGrp := v4.Group("/epoch")
+			{
+				epochGrp.GET("/list", handlers.EpochList)
+				epochGrp.GET("/:id", handlers.EpochGet)
+				epochGrp.POST("/build", middleware.AuthAdmin(), handlers.EpochBuild)
+			}
+
+			launchGrp := v4.Group("/launch")
+			{
+				launchGrp.GET("/:slug", handlers.LaunchGet)
+				launchGrp.GET("/:slug/deposit", handlers.LaunchMyDeposit)
+				launchGrp.POST("/:slug/open", middleware.AuthAdmin(), handlers.LaunchOpen)
+				launchGrp.POST("/:slug/token", middleware.AuthAdmin(), handlers.LaunchSetToken)
+				launchGrp.POST("/:slug/finalize", middleware.AuthAdmin(), handlers.LaunchFinalize)
+			}
+
+			// 「我的贡献」聚合接口 — 供贡献者仪表盘页读取。
+			me := v4.Group("/me")
+			{
+				me.GET("/contributions", handlers.MeContributions)
+			}
+		}
+
+		// MCP 接口 — 面向外部应用的独立版本 API。
+		mcp := api.Group("/mcp")
+		{
+			mcp.GET("/galaxy/list", handlers.MCPGalaxyList)
+			mcp.GET("/galaxy/:slug", handlers.MCPGalaxy)
+			mcp.GET("/galaxy/:slug/nodes", handlers.MCPGalaxyNodes)
+		}
 	}
 
 	return r

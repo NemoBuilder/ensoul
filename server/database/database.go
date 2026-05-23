@@ -100,6 +100,17 @@ func Connect(cfg *config.Config) *gorm.DB {
 		&models.VibeChatMessage{},
 		// Vibe Write 2.0 mentor methodology
 		&models.MentorMethodology{},
+		// ── V4 Galaxy knowledge-graph protocol ──
+		&models.Galaxy{},
+		&models.GalaxyRole{},
+		&models.Source{},
+		&models.Atom{},
+		&models.GalaxyApplication{},
+		&models.CreditLedger{},
+		&models.Epoch{},
+		&models.Launch{},
+		&models.LaunchDeposit{},
+		&models.BuybackEvent{},
 	); err != nil {
 		util.Log.Fatal("Failed to migrate database: %v", err)
 	}

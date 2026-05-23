@@ -10,6 +10,9 @@ import (
 	"github.com/ensoul-labs/ensoul-server/database"
 	"github.com/ensoul-labs/ensoul-server/router"
 	"github.com/ensoul-labs/ensoul-server/services"
+	"github.com/ensoul-labs/ensoul-server/services/buybackworker"
+	"github.com/ensoul-labs/ensoul-server/services/launchwatcher"
+	"github.com/ensoul-labs/ensoul-server/services/llm"
 	"github.com/ensoul-labs/ensoul-server/util"
 )
 
@@ -22,6 +25,10 @@ func main() {
 
 	// Connect to database and run migrations
 	database.Connect(cfg)
+
+	// Register the V4 LLM default provider (delegates to V3 services.CallLLM,
+	// honouring LLM_PROVIDER / LLM_API_KEY / LLM_MODEL / LLM_BASE_URL env).
+	llm.UseV3Default()
 
 	// Initialize blockchain client and ERC-8004 contract bindings.
 	// If the first attempt fails (e.g. RPC timeout), retries in background
@@ -59,6 +66,14 @@ func main() {
 
 	// Start monthly revenue settlement (1st of each month, 00:00 UTC)
 	services.StartMonthlySettlement()
+
+	// V4 — start fair-launch / NFT / epoch event watcher (polls every 30s).
+	// No-ops if chain.C never comes online or no V4 contracts configured.
+	launchwatcher.Start(30 * time.Second)
+
+	// V4 flywheel buyback executor — picks up BuybackEvent rows the watcher
+	// enqueued and turns them into PancakeSwap BNB→galaxy-token swaps.
+	buybackworker.Start(30 * time.Second)
 
 	// Setup routes
 	r := router.Setup()

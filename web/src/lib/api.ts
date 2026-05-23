@@ -1341,3 +1341,271 @@ export const workspaceApi = {
     }
   },
 };
+
+// ─── V4 Galaxy API ───────────────────────────────────────────────────────────
+// All endpoints live under /api/v4/*. Auth piggy-backs on V3 cookies
+// (ensoul_session OR ensoul_email_session) — credentials:"include" already set.
+
+export interface Galaxy {
+  id: string;
+  slug: string;
+  title: string;
+  subtitle?: string;
+  cover_url?: string;
+  category?: string;
+  lang: string;
+  founder_id: string;
+  stage: "applying" | "embryo" | "growing" | "mature" | "raising" | "graduated" | "rejected";
+  atom_count: number;
+  edge_count: number;
+  node_count: number;
+  contrib_count: number;
+  maturity_score: number;
+  diversity_score: number;
+  confidence_avg: number;
+  anti_farming_pass: boolean;
+  nft_token_id?: number;
+  token_addr?: string;
+  created_at: string;
+}
+
+export interface Atom {
+  id: string;
+  galaxy_id: string;
+  source_id: string;
+  contrib_id: string;
+  kind: "node" | "edge";
+  node_label?: string;
+  node_type?: string;
+  node_summary?: string;
+  head_node_id?: string;
+  tail_node_id?: string;
+  edge_label?: string;
+  edge_dir?: string;
+  confidence: number;
+  aligned_to?: string;
+  ambiguous: boolean;
+  status: string;
+  created_at: string;
+}
+
+export interface CreditLedgerRow {
+  id: string;
+  user_id: string;
+  amount: number;
+  balance: number;
+  reason: string;
+  ref_type?: string;
+  ref_id?: string;
+  created_at: string;
+}
+
+export const galaxyApi = {
+  list: (params: { stage?: string; category?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.stage) qs.set("stage", params.stage);
+    if (params.category) qs.set("category", params.category);
+    const q = qs.toString();
+    return apiFetch<{ galaxies: Galaxy[] }>(`/api/v4/galaxy/list${q ? "?" + q : ""}`);
+  },
+  get: (slug: string) => apiFetch<Galaxy>(`/api/v4/galaxy/${encodeURIComponent(slug)}`),
+  atoms: (slug: string, params: { kind?: "node" | "edge"; status?: string } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.kind) qs.set("kind", params.kind);
+    if (params.status) qs.set("status", params.status);
+    const q = qs.toString();
+    return apiFetch<{ atoms: Atom[] }>(
+      `/api/v4/galaxy/${encodeURIComponent(slug)}/atoms${q ? "?" + q : ""}`
+    );
+  },
+  apply: (body: {
+    slug: string;
+    title: string;
+    pitch?: string;
+    category?: string;
+    seed_urls?: string[];
+  }) =>
+    apiFetch<{ application: { id: string; slug: string; status: string } }>(
+      `/api/v4/galaxy/apply`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  uploadSource: (slug: string, body: { kind: "web" | "text" | "markdown"; url?: string; text?: string }) =>
+    apiFetch<{ source: { id: string; intake_status: string; credits_cost: number } }>(
+      `/api/v4/galaxy/${encodeURIComponent(slug)}/source`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+};
+
+export const atomApi = {
+  dispute: (id: string, reason?: string) =>
+    apiFetch<{ atom: Atom }>(`/api/v4/atom/${id}/dispute`, {
+      method: "POST",
+      body: JSON.stringify({ reason: reason ?? "" }),
+    }),
+};
+
+export const v4CreditsApi = {
+  me: () =>
+    apiFetch<{
+      credits: number;
+      credits_reset: string;
+      pro_expires_at: string | null;
+      ledger: CreditLedgerRow[];
+    }>(`/api/v4/credits/me`),
+};
+
+// ─── V4 Epoch explorer ─────────────────────────────────────────────────────
+
+export interface Epoch {
+  id: string;
+  galaxy_id?: string;
+  index: number;
+  root: string;
+  atom_count: number;
+  chain_tx_hash?: string;
+  chain_block?: number;
+  chain_status: string;
+  pushed_at?: string;
+  closed_at: string;
+  created_at: string;
+}
+
+export interface EpochLeafRow {
+  id: string;
+  kind: string;
+  node_label: string;
+  edge_label: string;
+  merkle_leaf: string;
+}
+
+export interface AtomProof {
+  epoch: Epoch;
+  leaf: string;     // 64-hex
+  index: number;
+  path: string[];   // 64-hex each
+}
+
+export const epochApi = {
+  list: (galaxySlug?: string) => {
+    const qs = galaxySlug ? `?galaxy_slug=${encodeURIComponent(galaxySlug)}` : "";
+    return apiFetch<{ epochs: Epoch[] }>(`/api/v4/epoch/list${qs}`);
+  },
+  get: (id: string) =>
+    apiFetch<{ epoch: Epoch; atoms: EpochLeafRow[] }>(
+      `/api/v4/epoch/${encodeURIComponent(id)}`
+    ),
+  atomProof: (atomID: string) =>
+    apiFetch<AtomProof>(`/api/v4/atom/${encodeURIComponent(atomID)}/proof`),
+};
+
+// ─── V4 「我的贡献」聚合 ─────────────────────────────────────────────────────
+
+export interface ContribGalaxyRow {
+  galaxy_id: string;
+  galaxy_slug: string;
+  galaxy_title: string;
+  accepted: number;
+  pending: number;
+  disputed: number;
+  rejected: number;
+  total: number;
+  avg_confidence: number;
+}
+export interface ContribSummary {
+  galaxy_count: number;
+  total_accepted: number;
+  total_pending: number;
+  total_disputed: number;
+  total_rejected: number;
+  global_avg_confidence: number;
+}
+
+export const meApi = {
+  contributions: () =>
+    apiFetch<{ summary: ContribSummary; galaxies: ContribGalaxyRow[] }>(
+      "/api/v4/me/contributions"
+    ),
+};
+
+// ─── V4 Curator workbench: list disputed atoms ──────────────────────────────
+//
+// 后端没有专门的 "disputed atoms list" 接口；我们直接复用 galaxy/atoms 然后
+// 在前端按 status 过滤。如果 disputed 数量真的爆了，再加一个聚合接口。
+
+export const curatorApi = {
+  resolve: (atomID: string, action: "accept" | "reject", note?: string) =>
+    apiFetch<{ atom: Atom }>(
+      `/api/v4/atom/${encodeURIComponent(atomID)}/resolve`,
+      { method: "POST", body: JSON.stringify({ action, note: note || "" }) }
+    ),
+};
+
+// ─── V4 Fair Launch ────────────────────────────────────────────────────────
+
+export interface Launch {
+  id: string;
+  galaxy_id: string;
+  founder_id: string;
+  start_at: string;
+  end_at: string;
+  min_raise_wei: string;
+  max_raise_wei: string;     // "0" = uncapped
+  total_raised_wei: string;
+  supply_wei: string;
+  status: "draft" | "open" | "succeeded" | "failed";
+  open_tx_hash?: string;
+  token_deploy_tx?: string;
+  set_token_tx_hash?: string;
+  finalize_tx_hash?: string;
+  token_addr?: string;
+  token_name?: string;
+  token_symbol?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export const launchApi = {
+  get: (slug: string) =>
+    apiFetch<{ launch: Launch; galaxy_stage: string }>(
+      `/api/v4/launch/${encodeURIComponent(slug)}`
+    ),
+  open: (
+    slug: string,
+    body: {
+      start_at: number;       // unix seconds
+      end_at: number;
+      min_raise_wei: string;
+      max_raise_wei: string;   // "" or "0" = uncapped
+      supply_wei: string;
+      token_name: string;
+      token_symbol: string;
+    }
+  ) =>
+    apiFetch<{ launch: Launch }>(
+      `/api/v4/launch/${encodeURIComponent(slug)}/open`,
+      { method: "POST", body: JSON.stringify(body) }
+    ),
+  setToken: (slug: string, tokenAddr: string) =>
+    apiFetch<{ launch: Launch }>(
+      `/api/v4/launch/${encodeURIComponent(slug)}/token`,
+      { method: "POST", body: JSON.stringify({ token_addr: tokenAddr }) }
+    ),
+  finalize: (slug: string) =>
+    apiFetch<{ launch: Launch }>(
+      `/api/v4/launch/${encodeURIComponent(slug)}/finalize`,
+      { method: "POST" }
+    ),
+  myDeposit: (slug: string, addr: string) =>
+    apiFetch<{
+      launch_id: string;
+      wallet_addr: string;
+      amount_wei: string;
+      claimed: boolean;
+      refunded: boolean;
+      projected_tokens: string;
+      projected_ratio_pp: string; // basis-of-percent: 10000 == 100%
+    }>(
+      `/api/v4/launch/${encodeURIComponent(slug)}/deposit?addr=${encodeURIComponent(addr)}`
+    ),
+};
+

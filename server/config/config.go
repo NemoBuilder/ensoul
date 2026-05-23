@@ -57,6 +57,11 @@ type Config struct {
 	PancakeRouterAddr  string // PancakeSwap V2 Router
 	USDTAddr           string // BSC USDT
 
+	// V4 — Galaxy knowledge-graph contracts
+	EpochRegistryAddr string // EnsoulEpochRegistry — anchors Merkle roots
+	GalaxyNFTAddr     string // EnsoulGalaxyNFT — one NFT per Galaxy
+	FairLaunchAddr    string // EnsoulFairLaunch — per-Galaxy fair-launch state machine
+
 	// Economic System — Wallet Keys (6-wallet scheme)
 	AdminAPIKey   string // Admin API key for management endpoints
 	AdminUsername string // Initial admin username (for seeding only)
@@ -145,6 +150,12 @@ func Load() *Config {
 		EnsoulMinterV2Addr: getEnv("ENSOUL_MINTER_V2_ADDR", ""),
 		PancakeRouterAddr:  getEnv("PANCAKE_ROUTER_ADDR", "0x10ED43C718714eb63d5aA57B78B54704E256024E"),
 		USDTAddr:           getEnv("USDT_ADDR", "0x55d398326f99059fF775485246999027B3197955"),
+
+		// V4 contracts — empty default means "not yet deployed"; the on-chain
+		// push paths log + skip when these are blank, so local dev still works.
+		EpochRegistryAddr: getEnv("EPOCH_REGISTRY_ADDR", ""),
+		GalaxyNFTAddr:     getEnv("GALAXY_NFT_ADDR", ""),
+		FairLaunchAddr:    getEnv("FAIR_LAUNCH_ADDR", ""),
 
 		// Anti-MEV: private RPC for swap transactions
 		SwapRPCURL: getEnv("SWAP_RPC_URL", ""),

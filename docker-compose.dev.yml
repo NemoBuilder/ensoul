@@ -1,0 +1,39 @@
+# V4 local-debug compose override.
+#
+# Usage (from repo root):
+#   docker compose -f docker-compose.dev.yml up -d
+#
+# What this gives you:
+#   - Postgres 16 on localhost:5432 with DB=ensoul / USER=ensoul / PASSWORD=ensoul_secret
+#   - Separate named volume (pgdata-v4-dev) so it never collides with the prod
+#     stack's pgdata in docker-compose.yml.
+#
+# What this deliberately does NOT do:
+#   - It does NOT start `server` or `web`. Run `go run .` from ./server with
+#     your local .env so you can attach a debugger / hot-reload.
+#   - It does NOT start nginx — local dev hits the Go server on :8990 directly.
+#   - pgvector is intentionally omitted in Phase 1 (no embeddings yet). When
+#     Phase 2 introduces semantic alignment, swap `postgres:16-alpine` for
+#     `pgvector/pgvector:pg16` and add `CREATE EXTENSION vector` to the init.
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: ensoul-v4-dev-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ensoul
+      POSTGRES_PASSWORD: ensoul_secret
+      POSTGRES_DB: ensoul
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata-v4-dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ensoul"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata-v4-dev:

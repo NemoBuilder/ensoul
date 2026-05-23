@@ -14,6 +14,8 @@ const navItems = [
   { href: "/admin/claws", label: "Claws", icon: "🦞" },
   { href: "/admin/candidates", label: "Candidates", icon: "🎯" },
   { href: "/admin/methodology", label: "Methodology", icon: "🧠" },
+  { href: "/admin/launch", label: "Fair Launch", icon: "🚀" },
+  { href: "/curator", label: "Curator", icon: "⚖️" },
   { href: "/admin/tax-wallet", label: "Tax Wallet", icon: "💰" },
   { href: "/admin/mining", label: "Mining Pool", icon: "⛏️" },
   { href: "/admin/settings", label: "Settings", icon: "⚙️" },

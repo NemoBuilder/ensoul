@@ -76,6 +76,10 @@ export default function Navbar() {
               { href: "/vibe-write" as const, label: t("vibe-write") },
               { href: "/pricing" as const, label: t("pricing") },
               { href: "/explore" as const, label: t("souls") },
+              // V4 entries — 暂未走 i18n，故硬编码 (Galaxy / Epoch / Vibe 是协议名词)。
+              { href: "/galaxy" as const, label: "Galaxy" },
+              { href: "/epoch" as const, label: "Epoch" },
+              { href: "/vibe" as const, label: "Vibe" },
               { href: "/protocol" as const, label: t("protocol") },
             ].map((item) => (
               <Link
